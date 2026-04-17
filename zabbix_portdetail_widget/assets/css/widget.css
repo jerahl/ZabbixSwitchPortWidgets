@@ -1,0 +1,350 @@
+/* ── Port Detail Widget ───────────────────────────────────────────────────── */
+
+.pd-widget {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 8px 10px;
+	box-sizing: border-box;
+	font-family: inherit;
+	color: #e2e8f0;
+	gap: 6px;
+}
+
+/* ── Waiting / Error states ───────────────────────────────────────────────── */
+
+.pd-waiting {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	gap: 4px;
+	color: #64748b;
+}
+
+.pd-waiting__icon {
+	font-size: 28px;
+}
+
+.pd-waiting__text {
+	font-size: 13px;
+	font-weight: 600;
+	color: #94a3b8;
+}
+
+.pd-waiting__sub {
+	font-size: 11px;
+	color: #64748b;
+}
+
+.pd-error {
+	padding: 12px;
+	color: #f87171;
+	font-size: 12px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+
+.pd-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid #2d3748;
+	flex-shrink: 0;
+}
+
+.pd-header__port {
+	font-size: 15px;
+	font-weight: 700;
+	color: #f1f5f9;
+}
+
+.pd-header__alias {
+	font-size: 13px;
+	color: #94a3b8;
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pd-header__state {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	padding: 2px 8px;
+	border-radius: 3px;
+}
+
+.pd-state--up       { background: #14532d; color: #4ade80; border: 1px solid #16a34a; }
+.pd-state--down     { background: #1e293b; color: #94a3b8; border: 1px solid #475569; }
+.pd-state--error    { background: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
+.pd-state--disabled { background: #1e293b; color: #94a3b8; border: 1px solid #475569; }
+.pd-state--testing  { background: #451a03; color: #fbbf24; border: 1px solid #d97706; }
+.pd-state--unknown  { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+
+.pd-maint {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	padding: 2px 8px;
+	border-radius: 3px;
+	background: #78350f;
+	color: #fbbf24;
+	border: 1px solid #d97706;
+}
+
+/* ── Main grid ────────────────────────────────────────────────────────────── */
+
+.pd-main {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 12px;
+	flex: 1;
+	min-height: 0;
+	align-items: start;
+}
+
+/* ── Traffic (left column) ────────────────────────────────────────────────── */
+
+.pd-traffic {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 240px;
+}
+
+.pd-traffic__row {
+	display: grid;
+	grid-template-columns: 80px 1fr auto;
+	align-items: center;
+	gap: 6px;
+}
+
+.pd-traffic__row--util {
+	grid-template-columns: 80px 1fr;
+	margin-top: 2px;
+	padding-top: 4px;
+	border-top: 1px solid #1e293b;
+}
+
+.pd-traffic__label {
+	font-size: 12px;
+	font-weight: 600;
+	color: #94a3b8;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.pd-traffic__spark {
+	display: flex;
+	align-items: center;
+}
+
+.pd-spark {
+	width: 120px;
+	height: 36px;
+	flex-shrink: 0;
+}
+
+.pd-traffic__value {
+	font-size: 13px;
+	font-weight: 600;
+	color: #e2e8f0;
+	min-width: 70px;
+	text-align: right;
+}
+
+/* ── PoE badge ────────────────────────────────────────────────────────────── */
+
+.pd-poe-badge {
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 3px;
+	display: inline-block;
+}
+
+.pd-poe--on        { background: #78350f; color: #fbbf24; border: 1px solid #d97706; }
+.pd-poe--searching { background: #0c4a6e; color: #38bdf8; border: 1px solid #0284c7; }
+.pd-poe--disabled  { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+.pd-poe--fault     { background: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
+.pd-poe--test      { background: #2e1065; color: #a78bfa; border: 1px solid #7c3aed; }
+.pd-poe--unknown   { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+
+/* ── Stats (right column) ─────────────────────────────────────────────────── */
+
+.pd-stats {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.pd-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.pd-stat__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.pd-stat__label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: #64748b;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	white-space: nowrap;
+}
+
+.pd-stat__now {
+	font-size: 10px;
+	color: #475569;
+}
+
+.pd-stat__value {
+	font-size: 11px;
+	color: #94a3b8;
+	text-align: right;
+}
+
+.pd-stat__value--warn {
+	color: #f87171;
+}
+
+/* ── 24h status bar ───────────────────────────────────────────────────────── */
+
+.pd-bar {
+	display: flex;
+	gap: 1px;
+	height: 12px;
+}
+
+.pd-bar__seg {
+	flex: 1;
+	border-radius: 1px;
+}
+
+.pd-bar__seg--up      { background: #16a34a; }
+.pd-bar__seg--down    { background: #475569; }
+.pd-bar__seg--error   { background: #dc2626; }
+.pd-bar__seg--unknown { background: #1e293b; }
+.pd-bar__seg--quiet   { background: #1e293b; }
+.pd-bar__seg--event   { background: #dc2626; }
+
+/* ── Link speed footer ────────────────────────────────────────────────────── */
+
+.pd-speed {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 2px;
+	padding-top: 5px;
+	border-top: 1px solid #1e293b;
+}
+
+.pd-speed__label {
+	font-size: 11px;
+	color: #64748b;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.pd-speed__value {
+	font-size: 12px;
+	font-weight: 600;
+	color: #94a3b8;
+}
+
+/* ── Debug panel ──────────────────────────────────────────────────────────── */
+.pd-debug {
+	margin-top: 10px;
+	padding: 8px;
+	background: #1a1a2e;
+	color: #c7c9d1;
+	border: 1px solid #3a3a5e;
+	border-radius: 4px;
+	font-family: 'Courier New', Consolas, monospace;
+	font-size: 10px;
+	line-height: 1.4;
+	max-height: 300px;
+	overflow-y: auto;
+}
+.pd-debug__title {
+	font-weight: bold;
+	font-size: 11px;
+	color: #f0f0f5;
+	margin-bottom: 6px;
+	letter-spacing: 0.5px;
+}
+.pd-debug__section {
+	margin-bottom: 6px;
+	padding: 4px 6px;
+	background: #0f0f1e;
+	border-left: 2px solid #5865f2;
+	border-radius: 2px;
+}
+.pd-debug__section-title {
+	color: #7dd3fc;
+	font-weight: bold;
+	margin-bottom: 2px;
+}
+.pd-debug__pre {
+	margin: 0;
+	padding: 0;
+	background: transparent;
+	color: #c7c9d1;
+	white-space: pre-wrap;
+	word-break: break-all;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+/* ── Graph link buttons ────────────────────────────────────────────────────── */
+.pd-graph-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	padding: 0;
+	background: transparent;
+	border: 1px solid #334155;
+	border-radius: 3px;
+	color: #94a3b8;
+	cursor: pointer;
+	line-height: 0;
+	transition: all .12s ease;
+	flex-shrink: 0;
+}
+.pd-graph-btn:hover {
+	color: #60a5fa;
+	border-color: #60a5fa;
+	background: rgba(96, 165, 250, 0.08);
+}
+.pd-graph-btn:focus {
+	outline: none;
+	border-color: #60a5fa;
+	box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.3);
+}
+.pd-graph-btn--active {
+	color: #1e293b;
+	background: #60a5fa;
+	border-color: #60a5fa;
+}
+
+/* Aligning the button so rows stay neat */
+.pd-traffic__row,
+.pd-stat__header {
+	align-items: center;
+}

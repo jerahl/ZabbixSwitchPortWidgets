@@ -1,0 +1,43 @@
+{
+	"manifest_version": 2.0,
+	"id": "switchports",
+	"type": "widget",
+	"name": "Switch Port Status",
+	"namespace": "SwitchPorts",
+	"version": "2.8",
+	"author": "Custom",
+	"description": "Displays switch port faceplate. Click a port to broadcast the host to listening widgets.",
+	"widget": {
+		"js_class": "WidgetSwitchPorts",
+		"size": {
+			"width": 36,
+			"height": 5
+		},
+		"in": {
+			"override_hostid": {
+				"type": "_hostids"
+			}
+		},
+		"out": [
+			{
+				"type": "_hostid"
+			},
+			{
+				"type": "_hostids"
+			}
+		]
+	},
+	"actions": {
+		"widget.switchports.view": {
+			"class": "WidgetView"
+		}
+	},
+	"assets": {
+		"js": [
+			"class.widget.js"
+		],
+		"css": [
+			"widget.css"
+		]
+	}
+}

@@ -1,0 +1,43 @@
+{
+	"manifest_version": 2.0,
+	"id": "portdetail",
+	"type": "widget",
+	"name": "Switch Port Detail",
+	"namespace": "PortDetail",
+	"version": "2.6",
+	"author": "Custom",
+	"description": "Displays detailed stats for a selected switch port. Set Override host to the Switch Port Status widget.",
+	"widget": {
+		"js_class": "WidgetPortDetail",
+		"size": {
+			"width": 12,
+			"height": 4
+		},
+		"out": [
+			{
+				"type": "_itemid"
+			},
+			{
+				"type": "_itemids"
+			}
+		],
+		"in": {
+			"time_period": {
+				"type": "_timeperiod"
+			}
+		}
+	},
+	"actions": {
+		"widget.portdetail.view": {
+			"class": "WidgetView"
+		}
+	},
+	"assets": {
+		"js": [
+			"class.widget.js"
+		],
+		"css": [
+			"widget.css"
+		]
+	}
+}

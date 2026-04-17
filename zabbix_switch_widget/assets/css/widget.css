@@ -1,0 +1,546 @@
+/*
+ * Switch Port Status Widget – stylesheet
+ * File: assets/css/widget.css
+ */
+
+/* ── Wrapper ──────────────────────────────────────────────────────────────── */
+
+.sw-widget-wrapper {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px 10px;
+	height: 100%;
+	box-sizing: border-box;
+}
+
+.sw-error-msg {
+	padding: 16px;
+	color: #e53935;
+	font-size: 13px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+
+.sw-header {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-shrink: 0;
+}
+
+.sw-header__hostname {
+	font-size: 13px;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sw-header__summary {
+	font-size: 11px;
+	opacity: 0.65;
+	white-space: nowrap;
+}
+
+/* ── Faceplate ────────────────────────────────────────────────────────────── */
+
+.sw-faceplate {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	background: #1e2128;
+	border: 2px solid #3a3f4b;
+	border-radius: 6px;
+	padding: 10px 12px;
+	flex: 1 1 auto;
+	min-height: 80px;
+	box-sizing: border-box;
+}
+
+/* ── Port panels ──────────────────────────────────────────────────────────── */
+
+.sw-panel--rj45 {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.sw-panel--sfp {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	border-left: 1px solid #3a3f4b;
+	padding-left: 10px;
+	flex-shrink: 0;
+}
+
+.sw-sfp-label {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	color: #6b7280;
+	text-transform: uppercase;
+}
+
+/* ── Port lists ───────────────────────────────────────────────────────────── */
+
+.sw-portlist {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.sw-portlist--dual-row {
+	display: grid;
+	grid-template-rows: repeat(2, auto);
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(30px, 44px);
+	gap: 4px 3px;
+}
+
+.sw-portlist--sfp {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(30px, 44px));
+	grid-auto-flow: column;
+	grid-template-rows: repeat(2, auto);
+	gap: 4px 3px;
+}
+
+/* ── Individual port cell ─────────────────────────────────────────────────── */
+
+.sw-port {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	cursor: default;
+	user-select: none;
+}
+
+/* ── Labels ───────────────────────────────────────────────────────────────── */
+
+.sw-port-label {
+	font-size: 9px;
+	color: #9ca3af;
+	line-height: 1;
+	text-align: center;
+	width: 100%;
+}
+
+.sw-port-label--top    { order: -1; }
+.sw-port-label--bottom { order:  1; }
+
+/* ── Port icon ────────────────────────────────────────────────────────────── */
+
+.sw-port-icon {
+	width: 30px;
+	height: 22px;
+	border-radius: 3px;
+	border: 1px solid rgba(255,255,255,0.08);
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: filter 0.12s, transform 0.1s;
+}
+
+.sw-port-icon:hover {
+	filter: brightness(1.3);
+	transform: scale(1.1);
+	z-index: 5;
+}
+
+/* RJ-45 notch */
+/* RJ-45 notch removed — top corners used by LED and PoE dots */
+
+/* LED */
+.sw-port-led {
+	position: absolute;
+	top: 3px;
+	right: 4px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: rgba(0,0,0,0.4);
+}
+
+/* SFP cage */
+.sw-port-icon--sfp {
+	width: 34px;
+	height: 20px;
+}
+
+.sw-port-icon--sfp::after {
+	display: none;
+}
+
+.sw-sfp-inner {
+	display: block;
+	width: 18px;
+	height: 4px;
+	border-radius: 2px;
+	background: rgba(0,0,0,0.4);
+}
+
+/* ── State colours ────────────────────────────────────────────────────────── */
+
+.sw-port-icon.port-up {
+	background: #1b5e20;
+	border-color: #4caf50;
+}
+.sw-port-icon.port-up .sw-port-led,
+.sw-port-icon.port-up .sw-sfp-inner {
+	background: #69f0ae;
+	box-shadow: 0 0 4px #69f0ae;
+}
+
+.sw-port-icon.port-down {
+	background: #1e293b;
+	border-color: #475569;
+}
+.sw-port-icon.port-down .sw-port-led,
+.sw-port-icon.port-down .sw-sfp-inner {
+	background: #64748b;
+	box-shadow: none;
+}
+
+.sw-port-icon.port-error {
+	background: #7f1010;
+	border-color: #ef5350;
+}
+.sw-port-icon.port-error .sw-port-led,
+.sw-port-icon.port-error .sw-sfp-inner {
+	background: #ff5252;
+	box-shadow: 0 0 3px #ff5252;
+}
+
+.sw-port-icon.port-disabled {
+	background: #2a2d35;
+	border-color: #555;
+	opacity: 0.5;
+}
+.sw-port-icon.port-disabled .sw-port-led,
+.sw-port-icon.port-disabled .sw-sfp-inner {
+	background: #555;
+}
+
+.sw-port-icon.port-testing {
+	background: #4a3800;
+	border-color: #fdd835;
+}
+.sw-port-icon.port-testing .sw-port-led,
+.sw-port-icon.port-testing .sw-sfp-inner {
+	background: #ffd740;
+	box-shadow: 0 0 4px #ffd740;
+}
+
+.sw-port-icon.port-absent {
+	background: #1a1d24;
+	border-color: #37474f;
+	opacity: 0.35;
+}
+
+.sw-port-icon.port-unknown {
+	background: #263238;
+	border-color: #78909c;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+
+.sw-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px 12px;
+	flex-shrink: 0;
+}
+
+.sw-legend__item {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.sw-legend__swatch {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	flex-shrink: 0;
+}
+
+.sw-legend__text {
+	font-size: 11px;
+	opacity: 0.7;
+}
+
+/* ── Tooltip ──────────────────────────────────────────────────────────────── */
+
+.sw-port-tooltip {
+	position: absolute;
+	z-index: 9999;
+	background: #111827;
+	color: #f9fafb;
+	font-size: 11px;
+	padding: 5px 9px;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+	pointer-events: none;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 0.1s ease;
+}
+
+/* ── Debug panel ──────────────────────────────────────────────────────────── */
+
+.sw-dbg {
+	margin-top: 10px;
+	border: 1px solid #f59e0b;
+	border-radius: 4px;
+	font-size: 11px;
+}
+
+.sw-dbg-title {
+	padding: 5px 8px;
+	background: #292524;
+	color: #f59e0b;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 11px;
+	user-select: none;
+}
+
+.sw-dbg-title:hover {
+	background: #3c2f1a;
+}
+
+.sw-dbg-body {
+	padding: 8px;
+	background: #1c1917;
+	overflow-x: auto;
+}
+
+.sw-dbg-h {
+	margin: 8px 0 3px;
+	font-weight: 700;
+	color: #a3a3a3;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.sw-dbg-tbl {
+	border-collapse: collapse;
+	width: 100%;
+	font-family: monospace;
+	font-size: 11px;
+	margin-bottom: 6px;
+}
+
+.sw-dbg-tbl th {
+	background: #292524;
+	color: #d4d4d4;
+	padding: 3px 6px;
+	text-align: left;
+	border: 1px solid #404040;
+	font-size: 10px;
+}
+
+.sw-dbg-tbl td {
+	padding: 2px 6px;
+	border: 1px solid #333;
+	color: #d4d4d4;
+	vertical-align: top;
+}
+
+.sw-dbg-k {
+	color: #7dd3fc;
+	white-space: nowrap;
+}
+
+.sw-dbg-v {
+	color: #86efac;
+	word-break: break-all;
+}
+
+/* ── Stack member ─────────────────────────────────────────────────────────── */
+
+.sw-stack-member {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.sw-stack-member + .sw-stack-member {
+	margin-top: 8px;
+}
+
+.sw-member-label {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 2px 4px;
+}
+
+.sw-member-label__name {
+	font-size: 11px;
+	font-weight: 700;
+	color: #94a3b8;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.sw-member-label__stats {
+	font-size: 10px;
+	color: #64748b;
+}
+
+/* ── PoE dot ──────────────────────────────────────────────────────────────── */
+
+/* Small circle in the bottom-left corner of each port icon */
+.sw-poe-dot {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	border: 1px solid rgba(0,0,0,0.4);
+}
+
+/* Larger version used in the legend */
+.sw-legend__poe-swatch {
+	position: static;
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+}
+
+/* PoE state colours */
+.poe-on        { background: #f59e0b; box-shadow: 0 0 3px #f59e0b; } /* amber — delivering */
+.poe-searching { background: #38bdf8; }                               /* blue — searching */
+.poe-disabled  { background: #4b5563; }                               /* grey — disabled */
+.poe-fault     { background: #dc2626; box-shadow: 0 0 3px #dc2626; } /* red  — fault/deny/error */
+.poe-test      { background: #a78bfa; }                               /* purple — test mode */
+
+/* PoE count in member label bar */
+.sw-member-label__poe {
+	color: #f59e0b;
+}
+
+/* Separator between port-state legend and PoE legend */
+.sw-legend__sep {
+	color: #4b5563;
+	margin: 0 4px;
+	font-size: 12px;
+}
+
+/* ── Port selection ───────────────────────────────────────────────────────── */
+
+.sw-port {
+	cursor: pointer;
+}
+
+.sw-port:hover .sw-port-icon,
+.sw-port:hover .sw-port-icon--sfp {
+	outline: 2px solid #60a5fa;
+	outline-offset: 1px;
+}
+
+.sw-port.sw-port--selected .sw-port-icon,
+.sw-port.sw-port--selected .sw-port-icon--sfp {
+	outline: 2px solid #f59e0b;
+	outline-offset: 1px;
+}
+
+/* ── Health strip ─────────────────────────────────────────────────────────── */
+.sw-health {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 8px;
+	margin-bottom: 4px;
+	background: #0f172a;
+	border-bottom: 1px solid #1e293b;
+	font-size: 11px;
+	font-weight: 500;
+	color: #cbd5e1;
+	flex-wrap: wrap;
+}
+
+.sw-health__item {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: #1e293b;
+	border: 1px solid transparent;
+	line-height: 1;
+	cursor: default;
+	transition: background .15s;
+}
+
+.sw-health__icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
+.sw-health__label {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.8;
+}
+
+.sw-health__value {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+
+/* State colors — ok / warn / crit / unknown */
+.sw-health__item--ok       { color: #4ade80; border-color: rgba(74,222,128,0.35); background: rgba(20,83,45,0.3); }
+.sw-health__item--warn     { color: #facc15; border-color: rgba(250,204,21,0.4);  background: rgba(113,63,18,0.35); }
+.sw-health__item--crit     { color: #f87171; border-color: rgba(248,113,113,0.45); background: rgba(127,29,29,0.4); }
+.sw-health__item--info     { color: #60a5fa; border-color: rgba(96,165,250,0.4);  background: rgba(30,58,138,0.35); }
+.sw-health__item--unknown  { color: #94a3b8; border-color: rgba(148,163,184,0.3); background: rgba(30,41,59,0.5); }
+
+/* Icon-only items (PSU, Fan): no numeric value, tighter padding */
+.sw-health__item--icon .sw-health__label {
+	font-size: 10px;
+	font-weight: 600;
+}
+
+.sw-health__problems {
+	font-weight: 700;
+	padding: 3px 10px;
+}
+
+.sw-health__problems .sw-health__value {
+	font-size: 12px;
+}
+
+.sw-health__ip {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: #64748b;
+	padding: 3px 8px;
+	border-radius: 4px;
+	background: #1e293b;
+}
+.sw-health__ip-label {
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 10px;
+	opacity: 0.8;
+}
+.sw-health__ip-value {
+	color: #e2e8f0;
+	font-variant-numeric: tabular-nums;
+	font-weight: 500;
+}
