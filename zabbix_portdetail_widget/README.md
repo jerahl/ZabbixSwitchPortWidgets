@@ -155,12 +155,6 @@ cannot list it as a broadcast source.
 3. Click any graph-link button in the Port Detail widget — the Graph widget
    will re-render to show that metric's data over the dashboard's time range.
 
-For multiple metrics visible at once, add multiple Graph widgets, each bound
-to the Port Detail widget. Every Graph widget receives the same broadcast, so
-whichever button is clicked most recently sets all of them at once. To lock a
-Graph widget to a specific metric, disconnect its item source from the widget
-and configure a fixed item.
-
 ## Troubleshooting
 
 - **"Awaiting port selection"** — either no port has been clicked in the Switch
