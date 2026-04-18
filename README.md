@@ -117,6 +117,45 @@ stack of 4. Splitting them keeps the faceplate fast (one batched item query
 per host) and defers the heavy per-port history fetching to a separate widget
 that only runs when a port is actively selected.
 
+## A Note on Scope
+
+This was written for **my environment** — a stack of Extreme Networks switches
+monitored by Zabbix 7.x using the stock Extreme EXOS by SNMP template (with
+one local addition, see below). That shapes some of the specifics: port
+discovery skips indices divisible by 1000 because that's where Extreme puts
+its management interfaces, item keys match Extreme's template conventions,
+and the health strip looks for `system.cpu.util[extremeCpuMonitorTotalUtilization.0]`
+and friends.
+
+That said, the code is deliberately simple and should be **easy to adapt for
+other vendors**. The item-key prefixes are centralized — change them once and
+the widget will discover Cisco, Juniper, Aruba, etc. ports just as happily.
+The port-discovery grouping heuristic (gaps > 100 between indices = new stack
+member) works for any vendor that uses similar block-allocated ifIndex
+schemes, and can be tuned in one spot. The health strip collection function
+in `switchports/actions/WidgetView.php` is a single `gatherHealth()` method
+where you'd swap in your vendor's sensor keys.
+
+If you port this to another vendor, PRs or forks welcome.
+
+### Note on PoE Items
+
+The Extreme EXOS by SNMP template that ships with Zabbix **does not include PoE
+items**. I added a PoE discovery rule to my local copy of the template — the
+widget's PoE features (per-port dot indicators, PoE fault detection, PoE status
+tooltip, "N PoE on" stack summary) all depend on the following items existing
+on the host:
+
+| Key | OID | Purpose |
+|---|---|---|
+| `snmp.interfaces.poe.discovery` | `1.3.6.1.2.1.105.1.1.1.3` | LLDP-MED PoE port discovery |
+| `snmp.interfaces.poe.dstatus[{#SNMPINDEX}]` | `1.3.6.1.2.1.105.1.1.1.6.{#SNMPINDEX}` | Per-port PoE detection status |
+
+If your environment doesn't have PoE monitoring set up, the widget still works
+fine — it just won't show the PoE dot beneath each port, the PoE rollup in the
+stack member header, or PoE-fault port coloring. Everything else (link state,
+speed, alias, utilization, errors, discards, health strip) renders normally.
+
 ## Compatibility
 
 - **Zabbix 7.0, 7.2, 7.4** — uses `manifest_version: 2.0`, PHP namespaced
@@ -125,8 +164,8 @@ that only runs when a port is actively selected.
 - Does **not** work on Zabbix 6.x — widget API changed significantly in 7.0.
 - Extreme EXOS by SNMP template is recommended for full functionality.
   Other templates work for basic port state display if they use similar key
-  patterns (`net.if.status[…]`, `net.if.adminstatus[…]`, `snmp.interfaces.poe[…]` etc.). CPU/memory/
-  temperature/PSU/fan detail requires matching `sensor.*` and `system.cpu.*` 
+  patterns (`net.if.status[…]`, `net.if.adminstatus[…]`, etc.). CPU/memory/
+  temperature/PSU/fan detail requires matching `sensor.*` and `system.cpu.*`
   keys from Extreme template specifically.
 
 ## Development Notes
