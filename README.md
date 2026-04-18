@@ -19,38 +19,12 @@ They are designed to work together: click a port in **Switch Port Status** and
 **Switch Port Detail** updates to show that port's metrics. Both widgets can
 also be used independently if desired.
 
-## Screenshot-ish Layout
-
-```
-┌─ Switch Port Status ──────────────────────────────────────────────────────┐
-│ ⬢CPU 4%  ⬢Mem 42%  ⬢66°C  ⬢PSU  ⬢Fan    ⚠3          IP: 10.21.100.7     │
-│ stack-sw-01                              12 up / 4 down / 16 total        │
-│                                                                           │
-│  [■][■][■][■][■][■][■][□][■][■][■][■]            SFP [■][■]               │
-│  [■][■][■][■][■][■][■][■][■][■][■][■]                [■][■]               │
-│                                                                           │
-│ ● Up (12)  ● Down (3)  ● Error (1)                                        │
-└───────────────────────────────────────────────────────────────────────────┘
-                                   │
+## Screenshot Layout
+!(/Screenshot Port View.png)                                   │
                  (user clicks port 5)
                                    │
                                    ▼
-┌─ Switch Port Detail ──────────────────────────────────────────────────────┐
-│ Port 5    uplink-to-core      [UP]                                        │
-│                                                                           │
-│ IN  📊   ╱╲╱╲╱───         142.3 Mbps                                       │
-│ OUT 📊   ╱╲╱╲╱───         87.1 Mbps                                        │
-│ Utilization 📊             14.2%                                           │
-│                                                                           │
-│ 24h online state 📊                                     now               │
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                           │
-│                                                                           │
-│ Errors 24h 📊             0 (in 0 / out 0), stable                        │
-│ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                           │
-│                                                                           │
-│ Link Speed                1 Gbps                                          │
-└───────────────────────────────────────────────────────────────────────────┘
-                                   │
+!(/Screenshot Port Detail.png)                                   │
           (user clicks 📊 next to "IN")
                                    │
                                    ▼
