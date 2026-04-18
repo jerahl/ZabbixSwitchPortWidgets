@@ -20,11 +20,13 @@ They are designed to work together: click a port in **Switch Port Status** and
 also be used independently if desired.
 
 ## Screenshot Layout
-!(/Screenshot Port View.png)                                   │
-                 (user clicks port 5)
+![PortView](PortView.png)                                  
+                                   │ 
+                 (user clicks port 51)
                                    │
                                    ▼
-!(/Screenshot Port Detail.png)                                   │
+![Port Detail](PortDetail.png)                                   
+                                   │
           (user clicks 📊 next to "IN")
                                    │
                                    ▼
