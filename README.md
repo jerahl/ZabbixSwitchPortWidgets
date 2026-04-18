@@ -29,7 +29,7 @@ also be used independently if desired.
 
 ┌─ Graph (classic) ─────────────────────────────────────────────────────────┐
 
-│                         Traffic In — Port 5                               │
+│                         Traffic In — Port 32                               │
 
 │                         [line graph here]                                 │
 
