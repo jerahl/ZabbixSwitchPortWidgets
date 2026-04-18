@@ -20,21 +20,21 @@ They are designed to work together: click a port in **Switch Port Status** and
 also be used independently if desired.
 
 ## Screenshot Layout
-![PortView](PortView.png)                                  
-                                   │ 
-                 (user clicks port 51)
-                                   │
-                                   ▼
-![Port Detail](PortDetail.png)                                   
-                                   │
-          (user clicks 📊 next to "IN")
-                                   │
-                                   ▼
+
+![PortView](PortView.png)
+(user clicks port 32)
+
+![Port Detail](PortDetail.png)
+(user clicks 📊 next to "IN")
+
 ┌─ Graph (classic) ─────────────────────────────────────────────────────────┐
+
 │                         Traffic In — Port 5                               │
+
 │                         [line graph here]                                 │
-└───────────────────────────────────────────────────────────────────────────┘
-```
+
+└───────────────────────────────────────────────────────────────────┘
+
 
 ## Quick Start
 
