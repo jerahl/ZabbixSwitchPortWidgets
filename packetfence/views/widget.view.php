@@ -168,6 +168,4 @@ if (!empty($data['show_debug']) && !empty($data['debug_info'])) {
 
 $body .= '</div>';  // .pf-widget
 
-(new CWidgetView($data))
-	->addItem(new CTag('div', true, $body))
-	->show();
+(new CWidgetView($data))->addItem($body)->show();
