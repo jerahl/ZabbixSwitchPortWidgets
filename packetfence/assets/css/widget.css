@@ -253,3 +253,19 @@
 	border-style: dashed;
 	opacity: 0.85;
 }
+
+/* ── IP source badge (PF vs DHCP) ────────────────────────────────────────── */
+.pf-ip-src {
+	display: inline-block;
+	margin-left: 5px;
+	padding: 0 4px;
+	font-size: 9px;
+	font-weight: 600;
+	border-radius: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	vertical-align: 1px;
+	font-family: system-ui, sans-serif;  /* reset from pf-mono */
+}
+.pf-ip-src--pf   { background: rgba(96,165,250,0.15); color: #60a5fa; }
+.pf-ip-src--dhcp { background: rgba(250,204,21,0.15); color: #facc15; }

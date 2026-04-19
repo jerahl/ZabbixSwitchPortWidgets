@@ -45,6 +45,17 @@ class WidgetForm extends CWidgetForm {
 				(new CWidgetFieldTextBox('pf_password', _('Password')))
 					->setDefault('')
 			)
+			// DHCP lookup fallback — hostname of the Zabbix host running the DHCP
+			// lease exporter. Leave blank to disable DHCP fallback.
+			->addField(
+				(new CWidgetFieldTextBox('dhcp_host', _('DHCP server Zabbix host name')))
+					->setDefault('')
+			)
+			// Item key on that host returning the JSON lease list
+			->addField(
+				(new CWidgetFieldTextBox('dhcp_item_key', _('DHCP lease item key')))
+					->setDefault('dhcp.leases')
+			)
 			// Prefix used to construct the MAC-list item key.
 			// Full key: <prefix><snmpIndex>]  — e.g. "port.mac.list[1001]"
 			->addField(

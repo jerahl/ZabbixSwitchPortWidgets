@@ -147,7 +147,55 @@ automatically try these fallback keys:
 - `port.mac.list[ifIndex.<ifIndex>]`
 - `net.if.mac[ifIndex.<ifIndex>]`
 
-## Configuration
+## DHCP Fallback (optional)
+
+When PacketFence doesn't have an IP for a device — common for purely-wired
+clients that never go through the captive portal or RADIUS accounting — the
+widget can fall back to querying a Zabbix item that holds a snapshot of the
+Windows DHCP lease table.
+
+### Setup
+
+1. On the Windows DHCP server, create `C:\zabbix\scripts\dhcp-leases.ps1`
+   with the contents of `dhcp/dhcp-leases.ps1` in this package.
+2. Install the Zabbix Agent 2 (or Agent 1) on the DHCP server if not already
+   present, and register the host in Zabbix.
+3. Drop `dhcp/zabbix_agent_dhcp.conf` into the agent's include directory
+   (`C:\Program Files\Zabbix Agent 2\zabbix_agent2.d\`) and restart the
+   agent service.
+4. Add a new item on the DHCP server's Zabbix host:
+   - Name: **DHCP leases JSON**
+   - Type: **Zabbix agent**
+   - Key: `dhcp.leases`
+   - Type of information: **Text**
+   - Update interval: `5m`
+   - History: `1h` (data changes constantly, no point retaining)
+   - Trends: do not keep
+5. Verify the item pulls by going to *Latest data* on the DHCP host — it
+   should show a JSON array of leases.
+6. In the widget config, set:
+   - **DHCP server Zabbix host name** → the technical host name you used
+     in step 2 (e.g. `dhcp01.example.com`)
+   - **DHCP lease item key** → `dhcp.leases` (default)
+
+### How It Works
+
+For every device card the widget builds, it checks whether an IP was
+returned from PacketFence's `ip4log.ip`. If not, it consults the DHCP lease
+map by MAC and fills in:
+
+- **IP address** (marked with a yellow `DHCP` badge next to the value)
+- **Hostname** (from the DHCP lease's hostname field, shown if PF didn't
+  provide a `computername`)
+- **DHCP Scope** (as an extra detail row)
+
+Cards with IPs sourced from PF show a subtle blue `PF` badge so you can
+always tell where a given IP came from.
+
+If the DHCP host name or item key is blank, the fallback is skipped
+entirely — PF remains the only source.
+
+
 
 | Field | Default | Purpose |
 |---|---|---|
@@ -155,6 +203,8 @@ automatically try these fallback keys:
 | **PacketFence API URL** | `https://packetfence.example.com:9999` | Root URL, no trailing slash. Default PF API port is **9999** |
 | **Username** | `admin` | PF admin or webservices user |
 | **Password** | — | Plaintext (see security note below) |
+| **DHCP server Zabbix host name** | — | Leave blank to disable DHCP fallback. See *DHCP Fallback* above |
+| **DHCP lease item key** | `dhcp.leases` | Key of the JSON lease item on that host |
 | **MAC-list item key prefix** | `port.mac.list[` | Prefix for constructing MAC-list item key. The widget appends `<snmpIndex>]` |
 | **Verify TLS certificate** | unchecked | Enable for properly-signed PF certs |
 | **Show debug info** | ✓ | Render a debug panel |

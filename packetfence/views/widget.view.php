@@ -28,7 +28,9 @@ function pfRenderDebug(array $info): string {
 function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	$mac       = htmlspecialchars($dev['mac']      ?? '—');
 	$ip        = htmlspecialchars((string) ($dev['ip']       ?? ''));
-	$hostname  = htmlspecialchars((string) ($dev['hostname'] ?? ''));
+	$ip_src    = (string) ($dev['ip_source'] ?? '');
+	$pf_host   = htmlspecialchars((string) ($dev['hostname'] ?? ''));
+	$dhcp_host = htmlspecialchars((string) ($dev['dhcp_hostname'] ?? ''));
 	$vendor    = htmlspecialchars((string) ($dev['vendor']   ?? ''));
 	$os        = htmlspecialchars((string) ($dev['os']       ?? ''));
 	$pid       = htmlspecialchars((string) ($dev['pid']      ?? ''));
@@ -37,8 +39,12 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	$ua        = htmlspecialchars((string) ($dev['user_agent']  ?? ''));
 	$dhcp_fp   = htmlspecialchars((string) ($dev['dhcp_fingerprint'] ?? ''));
 	$last_seen = htmlspecialchars((string) ($dev['last_seen'] ?? ''));
+	$scope     = htmlspecialchars((string) ($dev['dhcp_scope'] ?? ''));
 	$not_in_pf = !empty($dev['not_in_pf']);
 	$events    = $dev['security_events'] ?? [];
+
+	// Prefer PF hostname when present, fall back to DHCP hostname
+	$hostname = $pf_host !== '' ? $pf_host : $dhcp_host;
 
 	$status_css = match (strtolower($status)) {
 		'reg', 'registered'     => 'pf-status--ok',
@@ -64,12 +70,22 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 
 	// Details grid
 	$out .= '<div class="pf-card__details">';
-	if ($ip)        $out .= pfDetailRow('IP',           $ip,     'pf-mono');
+	if ($ip) {
+		// Suffix a small label indicating where the IP came from (PF vs DHCP)
+		$ip_html = $ip;
+		if ($ip_src === 'dhcp') {
+			$ip_html .= ' <span class="pf-ip-src pf-ip-src--dhcp" title="IP from Windows DHCP lease">DHCP</span>';
+		} elseif ($ip_src === 'pf') {
+			$ip_html .= ' <span class="pf-ip-src pf-ip-src--pf" title="IP from PacketFence ip4log">PF</span>';
+		}
+		$out .= pfDetailRow('IP', $ip_html, 'pf-mono');
+	}
 	if ($hostname)  $out .= pfDetailRow('Hostname',     $hostname);
 	if ($vendor)    $out .= pfDetailRow('Vendor',       $vendor);
 	if ($os)        $out .= pfDetailRow('OS',           $os);
 	if ($pid && $pid !== 'default') $out .= pfDetailRow('Owner', $pid);
 	if ($bvlan)     $out .= pfDetailRow('Bypass VLAN',  $bvlan);
+	if ($scope && $ip_src === 'dhcp') $out .= pfDetailRow('DHCP Scope', $scope, 'pf-mono');
 	if ($dhcp_fp)   $out .= pfDetailRow('DHCP FP',      $dhcp_fp, 'pf-mono');
 	if ($last_seen) $out .= pfDetailRow('Last seen',    $last_seen);
 	if ($ua && strlen($ua) < 80) $out .= pfDetailRow('User-Agent', $ua);
@@ -93,7 +109,7 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	// The MAC is appended directly after "node" with no separator, colons URL-encoded.
 	$out .= '<div class="pf-card__actions">';
 	if ($pf_admin_url !== '' && !$not_in_pf) {
-		$node_url = $pf_admin_url . '/admin/#/node/' . rawurlencode($dev['mac']);
+		$node_url = $pf_admin_url . '/admin/#/node' . rawurlencode($dev['mac']);
 		$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
 			. 'View in PacketFence</a>';
 	}

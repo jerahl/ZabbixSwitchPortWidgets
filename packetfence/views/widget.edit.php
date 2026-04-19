@@ -23,6 +23,12 @@
 		new CWidgetFieldTextBoxView($data['fields']['pf_password'])
 	)
 	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['dhcp_host'])
+	)
+	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['dhcp_item_key'])
+	)
+	->addField(
 		new CWidgetFieldTextBoxView($data['fields']['mac_item_prefix'])
 	)
 	->addField(

@@ -231,6 +231,48 @@ class WidgetView extends CControllerDashboardWidgetView {
 		}
 		$debug['step_8_devices'] = count($devices);
 
+		// ── STEP 9: DHCP fallback — fill in missing IPs from Windows DHCP ──
+		$dhcp_host     = trim((string) ($this->fields_values['dhcp_host']     ?? ''));
+		$dhcp_item_key = trim((string) ($this->fields_values['dhcp_item_key'] ?? ''));
+		$debug['step_9_dhcp'] = [
+			'host'            => $dhcp_host,
+			'item_key'        => $dhcp_item_key,
+			'lookup_attempts' => 0,
+			'matches'         => 0,
+			'lease_count'     => 0,
+			'item_age'        => null,
+			'error'           => null,
+		];
+
+		// Only query DHCP if at least one device is missing an IP and both
+		// config fields are set.
+		$needs_dhcp = false;
+		foreach ($devices as $d) {
+			if (empty($d['ip'])) { $needs_dhcp = true; break; }
+		}
+
+		if ($needs_dhcp && $dhcp_host !== '' && $dhcp_item_key !== '') {
+			$lease_map = self::fetchDhcpLeases($dhcp_host, $dhcp_item_key, $debug['step_9_dhcp']);
+
+			if ($lease_map !== null) {
+				foreach ($devices as &$dev) {
+					if (!empty($dev['ip'])) continue;          // already have a PF IP
+					$debug['step_9_dhcp']['lookup_attempts']++;
+					$mac_lc = strtolower((string) $dev['mac']);
+					if (isset($lease_map[$mac_lc])) {
+						$lease = $lease_map[$mac_lc];
+						$dev['ip']            = $lease['ip'] ?? null;
+						$dev['ip_source']     = 'dhcp';
+						$dev['dhcp_hostname'] = $lease['hostname'] ?? null;
+						$dev['dhcp_expires']  = $lease['expires']  ?? null;
+						$dev['dhcp_scope']    = $lease['scope']    ?? null;
+						$debug['step_9_dhcp']['matches']++;
+					}
+				}
+				unset($dev);
+			}
+		}
+
 		$this->setResponse(new CControllerResponseData([
 			'name'          => $name,
 			'waiting'       => false,
@@ -249,6 +291,66 @@ class WidgetView extends CControllerDashboardWidgetView {
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Fetch the DHCP lease JSON blob from a Zabbix item on the configured
+	 * host, parse it, and return a map of lowercased-MAC → lease row.
+	 *
+	 * Returns null on any failure; $debug is updated in-place with
+	 * lease_count / item_age / error for the debug panel.
+	 */
+	private static function fetchDhcpLeases(string $hostname, string $item_key, array &$debug): ?array {
+		$hosts = API::Host()->get([
+			'output' => ['hostid', 'name'],
+			'filter' => ['host' => $hostname],
+		]);
+		if (!$hosts) {
+			// Try by visible name if the technical host name didn't match
+			$hosts = API::Host()->get([
+				'output' => ['hostid', 'name'],
+				'search' => ['name' => $hostname],
+			]);
+		}
+		if (!$hosts) {
+			$debug['error'] = 'DHCP host not found: ' . $hostname;
+			return null;
+		}
+
+		$items = API::Item()->get([
+			'output'  => ['itemid', 'key_', 'lastvalue', 'lastclock'],
+			'hostids' => [$hosts[0]['hostid']],
+			'filter'  => ['key_' => $item_key],
+		]);
+		if (!$items) {
+			$debug['error'] = 'DHCP item not found: ' . $item_key;
+			return null;
+		}
+		$item = $items[0];
+		$debug['item_age'] = $item['lastclock'] ? (time() - (int) $item['lastclock']) : null;
+
+		$raw = (string) $item['lastvalue'];
+		if ($raw === '') {
+			$debug['error'] = 'DHCP item has empty value';
+			return null;
+		}
+
+		$data = json_decode($raw, true);
+		if (!is_array($data)) {
+			$debug['error'] = 'DHCP item value is not valid JSON';
+			return null;
+		}
+		$debug['lease_count'] = count($data);
+
+		$map = [];
+		foreach ($data as $lease) {
+			if (!is_array($lease) || !isset($lease['mac'])) continue;
+			// Normalize MAC: lowercase, colon-separated
+			$mac = strtolower(str_replace('-', ':', (string) $lease['mac']));
+			if (!preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac)) continue;
+			$map[$mac] = $lease;
+		}
+		return $map;
+	}
 
 	private function respondWaiting(string $name, array $debug, bool $show_debug): void {
 		$this->setResponse(new CControllerResponseData([
@@ -320,6 +422,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 			return [
 				'mac'             => $mac,
 				'ip'              => null,
+				'ip_source'       => null,
 				'ip6'             => null,
 				'last_arp'        => null,
 				'last_dhcp'       => null,
@@ -336,6 +439,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 		return [
 			'mac'              => $node['mac'] ?? $mac,
 			'ip'               => $node['ip4log.ip']      ?? null,
+			'ip_source'        => ($node['ip4log.ip'] ?? null) ? 'pf' : null,
 			'ip6'              => $node['ip6log.ip']      ?? null,
 			'last_arp'         => $node['last_arp']       ?? null,
 			'last_dhcp'        => $node['last_dhcp']      ?? null,
