@@ -181,7 +181,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				$all_detail_keys[] = 'net.if.type[ifType.'          . $idx . ']';
 				$all_detail_keys[] = 'net.if.speed[ifHighSpeed.'    . $idx . ']';
 				$all_detail_keys[] = 'net.if.adminstatus[ifIndex.'  . $idx . ']';
-				$all_detail_keys[] = 'snmp.interfaces.poe.dstatus[' . $idx . ']';
+				$all_detail_keys[] = 'snmp.interfaces.poe.dstatus[' . (int)($idx / 1000) . '.' . ($idx % 100) . ']';
 				// Alias candidates — the Zabbix key may be formatted several ways
 				$all_detail_keys[] = 'net.if.alias[ifAlias.'        . $idx . ']';
 				$all_detail_keys[] = 'net.if.alias[ifIndex.'        . $idx . ']';
@@ -304,6 +304,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 						'oper'             => 6,      // notPresent
 						'admin'            => 1,
 						'speed_label'      => '',
+						'speed_class'      => '',
 						'alias'            => '',
 						'poe_raw'          => null,
 						'poe_label'        => null,
@@ -322,7 +323,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				$type_key   = 'net.if.type[ifType.'              . $idx . ']';
 				$speed_key  = 'net.if.speed[ifHighSpeed.'        . $idx . ']';
 				$admin_key  = 'net.if.adminstatus[ifIndex.'      . $idx . ']';
-				$poe_key    = 'snmp.interfaces.poe.dstatus['     . $idx . ']';
+				$poe_key    = 'snmp.interfaces.poe.dstatus['     . (int)($idx / 1000) . '.' . ($idx % 100) . ']';
 				$alias_candidates = [
 					'net.if.alias[ifAlias.' . $idx . ']',
 					'net.if.alias[ifIndex.' . $idx . ']',
@@ -331,7 +332,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 				$oper    = array_key_exists($status_key, $detail_items) ? (int)    $detail_items[$status_key] : 6;
 				$admin   = array_key_exists($admin_key,  $detail_items) ? (int)    $detail_items[$admin_key]  : 1;
-				$speed   = array_key_exists($speed_key,  $detail_items) ? (int)$detail_items[$speed_key] * 1_000_000 : 0;  // ifHighSpeed is Mbps
+				$speed   = array_key_exists($speed_key,  $detail_items) ? (int)$detail_items[$speed_key] : 0;  // ifHighSpeed is Mbps
 				$poe_raw = array_key_exists($poe_key,    $detail_items) ? (string) $detail_items[$poe_key]    : null;
 
 				// Resolve alias from whichever candidate key was found
@@ -376,6 +377,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 					'oper'             => $oper,
 					'admin'            => $admin,
 					'speed_label'      => self::formatSpeed($speed),
+					'speed_class'      => self::speedToCss($speed, $oper),
 					'alias'            => $alias,
 					'poe_raw'          => $poe_raw,
 					'poe_label'        => $poe_info ? $poe_info['label'] : null,
@@ -553,5 +555,26 @@ class WidgetView extends CControllerDashboardWidgetView {
 		if ($bps >= 1_000_000_000) return round($bps / 1_000_000_000, 1) . ' Gbps';
 		if ($bps >= 1_000_000)     return (int) round($bps / 1_000_000)  . ' Mbps';
 		return (int) round($bps / 1_000) . ' Kbps';
+	}
+
+	/**
+	 * Bucket a speed (in bps) into a CSS class for LED coloring.
+	 * Only applies when the port is operationally up — otherwise the state
+	 * color drives the LED and speed coloring is irrelevant.
+	 *
+	 *   10 Mbps  → speed-10m   (amber)
+	 *   100 Mbps → speed-100m  (yellow-green)
+	 *   1 Gbps   → speed-1g    (bright green, the default "up" color)
+	 *   10 Gbps  → speed-10g   (cyan)
+	 *   25 Gbps+ → speed-25g   (blue / purple accent for high-speed uplinks)
+	 */
+	private static function speedToCss(int $bps, int $oper): string {
+		if ($oper !== 1)                return '';  // only color LED when port is up
+		if ($bps >= 25_000_000_000)     return 'speed-25g';
+		if ($bps >= 10_000_000_000)     return 'speed-10g';
+		if ($bps >= 1_000_000_000)      return 'speed-1g';
+		if ($bps >= 100_000_000)        return 'speed-100m';
+		if ($bps >= 10_000_000)         return 'speed-10m';
+		return '';  // unknown / sub-10M — default up color
 	}
 }

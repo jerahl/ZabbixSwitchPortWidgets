@@ -93,7 +93,7 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	// The MAC is appended directly after "node" with no separator, colons URL-encoded.
 	$out .= '<div class="pf-card__actions">';
 	if ($pf_admin_url !== '' && !$not_in_pf) {
-		$node_url = $pf_admin_url . '/admin/#/node' . rawurlencode($dev['mac']);
+		$node_url = $pf_admin_url . '/admin/#/node/' . rawurlencode($dev['mac']);
 		$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
 			. 'View in PacketFence</a>';
 	}
