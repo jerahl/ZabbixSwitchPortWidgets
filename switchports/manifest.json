@@ -4,7 +4,7 @@
 	"type": "widget",
 	"name": "Switch Port Status",
 	"namespace": "SwitchPorts",
-	"version": "2.8",
+	"version": "2.9",
 	"author": "Custom",
 	"description": "Displays switch port faceplate. Click a port to broadcast the host to listening widgets.",
 	"widget": {

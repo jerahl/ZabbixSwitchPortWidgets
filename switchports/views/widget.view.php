@@ -51,7 +51,7 @@ function renderSwitchPort(array $port, bool $show_labels, bool $show_desc): stri
 		.   $inner
 		.   $poe_dot
 		. '</div>'
-		. '</li>';
+		. $bottom . '</li>';
 }
 
 // ── Health strip helpers ──────────────────────────────────────────────────────
@@ -74,7 +74,8 @@ function hsPctState(?float $pct, float $warn = 80.0, float $crit = 90.0): string
  */
 function hsTempState(?float $c, ?int $alarm): string {
 	// Firmware-level over-temp alarm: 1=normal, 2=warning, 3=critical (EXTREME-SYSTEM-MIB)
-	if ($alarm === 1) return 'crit';
+	if ($alarm === 3) return 'crit';
+	if ($alarm === 2) return 'warn';
 	if ($c === null)  return 'unknown';
 	if ($c >= 90)     return 'crit';
 	if ($c >= 85)     return 'warn';
@@ -207,7 +208,7 @@ function renderHealthStrip(array $data): string {
 
 	// Problem count pill (always shown if there are problems)
 	if ($problems > 0) {
-		$out .= '<div class="sw-health__item sw-health__problems sw-health__item--' . $prob_state . '" title="' . htmlspecialchars($prob_tip) . '">';
+		$out .= '<div class="sw-health__item sw-health__problems sw-health__problems--' . $prob_state . '" title="' . htmlspecialchars($prob_tip) . '">';
 		$out .= '<svg class="sw-health__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
 		$out .=   '<path d="M12 2L2 20h20L12 2z"/><path d="M12 9v5M12 17h.01" stroke-width="2.5"/>';
 		$out .= '</svg>';
@@ -246,59 +247,14 @@ if (!empty($data['error'])) {
 	$body  = '<div class="sw-widget-wrapper"' . $hostid_attr . '>';
 
 	// ── Top health strip ─────────────────────────────────────────────────
+	$body .= renderHealthStrip($data);
+
 	$body .= '<div class="sw-header">'
 		. '<span class="sw-header__hostname">' . $hostname . '</span>'
 		. '<span class="sw-header__summary">'
-		. '</span>';
-
-    $body .= '<div class="sw-legend">';
-
-    // Legend — port states
-    $legend = [
-        'port-up'       => ['label' => 'Up',          'color' => '#00c853'],
-        'port-down'     => ['label' => 'Down',        'color' => '#64748b'],
-        'port-error'    => ['label' => 'Error',       'color' => '#ef5350'],
-        'port-disabled' => ['label' => 'Disabled',    'color' => '#9e9e9e'],
-        'port-testing'  => ['label' => 'Testing',     'color' => '#fdd835'],
-        'port-absent'   => ['label' => 'Not Present', 'color' => '#37474f'],
-        'port-unknown'  => ['label' => 'Unknown',     'color' => '#78909c'],
-    ];
-
-    foreach ($legend as $css_class => $info) {
-        $count = count(array_filter($all_ports, fn($p) => $p['css_state'] === $css_class));
-        if ($count === 0 && in_array($css_class, ['port-error', 'port-testing', 'port-absent', 'port-unknown'])) {
-            continue;
-        }
-        $body .= '<span class="sw-legend__item">'
-            . '<span class="sw-legend__swatch" style="background:' . $info['color'] . '"></span>'
-            . '<span class="sw-legend__text">' . htmlspecialchars($info['label']) . ' (' . $count . ')</span>'
-            . '</span>';
-    }
-
-    // PoE legend — only shown if any port has PoE data
-    $poe_legend = [
-        'poe-on'       => ['label' => 'PoE On',       'color' => '#f59e0b'],
-        'poe-searching'=> ['label' => 'Searching',    'color' => '#38bdf8'],
-        'poe-disabled' => ['label' => 'PoE Disabled', 'color' => '#6b7280'],
-        'poe-fault'    => ['label' => 'PoE Fault',    'color' => '#dc2626'],
-        'poe-test'     => ['label' => 'PoE Test',     'color' => '#a78bfa'],
-    ];
-
-    $any_poe = count(array_filter($all_ports, fn($p) => $p['poe_css'] !== null)) > 0;
-    if ($any_poe) {
-        $body .= '<span class="sw-legend__sep">|</span>';
-        foreach ($poe_legend as $css_class => $info) {
-            $count = count(array_filter($all_ports, fn($p) => $p['poe_css'] === $css_class));
-            if ($count === 0) continue;
-            $body .= '<span class="sw-legend__item">'
-                . '<span class="sw-poe-dot ' . $css_class . ' sw-legend__poe-swatch"></span>'
-                . '<span class="sw-legend__text">' . htmlspecialchars($info['label']) . ' (' . $count . ')</span>'
-                . '</span>';
-        }
-    }
-
-    $body .= '</div></div>'; // .sw-legend
-    $body .= renderHealthStrip($data);
+		.   $up_total . ' up / ' . $down_total . ' down / ' . $total . ' total'
+		. '</span>'
+		. '</div>';
 
 	foreach ($members as $m => $member) {
 		$ports   = $member['ports'];
@@ -337,9 +293,52 @@ if (!empty($data['error'])) {
 		$body .= '</div>'; // .sw-stack-member
 	}
 
+	// Legend — port states
+	$legend = [
+		'port-up'       => ['label' => 'Up',          'color' => '#00c853'],
+		'port-down'     => ['label' => 'Down',        'color' => '#64748b'],
+		'port-error'    => ['label' => 'Error',       'color' => '#ef5350'],
+		'port-disabled' => ['label' => 'Disabled',    'color' => '#9e9e9e'],
+		'port-testing'  => ['label' => 'Testing',     'color' => '#fdd835'],
+		'port-absent'   => ['label' => 'Not Present', 'color' => '#37474f'],
+		'port-unknown'  => ['label' => 'Unknown',     'color' => '#78909c'],
+	];
 
+	$body .= '<div class="sw-legend">';
+	foreach ($legend as $css_class => $info) {
+		$count = count(array_filter($all_ports, fn($p) => $p['css_state'] === $css_class));
+		if ($count === 0 && in_array($css_class, ['port-error', 'port-testing', 'port-absent', 'port-unknown'])) {
+			continue;
+		}
+		$body .= '<span class="sw-legend__item">'
+			. '<span class="sw-legend__swatch" style="background:' . $info['color'] . '"></span>'
+			. '<span class="sw-legend__text">' . htmlspecialchars($info['label']) . ' (' . $count . ')</span>'
+			. '</span>';
+	}
 
+	// PoE legend — only shown if any port has PoE data
+	$poe_legend = [
+		'poe-on'       => ['label' => 'PoE On',       'color' => '#f59e0b'],
+		'poe-searching'=> ['label' => 'Searching',    'color' => '#38bdf8'],
+		'poe-disabled' => ['label' => 'PoE Disabled', 'color' => '#6b7280'],
+		'poe-fault'    => ['label' => 'PoE Fault',    'color' => '#dc2626'],
+		'poe-test'     => ['label' => 'PoE Test',     'color' => '#a78bfa'],
+	];
 
+	$any_poe = count(array_filter($all_ports, fn($p) => $p['poe_css'] !== null)) > 0;
+	if ($any_poe) {
+		$body .= '<span class="sw-legend__sep">|</span>';
+		foreach ($poe_legend as $css_class => $info) {
+			$count = count(array_filter($all_ports, fn($p) => $p['poe_css'] === $css_class));
+			if ($count === 0) continue;
+			$body .= '<span class="sw-legend__item">'
+				. '<span class="sw-poe-dot ' . $css_class . ' sw-legend__poe-swatch"></span>'
+				. '<span class="sw-legend__text">' . htmlspecialchars($info['label']) . ' (' . $count . ')</span>'
+				. '</span>';
+		}
+	}
+
+	$body .= '</div>'; // .sw-legend
 	// Debug panel injected here so it sits inside .sw-widget-wrapper flex column
 	$body .= '<!-- debug-placeholder -->';
 	$body .= '</div>'; // .sw-widget-wrapper
