@@ -29,6 +29,11 @@ class WidgetForm extends CWidgetForm {
 					->setDefault('https://packetfence.example.com:9999')
 					->setFlags(CWidgetFieldTextBox::FLAG_NOT_EMPTY)
 			)
+			// PF admin UI URL - separate from API URL, typically on port 1443
+			->addField(
+				(new CWidgetFieldTextBox('pf_admin_url', _('PacketFence admin UI URL')))
+					->setDefault('https://packetfence.example.com:1443')
+			)
 			// PF admin username (or webservices user)
 			->addField(
 				(new CWidgetFieldTextBox('pf_username', _('Username')))

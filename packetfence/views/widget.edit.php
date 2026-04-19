@@ -14,6 +14,9 @@
 		new CWidgetFieldTextBoxView($data['fields']['pf_url'])
 	)
 	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['pf_admin_url'])
+	)
+	->addField(
 		new CWidgetFieldTextBoxView($data['fields']['pf_username'])
 	)
 	->addField(

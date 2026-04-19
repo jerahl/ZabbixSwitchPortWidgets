@@ -25,7 +25,7 @@ function pfRenderDebug(array $info): string {
 }
 
 // ── Individual device card ───────────────────────────────────────────────────
-function pfRenderDevice(array $dev, string $pf_url): string {
+function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	$mac       = htmlspecialchars($dev['mac']      ?? '—');
 	$ip        = htmlspecialchars((string) ($dev['ip']       ?? ''));
 	$hostname  = htmlspecialchars((string) ($dev['hostname'] ?? ''));
@@ -89,10 +89,14 @@ function pfRenderDevice(array $dev, string $pf_url): string {
 	}
 
 	// Action links
+	// PF admin UI uses SPA hash routing: /admin/#/node<encoded-mac>
+	// The MAC is appended directly after "node" with no separator, colons URL-encoded.
 	$out .= '<div class="pf-card__actions">';
-	$node_url = rtrim($pf_url, '/') . '/admin/#/node' . rawurlencode($dev['mac']);
-	$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
-		. 'View in PacketFence</a>';
+	if ($pf_admin_url !== '' && !$not_in_pf) {
+		$node_url = $pf_admin_url . '/admin/#/node' . rawurlencode($dev['mac']);
+		$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
+			. 'View in PacketFence</a>';
+	}
 	$out .= '</div>';
 
 	$out .= '</div>';
@@ -144,7 +148,7 @@ if (!empty($data['waiting'])) {
 	if ($devices) {
 		$body .= '<div class="pf-cards">';
 		foreach ($devices as $dev) {
-			$body .= pfRenderDevice($dev, (string) ($data['pf_url'] ?? ''));
+			$body .= pfRenderDevice($dev, (string) ($data['pf_admin_url'] ?? ''));
 		}
 		$body .= '</div>';
 	} else {
