@@ -26,25 +26,25 @@ function pfRenderDebug(array $info): string {
 
 // ── Individual device card ───────────────────────────────────────────────────
 function pfRenderDevice(array $dev, string $pf_url): string {
-	$mac      = htmlspecialchars($dev['mac']      ?? '—');
-	$ip       = htmlspecialchars((string) ($dev['ip']       ?? ''));
-	$hostname = htmlspecialchars((string) ($dev['hostname'] ?? ''));
-	$vendor   = htmlspecialchars((string) ($dev['vendor']   ?? ''));
-	$os       = htmlspecialchars((string) ($dev['os']       ?? ''));
-	$pid      = htmlspecialchars((string) ($dev['pid']      ?? ''));
-	$vlan     = htmlspecialchars((string) ($dev['vlan']     ?? ''));
-	$role     = htmlspecialchars((string) ($dev['role']     ?? ''));
-	$status   = htmlspecialchars((string) ($dev['status']   ?? ''));
-	$user     = htmlspecialchars((string) ($dev['dot1x_username'] ?? ''));
-	$conn     = htmlspecialchars((string) ($dev['connection_type'] ?? ''));
-	$online   = $dev['online'] ?? null;
-	$events   = $dev['security_events'] ?? [];
+	$mac       = htmlspecialchars($dev['mac']      ?? '—');
+	$ip        = htmlspecialchars((string) ($dev['ip']       ?? ''));
+	$hostname  = htmlspecialchars((string) ($dev['hostname'] ?? ''));
+	$vendor    = htmlspecialchars((string) ($dev['vendor']   ?? ''));
+	$os        = htmlspecialchars((string) ($dev['os']       ?? ''));
+	$pid       = htmlspecialchars((string) ($dev['pid']      ?? ''));
+	$status    = htmlspecialchars((string) ($dev['status']   ?? ''));
+	$bvlan     = htmlspecialchars((string) ($dev['bypass_vlan'] ?? ''));
+	$ua        = htmlspecialchars((string) ($dev['user_agent']  ?? ''));
+	$dhcp_fp   = htmlspecialchars((string) ($dev['dhcp_fingerprint'] ?? ''));
+	$last_seen = htmlspecialchars((string) ($dev['last_seen'] ?? ''));
+	$not_in_pf = !empty($dev['not_in_pf']);
+	$events    = $dev['security_events'] ?? [];
 
 	$status_css = match (strtolower($status)) {
-		'reg', 'registered' => 'pf-status--ok',
+		'reg', 'registered'     => 'pf-status--ok',
 		'unreg', 'unregistered' => 'pf-status--warn',
-		'pending'      => 'pf-status--pending',
-		default        => 'pf-status--unknown',
+		'pending'               => 'pf-status--pending',
+		default                 => 'pf-status--unknown',
 	};
 	$status_label = $status !== '' ? ucfirst($status) : 'Unknown';
 
@@ -55,33 +55,31 @@ function pfRenderDevice(array $dev, string $pf_url): string {
 	};
 	$online_label = $online ? ucfirst((string) $online) : '';
 
-	$out  = '<div class="pf-card">';
+	$out  = '<div class="pf-card' . ($not_in_pf ? ' pf-card--unknown' : '') . '">';
 
 	// Header: MAC + status pills
 	$out .= '<div class="pf-card__header">';
 	$out .= '<span class="pf-card__mac">' . $mac . '</span>';
 	$out .= '<span class="pf-card__pills">';
-	$out .= '<span class="pf-status ' . $status_css . '">' . $status_label . '</span>';
-	if ($online_label) {
-		$out .= '<span class="pf-online ' . $online_css . '">' . $online_label . '</span>';
+	if ($not_in_pf) {
+		$out .= '<span class="pf-status pf-status--unknown">Not in PacketFence</span>';
+	} else {
+		$out .= '<span class="pf-status ' . $status_css . '">' . $status_label . '</span>';
 	}
 	$out .= '</span>';
 	$out .= '</div>';
 
 	// Details grid
 	$out .= '<div class="pf-card__details">';
-	if ($ip)       $out .= pfDetailRow('IP',       $ip,       'pf-mono');
-	if ($hostname) $out .= pfDetailRow('Hostname', $hostname);
-	if ($vendor)   $out .= pfDetailRow('Vendor',   $vendor);
-	if ($os)       $out .= pfDetailRow('OS',       $os);
-	if ($user)     $out .= pfDetailRow('User',     $user);
-	elseif ($pid && $pid !== 'default') $out .= pfDetailRow('Owner', $pid);
-	if ($vlan)     $out .= pfDetailRow('VLAN',     $vlan);
-	if ($role)     $out .= pfDetailRow('Role',     $role);
-	if ($conn)     $out .= pfDetailRow('Conn',     $conn);
-	if (!empty($dev['session_start'])) {
-		$out .= pfDetailRow('Since', htmlspecialchars((string) $dev['session_start']));
-	}
+	if ($ip)        $out .= pfDetailRow('IP',           $ip,     'pf-mono');
+	if ($hostname)  $out .= pfDetailRow('Hostname',     $hostname);
+	if ($vendor)    $out .= pfDetailRow('Vendor',       $vendor);
+	if ($os)        $out .= pfDetailRow('OS',           $os);
+	if ($pid && $pid !== 'default') $out .= pfDetailRow('Owner', $pid);
+	if ($bvlan)     $out .= pfDetailRow('Bypass VLAN',  $bvlan);
+	if ($dhcp_fp)   $out .= pfDetailRow('DHCP FP',      $dhcp_fp, 'pf-mono');
+	if ($last_seen) $out .= pfDetailRow('Last seen',    $last_seen);
+	if ($ua && strlen($ua) < 80) $out .= pfDetailRow('User-Agent', $ua);
 	$out .= '</div>';
 
 	// Security events
@@ -127,8 +125,8 @@ if (!empty($data['waiting'])) {
 } elseif (!empty($data['error'])) {
 	$body .= '<div class="pf-header">';
 	$body .= '<span class="pf-header__title">' . htmlspecialchars((string) ($data['switch_name'] ?? '')) . '</span>';
-	if (!empty($data['port_number'])) {
-		$body .= '<span class="pf-header__port">Port ' . (int) $data['port_number'] . '</span>';
+	if (!empty($data['snmp_index'])) {
+		$body .= '<span class="pf-header__port">ifIndex ' . (int) $data['snmp_index'] . '</span>';
 	}
 	$body .= '</div>';
 	$body .= '<div class="pf-error">' . htmlspecialchars((string) $data['error']) . '</div>';
@@ -136,12 +134,16 @@ if (!empty($data['waiting'])) {
 	// Header
 	$body .= '<div class="pf-header">';
 	$body .= '<span class="pf-header__title">' . htmlspecialchars((string) ($data['switch_name'] ?? '')) . '</span>';
-	$body .= '<span class="pf-header__port">Port ' . (int) $data['port_number'];
-	if (!empty($data['stack_member'])) {
-		$body .= ' <span class="pf-header__member">(member ' . (int) $data['stack_member'] . ')</span>';
+	$body .= '<span class="pf-header__port">ifIndex ' . (int) ($data['snmp_index'] ?? 0) . '</span>';
+	if (!empty($data['macs'])) {
+		$body .= '<span class="pf-header__count">' . count($data['macs']) . ' MAC'
+			. (count($data['macs']) === 1 ? '' : 's') . '</span>';
 	}
-	$body .= '</span>';
-	$body .= '<span class="pf-header__ip">' . htmlspecialchars((string) ($data['switch_ip'] ?? '')) . '</span>';
+	if (isset($data['mac_item_age']) && $data['mac_item_age'] !== null) {
+		$age = (int) $data['mac_item_age'];
+		$age_label = $age < 60 ? $age . 's' : ($age < 3600 ? round($age / 60) . 'm' : round($age / 3600) . 'h');
+		$body .= '<span class="pf-header__age" title="MAC list last updated">' . $age_label . ' old</span>';
+	}
 	$body .= '</div>';
 
 	// Device list
@@ -155,8 +157,8 @@ if (!empty($data['waiting'])) {
 	} else {
 		$body .= '<div class="pf-empty">';
 		$body .= '<div class="pf-empty__icon">∅</div>';
-		$body .= '<div class="pf-empty__msg">No devices connected</div>';
-		$body .= '<div class="pf-empty__hint">PacketFence has no open location logs for this port</div>';
+		$body .= '<div class="pf-empty__msg">No devices on this port</div>';
+		$body .= '<div class="pf-empty__hint">No MACs learned on this port in the switch FDB</div>';
 		$body .= '</div>';
 	}
 }

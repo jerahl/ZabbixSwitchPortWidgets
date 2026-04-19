@@ -20,7 +20,7 @@
 		new CWidgetFieldTextBoxView($data['fields']['pf_password'])
 	)
 	->addField(
-		new CWidgetFieldIntegerBoxView($data['fields']['port_modulus'])
+		new CWidgetFieldTextBoxView($data['fields']['mac_item_prefix'])
 	)
 	->addField(
 		new CWidgetFieldCheckBoxView($data['fields']['verify_ssl'])

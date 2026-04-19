@@ -6,8 +6,7 @@ use Zabbix\Widgets\CWidgetForm;
 use Zabbix\Widgets\Fields\{
 	CWidgetFieldCheckBox,
 	CWidgetFieldMultiSelectOverrideHost,
-	CWidgetFieldTextBox,
-	CWidgetFieldIntegerBox
+	CWidgetFieldTextBox
 };
 
 /**
@@ -41,11 +40,11 @@ class WidgetForm extends CWidgetForm {
 				(new CWidgetFieldTextBox('pf_password', _('Password')))
 					->setDefault('')
 			)
-			// Port-number divisor: for Extreme where ifIndex=1001→port 1, this is 1000
-			// For switches that use bare ifIndex as port number, set to 1
+			// Prefix used to construct the MAC-list item key.
+			// Full key: <prefix><snmpIndex>]  — e.g. "port.mac.list[1001]"
 			->addField(
-				(new CWidgetFieldIntegerBox('port_modulus', _('Port number modulus'), 1, 100000))
-					->setDefault(1000)
+				(new CWidgetFieldTextBox('mac_item_prefix', _('MAC-list item key prefix')))
+					->setDefault('port.mac.list[')
 			)
 			// Verify TLS cert (disable for self-signed / internal CA)
 			->addField(
