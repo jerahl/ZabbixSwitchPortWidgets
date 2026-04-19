@@ -303,6 +303,8 @@ class WidgetView extends CControllerDashboardWidgetView {
 				'last_seen', 'mac', 'machine_account', 'notes', 'pid', 'regdate',
 				'sessionid', 'status', 'time_balance', 'unregdate', 'user_agent',
 				'voip',
+				// Joined fields — pull the current IPs from ip4log / ip6log
+				'ip4log.ip', 'ip6log.ip',
 			],
 			'query' => [
 				'op'     => 'and',
@@ -318,6 +320,9 @@ class WidgetView extends CControllerDashboardWidgetView {
 			return [
 				'mac'             => $mac,
 				'ip'              => null,
+				'ip6'             => null,
+				'last_arp'        => null,
+				'last_dhcp'       => null,
 				'hostname'        => null,
 				'vendor'          => null,
 				'os'              => null,
@@ -330,7 +335,10 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 		return [
 			'mac'              => $node['mac'] ?? $mac,
-			'ip'               => $node['last_arp']       ?? ($node['last_dhcp'] ?? null),
+			'ip'               => $node['ip4log.ip']      ?? null,
+			'ip6'              => $node['ip6log.ip']      ?? null,
+			'last_arp'         => $node['last_arp']       ?? null,
+			'last_dhcp'        => $node['last_dhcp']      ?? null,
 			'hostname'         => $node['computername']   ?? null,
 			'vendor'           => $node['device_manufacturer'] ?? null,
 			'os'               => $node['device_type']    ?? ($node['device_class'] ?? null),

@@ -4,7 +4,7 @@
 	"type": "widget",
 	"name": "Switch Port Device (PacketFence)",
 	"namespace": "PacketFence",
-	"version": "2.3",
+	"version": "2.4",
 	"author": "Custom",
 	"description": "Displays the devices currently connected to a switch port via PacketFence API. Set Override host to the Switch Port Status widget.",
 	"widget": {
