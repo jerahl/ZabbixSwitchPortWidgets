@@ -48,13 +48,6 @@ function pfRenderDevice(array $dev, string $pf_url): string {
 	};
 	$status_label = $status !== '' ? ucfirst($status) : 'Unknown';
 
-	$online_css = match (strtolower((string) $online)) {
-		'on',  'online'  => 'pf-online--on',
-		'off', 'offline' => 'pf-online--off',
-		default          => 'pf-online--unknown',
-	};
-	$online_label = $online ? ucfirst((string) $online) : '';
-
 	$out  = '<div class="pf-card' . ($not_in_pf ? ' pf-card--unknown' : '') . '">';
 
 	// Header: MAC + status pills
@@ -97,7 +90,7 @@ function pfRenderDevice(array $dev, string $pf_url): string {
 
 	// Action links
 	$out .= '<div class="pf-card__actions">';
-	$node_url = rtrim($pf_url, '/') . '/admin/nodes/' . rawurlencode($dev['mac']);
+	$node_url = rtrim($pf_url, '/') . '/admin/#/node' . rawurlencode($dev['mac']);
 	$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
 		. 'View in PacketFence</a>';
 	$out .= '</div>';
