@@ -6,8 +6,7 @@ use Zabbix\Widgets\CWidgetForm;
 use Zabbix\Widgets\Fields\{
 	CWidgetFieldCheckBox,
 	CWidgetFieldMultiSelectOverrideHost,
-	CWidgetFieldTextBox,
-	CWidgetFieldIntegerBox
+	CWidgetFieldTextBox
 };
 
 /**
@@ -30,6 +29,11 @@ class WidgetForm extends CWidgetForm {
 					->setDefault('https://packetfence.example.com:9999')
 					->setFlags(CWidgetFieldTextBox::FLAG_NOT_EMPTY)
 			)
+			// PF admin UI URL - separate from API URL, typically on port 1443
+			->addField(
+				(new CWidgetFieldTextBox('pf_admin_url', _('PacketFence admin UI URL')))
+					->setDefault('https://packetfence.example.com:1443')
+			)
 			// PF admin username (or webservices user)
 			->addField(
 				(new CWidgetFieldTextBox('pf_username', _('Username')))
@@ -41,11 +45,22 @@ class WidgetForm extends CWidgetForm {
 				(new CWidgetFieldTextBox('pf_password', _('Password')))
 					->setDefault('')
 			)
-			// Port-number divisor: for Extreme where ifIndex=1001→port 1, this is 1000
-			// For switches that use bare ifIndex as port number, set to 1
+			// DHCP lookup fallback — hostname of the Zabbix host running the DHCP
+			// lease exporter. Leave blank to disable DHCP fallback.
 			->addField(
-				(new CWidgetFieldIntegerBox('port_modulus', _('Port number modulus'), 1, 100000))
-					->setDefault(1000)
+				(new CWidgetFieldTextBox('dhcp_host', _('DHCP server Zabbix host name')))
+					->setDefault('')
+			)
+			// Item key on that host returning the JSON lease list
+			->addField(
+				(new CWidgetFieldTextBox('dhcp_item_key', _('DHCP lease item key')))
+					->setDefault('dhcp.leases')
+			)
+			// Prefix used to construct the MAC-list item key.
+			// Full key: <prefix><snmpIndex>]  — e.g. "port.mac.list[1001]"
+			->addField(
+				(new CWidgetFieldTextBox('mac_item_prefix', _('MAC-list item key prefix')))
+					->setDefault('port.mac.list[')
 			)
 			// Verify TLS cert (disable for self-signed / internal CA)
 			->addField(

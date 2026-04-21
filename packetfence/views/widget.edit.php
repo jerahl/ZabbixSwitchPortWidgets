@@ -14,13 +14,22 @@
 		new CWidgetFieldTextBoxView($data['fields']['pf_url'])
 	)
 	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['pf_admin_url'])
+	)
+	->addField(
 		new CWidgetFieldTextBoxView($data['fields']['pf_username'])
 	)
 	->addField(
 		new CWidgetFieldTextBoxView($data['fields']['pf_password'])
 	)
 	->addField(
-		new CWidgetFieldIntegerBoxView($data['fields']['port_modulus'])
+		new CWidgetFieldTextBoxView($data['fields']['dhcp_host'])
+	)
+	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['dhcp_item_key'])
+	)
+	->addField(
+		new CWidgetFieldTextBoxView($data['fields']['mac_item_prefix'])
 	)
 	->addField(
 		new CWidgetFieldCheckBoxView($data['fields']['verify_ssl'])

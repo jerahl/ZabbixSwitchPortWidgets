@@ -181,7 +181,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				$all_detail_keys[] = 'net.if.type[ifType.'          . $idx . ']';
 				$all_detail_keys[] = 'net.if.speed[ifHighSpeed.'    . $idx . ']';
 				$all_detail_keys[] = 'net.if.adminstatus[ifIndex.'  . $idx . ']';
-				$all_detail_keys[] = 'snmp.interfaces.poe.dstatus[' . (int)($idx / 1000) . '.' . ($idx % 100) . ']'; //poe.dsstatus expects index of 1.1 instead of 1001 so convert it
+				$all_detail_keys[] = 'snmp.interfaces.poe.dstatus[' . (int)($idx / 1000) . '.' . ($idx % 100) . ']';
 				// Alias candidates — the Zabbix key may be formatted several ways
 				$all_detail_keys[] = 'net.if.alias[ifAlias.'        . $idx . ']';
 				$all_detail_keys[] = 'net.if.alias[ifIndex.'        . $idx . ']';
@@ -258,17 +258,72 @@ class WidgetView extends CControllerDashboardWidgetView {
 		$members = [];
 
 		foreach ($member_defs as $def) {
-			$ports      = [];
-			$port_num   = 0;
+			$ports = [];
 
-			foreach ($def['indices'] as $idx) {
-				$port_num++;
+			// Build a lookup: port_number → ifIndex from the discovered indices
+			// Port number is (ifIndex mod 1000) for Extreme-style indexing, and
+			// falls back to positional for switches that don't use that scheme.
+			$present_indices = $def['indices'];
+			$idx_to_port = [];
+			$max_port    = 0;
+			$use_modulo  = true;
+			foreach ($present_indices as $pos => $idx) {
+				// If any index doesn't fit the "base-of-1000" scheme, fall back
+				// to positional (the old behavior) for this member.
+				$mod = $idx % 1000;
+				if ($mod === 0) {
+					// Shouldn't happen since we skipped mgmt earlier, but guard anyway
+					$use_modulo = false;
+					break;
+				}
+				$idx_to_port[$idx] = $mod;
+				$max_port = max($max_port, $mod);
+			}
+
+			if (!$use_modulo) {
+				// Positional fallback: port_num = array position + 1
+				$idx_to_port = [];
+				foreach ($present_indices as $pos => $idx) {
+					$idx_to_port[$idx] = $pos + 1;
+				}
+				$max_port = count($present_indices);
+			}
+
+			$present_index_by_port = array_flip($idx_to_port);
+
+			// Iterate from port 1 to max_port so that gaps produce an "absent"
+			// placeholder, keeping the faceplate columns aligned physically.
+			for ($port_num = 1; $port_num <= $max_port; $port_num++) {
+				if (!isset($present_index_by_port[$port_num])) {
+					// Gap in the ifIndex sequence — render an absent slot
+					$ports[$port_num] = [
+						'num'              => $port_num,
+						'snmp_index'       => 0,
+						'is_sfp'           => false,
+						'itemids'          => [],
+						'oper'             => 6,      // notPresent
+						'admin'            => 1,
+						'speed_label'      => '',
+						'speed_class'      => '',
+						'alias'            => '',
+						'poe_raw'          => null,
+						'poe_label'        => null,
+						'poe_css'          => null,
+						'poe_fault'        => false,
+						'has_problem'      => false,
+						'problem_severity' => 0,
+						'css_state'        => 'port-absent',
+					];
+					continue;
+				}
+
+				$idx = $present_index_by_port[$port_num];
 
 				$status_key = $item_prefix                       . $idx . ']';
 				$type_key   = 'net.if.type[ifType.'              . $idx . ']';
 				$speed_key  = 'net.if.speed[ifHighSpeed.'        . $idx . ']';
 				$admin_key  = 'net.if.adminstatus[ifIndex.'      . $idx . ']';
-				$poe_key    = 'snmp.interfaces.poe.dstatus['     . (int)($idx / 1000) . '.' . ($idx % 100) . ']'; //poe.dsstatus expects index of 1.1 instead of 1001 so convert it
+				$poe_key    = 'snmp.interfaces.poe.dstatus['     . (int)($idx / 1000) . '.' . ($idx % 100) . ']';
 				$alias_candidates = [
 					'net.if.alias[ifAlias.' . $idx . ']',
 					'net.if.alias[ifIndex.' . $idx . ']',
@@ -322,6 +377,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 					'oper'             => $oper,
 					'admin'            => $admin,
 					'speed_label'      => self::formatSpeed($speed),
+					'speed_class'      => self::speedToCss($speed, $oper),
 					'alias'            => $alias,
 					'poe_raw'          => $poe_raw,
 					'poe_label'        => $poe_info ? $poe_info['label'] : null,
@@ -334,7 +390,8 @@ class WidgetView extends CControllerDashboardWidgetView {
 			}
 
 			$sfp_count  = count(array_filter($ports, fn($p) => $p['is_sfp']));
-			$port_count = count($ports) - $sfp_count;
+			$real_ports = array_filter($ports, fn($p) => $p['css_state'] !== 'port-absent' || $p['snmp_index'] > 0);
+			$port_count = count($real_ports) - $sfp_count;
 
 			$members[$def['num']] = [
 				'label'      => $def['label'],
@@ -342,7 +399,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				'port_count' => $port_count,
 				'sfp_count'  => $sfp_count,
 				'idx_base'   => $def['indices'][0] ?? 0,
-				'total'      => count($ports),
+				'total'      => count($real_ports),
 				'ports'      => $ports,
 			];
 		}
@@ -498,5 +555,26 @@ class WidgetView extends CControllerDashboardWidgetView {
 		if ($bps >= 1_000_000_000) return round($bps / 1_000_000_000, 1) . ' Gbps';
 		if ($bps >= 1_000_000)     return (int) round($bps / 1_000_000)  . ' Mbps';
 		return (int) round($bps / 1_000) . ' Kbps';
+	}
+
+	/**
+	 * Bucket a speed (in bps) into a CSS class for LED coloring.
+	 * Only applies when the port is operationally up — otherwise the state
+	 * color drives the LED and speed coloring is irrelevant.
+	 *
+	 *   10 Mbps  → speed-10m   (amber)
+	 *   100 Mbps → speed-100m  (yellow-green)
+	 *   1 Gbps   → speed-1g    (bright green, the default "up" color)
+	 *   10 Gbps  → speed-10g   (cyan)
+	 *   25 Gbps+ → speed-25g   (blue / purple accent for high-speed uplinks)
+	 */
+	private static function speedToCss(int $bps, int $oper): string {
+		if ($oper !== 1)                return '';  // only color LED when port is up
+		if ($bps >= 25_000_000_000)     return 'speed-25g';
+		if ($bps >= 10_000_000_000)     return 'speed-10g';
+		if ($bps >= 1_000_000_000)      return 'speed-1g';
+		if ($bps >= 100_000_000)        return 'speed-100m';
+		if ($bps >= 10_000_000)         return 'speed-10m';
+		return '';  // unknown / sub-10M — default up color
 	}
 }

@@ -544,3 +544,38 @@
 	font-variant-numeric: tabular-nums;
 	font-weight: 500;
 }
+
+/* ── Speed-tier LED colors ────────────────────────────────────────────────── */
+/* Applied on top of .port-up so only up ports get speed-tiered LEDs.
+   The default .port-up LED (bright green) stays as the fallback for 1 Gbps,
+   which is the most common "healthy link" speed. */
+
+.sw-port-icon.port-up.speed-10m .sw-port-led,
+.sw-port-icon.port-up.speed-10m .sw-sfp-inner {
+	background: #ff9800;                /* amber - old/slow link, worth noticing */
+	box-shadow: 0 0 4px #ff9800;
+}
+
+.sw-port-icon.port-up.speed-100m .sw-port-led,
+.sw-port-icon.port-up.speed-100m .sw-sfp-inner {
+	background: #cddc39;                /* lime - 100M */
+	box-shadow: 0 0 4px #cddc39;
+}
+
+.sw-port-icon.port-up.speed-1g .sw-port-led,
+.sw-port-icon.port-up.speed-1g .sw-sfp-inner {
+	background: #69f0ae;                /* bright green - gigabit, the default healthy link */
+	box-shadow: 0 0 4px #69f0ae;
+}
+
+.sw-port-icon.port-up.speed-10g .sw-port-led,
+.sw-port-icon.port-up.speed-10g .sw-sfp-inner {
+	background: #4dd0e1;                /* cyan - 10 gigabit */
+	box-shadow: 0 0 5px #4dd0e1;
+}
+
+.sw-port-icon.port-up.speed-25g .sw-port-led,
+.sw-port-icon.port-up.speed-25g .sw-sfp-inner {
+	background: #b388ff;                /* violet - 25G+ high-speed uplinks */
+	box-shadow: 0 0 5px #b388ff;
+}

@@ -230,3 +230,42 @@
 	font-size: 10px;
 }
 .pf-dbg-tbl th { background: #111827; color: #cbd5e1; font-weight: 600; }
+
+/* ── MAC list item age indicator ─────────────────────────────────────────── */
+.pf-header__count {
+	padding: 2px 6px;
+	background: #1e293b;
+	border-radius: 3px;
+	font-size: 10px;
+	color: #94a3b8;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.pf-header__age {
+	margin-left: auto;
+	font-size: 10px;
+	color: #64748b;
+	font-style: italic;
+}
+
+/* ── Card state: MAC seen on switch but not known to PacketFence ──────── */
+.pf-card--unknown {
+	border-style: dashed;
+	opacity: 0.85;
+}
+
+/* ── IP source badge (PF vs DHCP) ────────────────────────────────────────── */
+.pf-ip-src {
+	display: inline-block;
+	margin-left: 5px;
+	padding: 0 4px;
+	font-size: 9px;
+	font-weight: 600;
+	border-radius: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	vertical-align: 1px;
+	font-family: system-ui, sans-serif;  /* reset from pf-mono */
+}
+.pf-ip-src--pf   { background: rgba(96,165,250,0.15); color: #60a5fa; }
+.pf-ip-src--dhcp { background: rgba(250,204,21,0.15); color: #facc15; }

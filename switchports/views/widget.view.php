@@ -33,7 +33,8 @@ function renderSwitchPort(array $port, bool $show_labels, bool $show_desc): stri
 	$top    = $show_labels ? '<span class="sw-port-label sw-port-label--top">'    . $num . '</span>' : '';
 	$bottom = $show_labels ? '<span class="sw-port-label sw-port-label--bottom">' . $num . '</span>' : '';
 	$inner  = $is_sfp ? '<span class="sw-sfp-inner"></span>' : '<span class="sw-port-led"></span>';
-	$cls    = 'sw-port-icon' . ($is_sfp ? ' sw-port-icon--sfp' : '') . ' ' . $state;
+	$speed_cls = !empty($port['speed_class']) ? ' ' . htmlspecialchars($port['speed_class']) : '';
+	$cls    = 'sw-port-icon' . ($is_sfp ? ' sw-port-icon--sfp' : '') . ' ' . $state . $speed_cls;
 
 	// PoE dot — only shown when PoE data exists for this port
 	$poe_dot = '';
@@ -51,7 +52,7 @@ function renderSwitchPort(array $port, bool $show_labels, bool $show_desc): stri
 		.   $inner
 		.   $poe_dot
 		. '</div>'
-		. '</li>';
+		. $bottom . '</li>';
 }
 
 // ── Health strip helpers ──────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ function hsPctState(?float $pct, float $warn = 80.0, float $crit = 90.0): string
 function hsTempState(?float $c, ?int $alarm): string {
 	// Firmware-level over-temp alarm: 1=normal, 2=warning, 3=critical (EXTREME-SYSTEM-MIB)
 	if ($alarm === 1) return 'crit';
-	if ($c === null)  return 'unknown';
+    if ($c === null)  return 'unknown';
 	if ($c >= 90)     return 'crit';
 	if ($c >= 85)     return 'warn';
 	return 'ok';
@@ -247,11 +248,7 @@ if (!empty($data['error'])) {
 
 	// ── Top health strip ─────────────────────────────────────────────────
 	$body .= '<div class="sw-header">'
-		. '<span class="sw-header__hostname">' . $hostname . '</span>'
-		. '<span class="sw-header__summary">'
-		. '</span>';
-
-    $body .= '<div class="sw-legend">';
+		. '<span class="sw-header__hostname">' . $hostname . '</span>';
 
     // Legend — port states
     $legend = [
@@ -264,6 +261,7 @@ if (!empty($data['error'])) {
         'port-unknown'  => ['label' => 'Unknown',     'color' => '#78909c'],
     ];
 
+    $body .= '<div class="sw-legend">';
     foreach ($legend as $css_class => $info) {
         $count = count(array_filter($all_ports, fn($p) => $p['css_state'] === $css_class));
         if ($count === 0 && in_array($css_class, ['port-error', 'port-testing', 'port-absent', 'port-unknown'])) {
@@ -293,6 +291,35 @@ if (!empty($data['error'])) {
             $body .= '<span class="sw-legend__item">'
                 . '<span class="sw-poe-dot ' . $css_class . ' sw-legend__poe-swatch"></span>'
                 . '<span class="sw-legend__text">' . htmlspecialchars($info['label']) . ' (' . $count . ')</span>'
+                . '</span>';
+        }
+    }
+
+    // Speed legend — only shown for speeds actually present on up ports
+    $speed_legend = [
+        'speed-10m'  => ['label' => '10 Mbps',  'color' => '#ff9800'],
+        'speed-100m' => ['label' => '100 Mbps', 'color' => '#cddc39'],
+        'speed-1g'   => ['label' => '1 Gbps',   'color' => '#69f0ae'],
+        'speed-10g'  => ['label' => '10 Gbps',  'color' => '#4dd0e1'],
+        'speed-25g'  => ['label' => '25 Gbps+', 'color' => '#b388ff'],
+    ];
+
+    $speed_counts = [];
+    foreach ($speed_legend as $cls => $_info) {
+        $speed_counts[$cls] = count(array_filter(
+            $all_ports,
+            fn($p) => ($p['speed_class'] ?? '') === $cls
+        ));
+    }
+    $any_speeds_shown = count(array_filter($speed_counts, fn($n) => $n > 0)) > 0;
+    if ($any_speeds_shown) {
+        $body .= '<span class="sw-legend__sep">|</span>';
+        foreach ($speed_legend as $css_class => $info) {
+            if (($speed_counts[$css_class] ?? 0) === 0) continue;
+            $body .= '<span class="sw-legend__item">'
+                . '<span class="sw-legend__swatch" style="background:' . $info['color'] . '"></span>'
+                . '<span class="sw-legend__text">' . htmlspecialchars($info['label'])
+                . ' (' . $speed_counts[$css_class] . ')</span>'
                 . '</span>';
         }
     }
@@ -336,8 +363,6 @@ if (!empty($data['error'])) {
 		$body .= '</div>'; // .sw-faceplate
 		$body .= '</div>'; // .sw-stack-member
 	}
-
-
 
 
 	// Debug panel injected here so it sits inside .sw-widget-wrapper flex column
