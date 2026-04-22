@@ -1,10 +1,13 @@
 zabbix_export:
   version: '7.0'
   template_groups:
-    - uuid: a2b3c4d5e6f71890abcd1234567890ff
+    - uuid: 132ca64d90934edfae48c0a3250b4b07
       name: Templates/Video
+  host_groups:
+    - uuid: 570ab5fdc001423a8758df1b30099f2b
+      name: Cameras/Bosch
   templates:
-    - uuid: 'a7890123456789012789012345678abc'
+    - uuid: e178298b1cc24666a075358f0d9bf027
       template: 'Template Milestone Recording Server'
       name: 'Milestone XProtect Recording Server'
       description: |
@@ -24,27 +27,82 @@ zabbix_export:
         - macro: '{$CAMERA.TEMPLATE}'
           value: 'Template Bosch Camera via Milestone'
       items:
-      # ... your items unchanged ...
+        - uuid: ddfc2200cd1a480f91a135365b387b7e
+          name: 'Milestone: storage used %'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.storage.used_pct'
+          delay: 5m
+          history: 30d
+          trends: 365d
+          value_type: FLOAT
+          units: '%'
+          tags:
+            - tag: component
+              value: storage
+        - uuid: 09886bd2b11f4272a29a9a44867954e2
+          name: 'Event Server service state'
+          type: ZABBIX_ACTIVE
+          key: 'service.info[Milestone XProtect Event Server,state]'
+          delay: 1m
+          history: 7d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: services
+        - uuid: 4f11ae437b7949b7a0fa80c587bb91c6
+          name: 'Recording Server service state'
+          type: ZABBIX_ACTIVE
+          key: 'service.info[Milestone XProtect Recording Server,state]'
+          delay: 1m
+          history: 7d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: services
+        - uuid: f8e4050a08e34fcc90336aac7e97f592
+          name: 'Management Server service state'
+          type: ZABBIX_ACTIVE
+          key: 'service.info[Milestone XProtect Management Server,state]'
+          delay: 1m
+          history: 7d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: services
       discovery_rules:
-      # ... your discovery rule unchanged ...
-
+        - uuid: 55630679610f4ad88f7b09889bc41595
+          name: 'Camera discovery'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.camera.discover'
+          delay: 1h
+          lifetime: 7d
+          description: 'Discovers all cameras registered in Milestone'
+          host_prototypes:
+            - uuid: cba8a468a5c24cf59e20b552e32c7db1
+              host: 'CAM-{#CAMERA_GUID}'
+              name: '{#CAMERA_NAME}'
+              group_links:
+                - group:
+                    name: 'Cameras/Bosch'
+              macros:
+                - macro: '{$CAMERA.GUID}'
+                  value: '{#CAMERA_GUID}'
+                - macro: '{$MILESTONE.RECORDER}'
+                  value: '{#RECORDER}'
   triggers:
-    - uuid: '14567890123456789456789012345f234'
+    - uuid: 41d0e870cf5b49a081a2a75fb361c81b
       expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.WARN_PCT}'
       name: 'Milestone storage >{$STORAGE.WARN_PCT}%'
       priority: WARNING
-
-    - uuid: '25678901234567890567890123456f345'
+    - uuid: 0f9279beb4af4fcaabce09ba495d531f
       expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.CRIT_PCT}'
       name: 'Milestone storage >{$STORAGE.CRIT_PCT}% CRITICAL'
       priority: HIGH
-
-    - uuid: '36789012345678901678901234567f456'
+    - uuid: c62490c4638a43a9b0d33858dc4730e2
       expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Recording Server,state])<>0'
       name: 'Recording Server service not running'
       priority: DISASTER
-
-    - uuid: '47890123456789012789012345678f567'
+    - uuid: 6044010103284f5d9ef3b4cc76f95918
       expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Event Server,state])<>0'
       name: 'Event Server service not running'
       priority: HIGH
