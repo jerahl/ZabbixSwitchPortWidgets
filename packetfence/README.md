@@ -198,6 +198,42 @@ always tell where a given IP came from.
 If the DHCP host name or item key is blank, the fallback is skipped
 entirely — PF remains the only source.
 
+### Payload Format & Size
+
+The PowerShell script emits the lease list as **gzip-compressed JSON,
+base64-encoded** on a single line. This matters on servers with large lease
+tables — gzip typically achieves 8-10× compression on the repetitive
+MAC/IP/hostname data, so a raw 1.5 MB JSON blob becomes roughly 150-200 KB
+of base64 text. Combined with tighter filtering (only active, non-expired
+leases with real MACs from active scopes), 10,000+ lease environments stay
+well within comfortable item size limits.
+
+The widget detects the encoding automatically. It first tries
+`base64_decode()` + `gzdecode()` and falls back to raw-JSON parsing if the
+value doesn't look base64-encoded, so older script installations keep
+working during an upgrade.
+
+You can verify the decoded content from Zabbix's *Latest data* page —
+the base64 blob looks like a long gibberish string. To decode manually on
+the DHCP server:
+
+```powershell
+$raw = powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File C:\zabbix\scripts\dhcp-leases.ps1
+$bytes = [Convert]::FromBase64String($raw)
+$ms = New-Object IO.MemoryStream(,$bytes)
+$gz = New-Object IO.Compression.GZipStream($ms, `
+    [IO.Compression.CompressionMode]::Decompress)
+$sr = New-Object IO.StreamReader($gz)
+$leases = $sr.ReadToEnd() | ConvertFrom-Json
+$leases.Count
+```
+
+Note that Zabbix's *Latest data* UI truncates long text values in the
+display (at around 64 KB of visible characters), but the full value is
+stored in the database and returned by the API. The widget always sees
+the complete payload.
+
 
 
 | Field | Default | Purpose |

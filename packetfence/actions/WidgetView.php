@@ -350,9 +350,44 @@ class WidgetView extends CControllerDashboardWidgetView {
 			return null;
 		}
 
-		$data = json_decode($raw, true);
+		// The PowerShell script emits gzip-compressed JSON, base64-encoded,
+		// as a single line. Try to decode + decompress first. If that fails
+		// (e.g. user still running the older raw-JSON script), fall back
+		// to parsing the raw value directly as JSON.
+		$json = null;
+
+		// Base64-encoded gzip blobs are typically 100+ chars of A-Z/a-z/0-9/+/
+		// with optional trailing =. Reject anything containing a JSON opener
+		// early so we don't waste time on the gzip path.
+		$trimmed = trim($raw);
+		$looks_base64 = ($trimmed !== ''
+			&& $trimmed[0] !== '['
+			&& $trimmed[0] !== '{'
+			&& preg_match('/^[A-Za-z0-9+\/=\s]+$/', $trimmed));
+
+		if ($looks_base64) {
+			$decoded = base64_decode($trimmed, true);
+			if ($decoded !== false) {
+				// gzdecode handles RFC 1952 (gzip) streams with headers
+				$inflated = @gzdecode($decoded);
+				if (is_string($inflated) && $inflated !== '') {
+					$json = $inflated;
+					$debug['encoding'] = 'gzip+base64';
+					$debug['compressed_bytes']   = strlen($trimmed);
+					$debug['decompressed_bytes'] = strlen($inflated);
+				}
+			}
+		}
+
+		if ($json === null) {
+			// Raw-JSON fallback for older agent scripts
+			$json = $raw;
+			$debug['encoding'] = 'raw';
+		}
+
+		$data = json_decode($json, true);
 		if (!is_array($data)) {
-			$debug['error'] = 'DHCP item value is not valid JSON';
+			$debug['error'] = 'DHCP item value is not valid JSON after decoding';
 			return null;
 		}
 		$debug['lease_count'] = count($data);
