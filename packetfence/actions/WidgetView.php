@@ -212,18 +212,34 @@ class WidgetView extends CControllerDashboardWidgetView {
 			$security_events = [];
 			if ($node) {
 				$se_result = self::pfRequest(
-					$pf_url . '/api/v1/security_events?limit=5&query=' . rawurlencode(json_encode([
-						'op'     => 'and',
-						'values' => [
-							['op' => 'equals', 'field' => 'mac',    'value' => $mac],
-							['op' => 'equals', 'field' => 'status', 'value' => 'open'],
+					$pf_url . '/api/v1/security_events/search',
+					'POST',
+					$token,
+					[
+						'cursor' => 0,
+						'limit'  => 5,
+						'fields' => ['security_event_id', 'mac', 'description',
+							'status', 'start_date', 'release_date', 'ip'],
+						'query'  => [
+							'op'     => 'and',
+							'values' => [
+								['op' => 'equals', 'field' => 'mac',    'value' => $mac],
+								['op' => 'equals', 'field' => 'status', 'value' => 'open'],
+							],
 						],
-					])),
-					'GET', $token, null, $verify_ssl
+					],
+					$verify_ssl
 				);
 				if ($se_result['ok'] && isset($se_result['data']['items'])
 						&& is_array($se_result['data']['items'])) {
-					$security_events = $se_result['data']['items'];
+					// Defensive: drop any events whose MAC doesn't match this card's MAC.
+					// Guards against API shape changes that might widen the filter.
+					foreach ($se_result['data']['items'] as $ev) {
+						$ev_mac = strtolower((string) ($ev['mac'] ?? ''));
+						if ($ev_mac === $mac) {
+							$security_events[] = $ev;
+						}
+					}
 				}
 			}
 
