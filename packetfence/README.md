@@ -171,6 +171,9 @@ Windows DHCP lease table.
    - Update interval: `5m`
    - History: `1h` (data changes constantly, no point retaining)
    - Trends: do not keep
+   - **Timeout: `30s`** (per-item, not the agent's global Timeout — Zabbix
+     rejects `Timeout` in agent include files with
+     *"wrong value of 'Timeout' in config file"*)
 5. Verify the item pulls by going to *Latest data* on the DHCP host — it
    should show a JSON array of leases.
 6. In the widget config, set:
