@@ -1,184 +1,357 @@
 zabbix_export:
   version: '7.0'
   template_groups:
-    - uuid: a2b3c4d5e6f71890abcd1234567890ff
-      name: Templates/Video
+    - uuid: 7b645fd22e46459f93f5240834c6a88b
+      name: Templates/Video Surveillance
   host_groups:
-    - uuid: b3c4d5e6f7819023bcde23456789012a
-      name: Cameras/Bosch
+    - uuid: d5ba1abcdbe44eb59824765739393178
+      name: 'Video Surveillance'
   templates:
-    - uuid: c4d5e6f781902345cdef345678901234
-      template: 'Template Bosch Camera via Milestone'
-      name: 'Bosch Camera via Milestone'
+    # =================================================================
+    # Master template - holds the two LLD rules + host prototypes
+    # =================================================================
+    - uuid: 7afe282d420e449ab5945b335c1c2883
+      template: 'Bosch Cameras via Milestone XProtect'
+      name: 'Bosch Cameras via Milestone XProtect'
       description: |
-        Monitors individual Bosch cameras by querying the Milestone XProtect
-        Professional+ Management Server. Apply to one host per camera. Set
-        the macro {$CAMERA.GUID} on each host to the camera's Milestone GUID.
-        The Milestone polling host is referenced by {$MILESTONE.HOST}.
+        Hybrid monitoring for Bosch IP cameras via Milestone XProtect
+        Professional+ Management Server, with direct ICMP/HTTP probes to
+        the cameras as an independent liveness check.
+
+        Requires the milestone_zbx.py external check helper script on the
+        Zabbix server (or proxy).
+
+        Link THIS template to one seed host - that's where the LLD rules
+        run. The child templates are linked automatically to discovered
+        hosts via the host prototypes.
+      vendor:
+        name: 'Custom - Stephen'
+        version: '1.0.4'
       groups:
-        - name: Templates/Video
+        - name: Templates/Video Surveillance
       macros:
-        - macro: '{$CAMERA.GUID}'
-          description: 'Milestone camera GUID — set per host'
-        - macro: '{$MILESTONE.HOST}'
-          value: 'milestone-mgmt'
-          description: 'Hostname of the Milestone server in Zabbix'
-        - macro: '{$CAMERA.FRAME_STALE_SEC}'
-          value: '120'
-          description: 'Seconds before last frame is considered stale'
-        - macro: '{$CAMERA.RETENTION_MIN_DAYS}'
-          value: '7'
-          description: 'Minimum acceptable retention in days'
-        - macro: '{$CAMERA.HTTP_PORT}'
-          value: '80'
-        - macro: '{$CAMERA.IP}'
-          description: 'Camera IP — usually set via host interface, copy here for HTTP check'
+        - macro: '{$MILESTONE.HELPER}'
+          value: 'milestone_zbx.py'
+          description: 'External check script name'
+
+      discovery_rules:
+        - uuid: bb62743550c84c399fdea6a1ee1934e5
+          name: 'Milestone Recording Servers'
+          key: 'milestone.discover.rs'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[discover,recording_servers]'
+          delay: 1h
+          lifetime: 7d
+          description: 'Discovers Milestone Recording Servers and creates them as sub-hosts'
+          host_prototypes:
+            - uuid: 3063b4b0a5b54417924333faf5b05d5e
+              host: 'RS {#RS.NAME}'
+              name: 'Milestone RS: {#RS.NAME}'
+              group_links:
+                - group:
+                    name: 'Video Surveillance'
+              templates:
+                - name: 'Bosch Cameras via Milestone XProtect - RS'
+              macros:
+                - macro: '{$RS.GUID}'
+                  value: '{#RS.GUID}'
+                  description: 'GUID of this Recording Server in Milestone'
+              tags:
+                - tag: milestone_role
+                  value: recording_server
+                - tag: rs_guid
+                  value: '{#RS.GUID}'
+                - tag: rs_name
+                  value: '{#RS.NAME}'
+              custom_interfaces: 'NO'
+
+        - uuid: 0df6fcdeaab240dc9218bbdb7b8b1292
+          name: 'Milestone Cameras'
+          key: 'milestone.discover.cameras'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[discover,cameras]'
+          delay: 1h
+          lifetime: 7d
+          description: 'Discovers cameras configured in Milestone and creates them as sub-hosts'
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#CAM.ENABLED}'
+                value: '1'
+                formulaid: A
+          host_prototypes:
+            - uuid: b8fc50dbfa3343768b858ef162bce26b
+              host: 'CAM {#CAM.NAME}'
+              name: 'Camera: {#CAM.NAME}'
+              group_links:
+                - group:
+                    name: 'Video Surveillance'
+              templates:
+                - name: 'Bosch Cameras via Milestone XProtect - Camera'
+              macros:
+                - macro: '{$CAM.GUID}'
+                  value: '{#CAM.GUID}'
+                  description: 'GUID of this camera in Milestone'
+              tags:
+                - tag: milestone_role
+                  value: camera
+                - tag: camera_guid
+                  value: '{#CAM.GUID}'
+                - tag: camera_name
+                  value: '{#CAM.NAME}'
+                - tag: rs_name
+                  value: '{#RS.NAME}'
+              custom_interfaces: 'NO'
+
+    # =================================================================
+    # Child template: Recording Server
+    # =================================================================
+    - uuid: 90069e9f8e9744b08bebc8df9bf495b0
+      template: 'Bosch Cameras via Milestone XProtect - RS'
+      name: 'Bosch Cameras via Milestone XProtect - RS'
+      description: |
+        Per Recording Server items. Attached by LLD host prototype.
+
+        The discovered host is expected to have user macro {$RS.GUID}
+        populated (the host prototype sets this automatically).
+      groups:
+        - name: Templates/Video Surveillance
+      macros:
+        - macro: '{$MILESTONE.HELPER}'
+          value: 'milestone_zbx.py'
+          description: 'External check script name'
+        - macro: '{$RS.GUID}'
+          value: ''
+          description: 'Populated per-host by LLD'
+        - macro: '{$STORAGE.FREE.WARN.PCT}'
+          value: '15'
+          description: 'Warn if RS primary storage free % falls below this'
+        - macro: '{$STORAGE.FREE.HIGH.PCT}'
+          value: '5'
+          description: 'High severity if RS primary storage free % falls below this'
+
+      valuemaps:
+        - uuid: 4521df34febe42f592b8465b91176eb9
+          name: 'Service State'
+          mappings:
+            - value: '0'
+              newvalue: 'Stopped'
+            - value: '1'
+              newvalue: 'Running'
+            - value: '-1'
+              newvalue: 'Unknown'
+
       items:
-        - uuid: d5e6f78901234567def456789012345a
-          name: 'Camera: Milestone GUID'
-          type: DEPENDENT
-          key: 'camera.milestone_guid'
-          value_type: CHAR
-          description: 'Surfaces the macro value for the widget'
-          preprocessing:
-            - type: JAVASCRIPT
-              parameters:
-                - 'return "{$CAMERA.GUID}";'
-          master_item:
-            key: 'camera.online'
-          tags:
-            - tag: component
-              value: identity
-
-        - uuid: e6f78901234567890ef5678901234567
-          name: 'Camera online state'
-          type: ZABBIX_ACTIVE
-          key: 'milestone.camera.online[{$CAMERA.GUID}]'
-          delay: 1m
-          history: 7d
-          trends: 90d
+        - uuid: 41f3dad27e804fcda7d67ebca9c02246
+          name: 'RS service state'
+          key: 'milestone.rs.service'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[rs_service,{$RS.GUID}]'
           value_type: UNSIGNED
-          description: '1 if camera is enabled and connected per Milestone'
-          # Redirect the active check to the Milestone host
-          tags:
-            - tag: component
-              value: availability
-          request_method: POST
-          # The trick: key proxies to a passive request against the Milestone host.
-          # In Zabbix, use a second-level proxy pattern via HTTP agent if preferred.
-
-        - uuid: f789012345678901f67890123456789a
-          name: 'Camera recording state'
-          type: ZABBIX_ACTIVE
-          key: 'milestone.camera.recording[{$CAMERA.GUID}]'
-          delay: 1m
-          history: 7d
-          trends: 90d
-          value_type: UNSIGNED
-          tags:
-            - tag: component
-              value: recording
-
-        - uuid: '07890123456789012789012345678901'
-          name: 'Last frame timestamp'
-          type: ZABBIX_ACTIVE
-          key: 'milestone.camera.last_frame[{$CAMERA.GUID}]'
-          delay: 1m
-          history: 7d
-          value_type: UNSIGNED
-          units: unixtime
-          tags:
-            - tag: component
-              value: recording
-
-        - uuid: '18901234567890123890123456789012'
-          name: 'Retention days available'
-          type: ZABBIX_ACTIVE
-          key: 'milestone.camera.retention[{$CAMERA.GUID}]'
-          delay: 5m
-          history: 30d
+          delay: 2m
+          history: 90d
           trends: 365d
-          value_type: FLOAT
-          units: d
+          description: '1 = running, 0 = stopped, -1 = unknown'
+          valuemap:
+            name: 'Service State'
           tags:
             - tag: component
-              value: storage
+              value: recording_server
+            - tag: metric
+              value: service_state
+          triggers:
+            - uuid: 26938fdc4ccd4baa82c2ad5dce227377
+              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.service)=0'
+              name: 'Recording Server {HOST.NAME} service is stopped'
+              priority: HIGH
+              description: 'The Milestone Recording Server service has stopped; all cameras on this RS will be offline for recording.'
 
-        - uuid: '29012345678901234901234567890123'
-          name: 'Camera ICMP ping'
-          type: SIMPLE
-          key: 'icmpping'
-          delay: 30s
-          history: 7d
-          trends: 90d
-          value_type: UNSIGNED
-          tags:
-            - tag: component
-              value: network
-
-        - uuid: '30123456789012345012345678901234'
-          name: 'Camera ICMP loss %'
-          type: SIMPLE
-          key: 'icmppingloss'
-          delay: 30s
-          history: 7d
+        - uuid: 8be92687833843caabdc6ba11c5fe242
+          name: 'RS primary storage free %'
+          key: 'milestone.rs.storage.free.pct'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[rs_storage_free_pct,{$RS.GUID}]'
           value_type: FLOAT
           units: '%'
+          delay: 5m
+          history: 90d
+          trends: 365d
           tags:
             - tag: component
-              value: network
+              value: recording_server
+            - tag: metric
+              value: storage_free_pct
+          triggers:
+            - uuid: 4dc0102cfb4c490ca9d6e4a64bd11acf
+              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)<{$STORAGE.FREE.HIGH.PCT} and last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)>=0'
+              name: 'RS {HOST.NAME} primary storage critically low'
+              priority: HIGH
+            - uuid: 7828c958baa84c1ca38887b851ae2168
+              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)<{$STORAGE.FREE.WARN.PCT} and last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)>={$STORAGE.FREE.HIGH.PCT}'
+              name: 'RS {HOST.NAME} primary storage low'
+              priority: WARNING
 
-        - uuid: '41234567890123456123456789012345'
-          name: 'Camera HTTP response'
+    # =================================================================
+    # Child template: Camera
+    # =================================================================
+    - uuid: a6409fb5c704434682937ae656e0d500
+      template: 'Bosch Cameras via Milestone XProtect - Camera'
+      name: 'Bosch Cameras via Milestone XProtect - Camera'
+      description: |
+        Per-camera items. Combines Milestone-sourced state with direct
+        ICMP/HTTP probes to the Bosch device.
+
+        The discovered host is expected to have user macro {$CAM.GUID}
+        populated (the host prototype sets this automatically).
+      groups:
+        - name: Templates/Video Surveillance
+      macros:
+        - macro: '{$MILESTONE.HELPER}'
+          value: 'milestone_zbx.py'
+          description: 'External check script name'
+        - macro: '{$CAM.GUID}'
+          value: ''
+          description: 'Populated per-host by LLD'
+        - macro: '{$CAMERA.HTTP.TIMEOUT}'
+          value: '5s'
+          description: 'HTTP probe timeout (with unit) for direct Bosch check'
+        - macro: '{$RETENTION.WARN.DAYS}'
+          value: '14'
+          description: 'Warn if retention falls below this many days'
+        - macro: '{$RETENTION.HIGH.DAYS}'
+          value: '7'
+          description: 'High severity if retention falls below this many days'
+
+      valuemaps:
+        - uuid: 5d7e21cd143e482da452f28d4429819d
+          name: 'Online State'
+          mappings:
+            - value: '0'
+              newvalue: 'Offline'
+            - value: '1'
+              newvalue: 'Online'
+            - value: '-1'
+              newvalue: 'Unknown'
+        - uuid: c3f14d5fff3a4ac1b50ffde317feb3fa
+          name: 'Recording State'
+          mappings:
+            - value: '0'
+              newvalue: 'Not Recording'
+            - value: '1'
+              newvalue: 'Recording'
+            - value: '-1'
+              newvalue: 'Unknown'
+
+      items:
+        - uuid: 65f92714330a49989c5ad9d068410edc
+          name: 'Camera online (Milestone)'
+          key: 'milestone.cam.state'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[camera_state,{$CAM.GUID}]'
+          value_type: UNSIGNED
+          delay: 2m
+          history: 30d
+          trends: 180d
+          valuemap:
+            name: 'Online State'
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: online_milestone
+          triggers:
+            - uuid: b16cf0011dac4644978c539782119e42
+              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.state)=0'
+              name: 'Camera {HOST.NAME} offline (per Milestone)'
+              priority: AVERAGE
+              description: 'Milestone reports the camera is not responding. Compare with the ICMP probe to isolate whether the camera or the Recording Server is the problem.'
+
+        - uuid: fca4205ff9b54466a45780c1fb1c4685
+          name: 'Camera recording (Milestone)'
+          key: 'milestone.cam.recording'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[recording_state,{$CAM.GUID}]'
+          value_type: UNSIGNED
+          delay: 2m
+          history: 30d
+          trends: 180d
+          valuemap:
+            name: 'Recording State'
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: recording_state
+          triggers:
+            - uuid: 1e85f619a4e14524a2f2a3672b92adaa
+              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.recording)=0 and last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.state)=1'
+              name: 'Camera {HOST.NAME} online but NOT recording'
+              priority: HIGH
+              description: 'Camera is reachable but Milestone is not recording it - investigate retention rule, licensing, or archive storage.'
+
+        - uuid: e885e9632d154383b9825152e055ee09
+          name: 'Retention (days)'
+          key: 'milestone.cam.retention'
+          type: EXTERNAL
+          params: '{$MILESTONE.HELPER}[retention_days,{$CAM.GUID}]'
+          value_type: FLOAT
+          units: d
+          delay: 15m
+          history: 90d
+          trends: 365d
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: retention_days
+          triggers:
+            - uuid: 10d615d6332c4de3b26029c8b3002371
+              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)<{$RETENTION.HIGH.DAYS}'
+              name: 'Camera {HOST.NAME} retention below {$RETENTION.HIGH.DAYS}d'
+              priority: HIGH
+            - uuid: cda357e160cd47e28be7d7bed81eaa63
+              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)<{$RETENTION.WARN.DAYS} and last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)>={$RETENTION.HIGH.DAYS}'
+              name: 'Camera {HOST.NAME} retention below {$RETENTION.WARN.DAYS}d'
+              priority: WARNING
+
+        - uuid: 931a0e04af4c4d89a5d8420ba57d3096
+          name: 'ICMP ping'
+          key: 'icmpping'
           type: SIMPLE
-          key: 'net.tcp.service[http,{$CAMERA.IP},{$CAMERA.HTTP_PORT}]'
+          value_type: UNSIGNED
           delay: 1m
           history: 7d
-          value_type: UNSIGNED
+          trends: 90d
           tags:
             - tag: component
-              value: network
-
-      triggers:
-        - uuid: '52345678901234567234567890123456'
-          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.online[{$CAMERA.GUID}])=0'
-          name: 'Camera offline (per Milestone): {HOST.NAME}'
-          priority: HIGH
-          description: 'Milestone reports the camera as disconnected'
-          tags:
-            - tag: scope
               value: camera
+            - tag: metric
+              value: icmp
+          triggers:
+            - uuid: 0147eb600bd9456a97ac19a302c020a6
+              expression: 'max(/Bosch Cameras via Milestone XProtect - Camera/icmpping,#3)=0'
+              name: 'Camera {HOST.NAME} unreachable (ICMP)'
+              priority: AVERAGE
+              description: 'Three consecutive ICMP failures. Combined with the Milestone online trigger, both-firing means the camera is genuinely down; ICMP-only means Milestone may be stale.'
 
-        - uuid: '63456789012345678345678901234567'
-          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.recording[{$CAMERA.GUID}])=0 and last(/Template Bosch Camera via Milestone/milestone.camera.online[{$CAMERA.GUID}])=1'
-          name: 'Camera not recording: {HOST.NAME}'
-          priority: HIGH
-          description: 'Camera is online but not being recorded'
+        - uuid: 3b191718662c42c392aace1cbe9b4911
+          name: 'Bosch RCP+ device probe'
+          key: 'web.page.get[{HOST.CONN},/rcp.xml?command=0x0a04,80]'
+          type: SIMPLE
+          value_type: TEXT
+          delay: 5m
+          history: 1d
+          timeout: '{$CAMERA.HTTP.TIMEOUT}'
           tags:
-            - tag: scope
+            - tag: component
               value: camera
-
-        - uuid: '74567890123456789456789012345678'
-          expression: '(fuzzytime(/Template Bosch Camera via Milestone/milestone.camera.last_frame[{$CAMERA.GUID}],{$CAMERA.FRAME_STALE_SEC})=0)'
-          name: 'Frames stale (>{$CAMERA.FRAME_STALE_SEC}s): {HOST.NAME}'
-          priority: AVERAGE
-          tags:
-            - tag: scope
-              value: camera
-
-        - uuid: '85678901234567890567890123456789'
-          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.retention[{$CAMERA.GUID}])<{$CAMERA.RETENTION_MIN_DAYS}'
-          name: 'Retention below {$CAMERA.RETENTION_MIN_DAYS} days: {HOST.NAME}'
-          priority: AVERAGE
-          tags:
-            - tag: scope
-              value: storage
-
-        - uuid: '96789012345678901678901234567890'
-          expression: 'max(/Template Bosch Camera via Milestone/icmpping,#3)=0'
-          name: 'Camera unreachable (ICMP): {HOST.NAME}'
-          priority: AVERAGE
-          description: 'Early warning — before Milestone flags it'
-          tags:
-            - tag: scope
-              value: network
+            - tag: metric
+              value: rcp_probe
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - 'HTTP/1\.[01] (\d+)'
+                - '\1'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
