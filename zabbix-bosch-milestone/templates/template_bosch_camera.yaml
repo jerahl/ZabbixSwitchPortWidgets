@@ -1,0 +1,184 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a2b3c4d5e6f71890abcd1234567890ff
+      name: Templates/Video
+  host_groups:
+    - uuid: b3c4d5e6f7819023bcde23456789012a
+      name: Cameras/Bosch
+  templates:
+    - uuid: c4d5e6f781902345cdef345678901234
+      template: 'Template Bosch Camera via Milestone'
+      name: 'Bosch Camera via Milestone'
+      description: |
+        Monitors individual Bosch cameras by querying the Milestone XProtect
+        Professional+ Management Server. Apply to one host per camera. Set
+        the macro {$CAMERA.GUID} on each host to the camera's Milestone GUID.
+        The Milestone polling host is referenced by {$MILESTONE.HOST}.
+      groups:
+        - name: Templates/Video
+      macros:
+        - macro: '{$CAMERA.GUID}'
+          description: 'Milestone camera GUID — set per host'
+        - macro: '{$MILESTONE.HOST}'
+          value: 'milestone-mgmt'
+          description: 'Hostname of the Milestone server in Zabbix'
+        - macro: '{$CAMERA.FRAME_STALE_SEC}'
+          value: '120'
+          description: 'Seconds before last frame is considered stale'
+        - macro: '{$CAMERA.RETENTION_MIN_DAYS}'
+          value: '7'
+          description: 'Minimum acceptable retention in days'
+        - macro: '{$CAMERA.HTTP_PORT}'
+          value: '80'
+        - macro: '{$CAMERA.IP}'
+          description: 'Camera IP — usually set via host interface, copy here for HTTP check'
+      items:
+        - uuid: d5e6f78901234567def456789012345a
+          name: 'Camera: Milestone GUID'
+          type: DEPENDENT
+          key: 'camera.milestone_guid'
+          value_type: CHAR
+          description: 'Surfaces the macro value for the widget'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return "{$CAMERA.GUID}";'
+          master_item:
+            key: 'camera.online'
+          tags:
+            - tag: component
+              value: identity
+
+        - uuid: e6f78901234567890ef5678901234567
+          name: 'Camera online state'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.camera.online[{$CAMERA.GUID}]'
+          delay: 1m
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          description: '1 if camera is enabled and connected per Milestone'
+          # Redirect the active check to the Milestone host
+          tags:
+            - tag: component
+              value: availability
+          request_method: POST
+          # The trick: key proxies to a passive request against the Milestone host.
+          # In Zabbix, use a second-level proxy pattern via HTTP agent if preferred.
+
+        - uuid: f789012345678901f67890123456789a
+          name: 'Camera recording state'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.camera.recording[{$CAMERA.GUID}]'
+          delay: 1m
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: recording
+
+        - uuid: '07890123456789012789012345678901'
+          name: 'Last frame timestamp'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.camera.last_frame[{$CAMERA.GUID}]'
+          delay: 1m
+          history: 7d
+          value_type: UNSIGNED
+          units: unixtime
+          tags:
+            - tag: component
+              value: recording
+
+        - uuid: '18901234567890123890123456789012'
+          name: 'Retention days available'
+          type: ZABBIX_ACTIVE
+          key: 'milestone.camera.retention[{$CAMERA.GUID}]'
+          delay: 5m
+          history: 30d
+          trends: 365d
+          value_type: FLOAT
+          units: d
+          tags:
+            - tag: component
+              value: storage
+
+        - uuid: '29012345678901234901234567890123'
+          name: 'Camera ICMP ping'
+          type: SIMPLE
+          key: 'icmpping'
+          delay: 30s
+          history: 7d
+          trends: 90d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: network
+
+        - uuid: '30123456789012345012345678901234'
+          name: 'Camera ICMP loss %'
+          type: SIMPLE
+          key: 'icmppingloss'
+          delay: 30s
+          history: 7d
+          value_type: FLOAT
+          units: '%'
+          tags:
+            - tag: component
+              value: network
+
+        - uuid: '41234567890123456123456789012345'
+          name: 'Camera HTTP response'
+          type: SIMPLE
+          key: 'net.tcp.service[http,{$CAMERA.IP},{$CAMERA.HTTP_PORT}]'
+          delay: 1m
+          history: 7d
+          value_type: UNSIGNED
+          tags:
+            - tag: component
+              value: network
+
+      triggers:
+        - uuid: '52345678901234567234567890123456'
+          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.online[{$CAMERA.GUID}])=0'
+          name: 'Camera offline (per Milestone): {HOST.NAME}'
+          priority: HIGH
+          description: 'Milestone reports the camera as disconnected'
+          tags:
+            - tag: scope
+              value: camera
+
+        - uuid: '63456789012345678345678901234567'
+          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.recording[{$CAMERA.GUID}])=0 and last(/Template Bosch Camera via Milestone/milestone.camera.online[{$CAMERA.GUID}])=1'
+          name: 'Camera not recording: {HOST.NAME}'
+          priority: HIGH
+          description: 'Camera is online but not being recorded'
+          tags:
+            - tag: scope
+              value: camera
+
+        - uuid: '74567890123456789456789012345678'
+          expression: '(fuzzytime(/Template Bosch Camera via Milestone/milestone.camera.last_frame[{$CAMERA.GUID}],{$CAMERA.FRAME_STALE_SEC})=0)'
+          name: 'Frames stale (>{$CAMERA.FRAME_STALE_SEC}s): {HOST.NAME}'
+          priority: AVERAGE
+          tags:
+            - tag: scope
+              value: camera
+
+        - uuid: '85678901234567890567890123456789'
+          expression: 'last(/Template Bosch Camera via Milestone/milestone.camera.retention[{$CAMERA.GUID}])<{$CAMERA.RETENTION_MIN_DAYS}'
+          name: 'Retention below {$CAMERA.RETENTION_MIN_DAYS} days: {HOST.NAME}'
+          priority: AVERAGE
+          tags:
+            - tag: scope
+              value: storage
+
+        - uuid: '96789012345678901678901234567890'
+          expression: 'max(/Template Bosch Camera via Milestone/icmpping,#3)=0'
+          name: 'Camera unreachable (ICMP): {HOST.NAME}'
+          priority: AVERAGE
+          description: 'Early warning — before Milestone flags it'
+          tags:
+            - tag: scope
+              value: network

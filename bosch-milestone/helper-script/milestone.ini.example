@@ -1,0 +1,16 @@
+# /etc/zabbix/milestone.ini
+# Deploy this file on the Zabbix server (or proxy) that runs external checks.
+# chown zabbix:zabbix and chmod 0600.
+#
+# For XProtect Professional+ the Management Server is typically the same
+# Windows host as the Event Server; SOAP is on 80 (or 443 if you put a
+# cert on it).
+
+[milestone]
+mgmt_host = milestone.example.local
+mgmt_port = 80
+username  = zabbix_svc
+password  = CHANGE_ME
+domain    = EXAMPLE
+# auth_type: ntlm (most common), basic (BasicUser), or windows (Kerberos)
+auth_type = ntlm

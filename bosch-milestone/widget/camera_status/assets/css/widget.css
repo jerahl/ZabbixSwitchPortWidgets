@@ -1,0 +1,158 @@
+/* Camera Status Grid - styles */
+
+.camera-status-widget {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    font-size: 12px;
+}
+
+/* Summary strip at top */
+.cam-summary {
+    display: flex;
+    gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--ui-border-color, #dcdcdc);
+    flex: 0 0 auto;
+}
+
+.cam-pill {
+    display: inline-block;
+    min-width: 28px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 11px;
+    text-align: center;
+    color: #fff;
+    cursor: default;
+}
+.cam-pill--ok       { background: #1e8e3e; }
+.cam-pill--warn     { background: #e67700; }
+.cam-pill--rs       { background: #6f42c1; }
+.cam-pill--down     { background: #c62828; }
+.cam-pill--unknown  { background: #6c757d; }
+
+/* Scrollable grid body */
+.cam-grid-wrap {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.cam-empty {
+    color: var(--ui-fg-color-muted, #888);
+    text-align: center;
+    padding: 20px;
+}
+
+.cam-grid {
+    display: grid;
+    gap: 6px;
+    grid-auto-flow: row dense;
+}
+
+/* Recording Server section header (spans full row) */
+.cam-rs-header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    margin-top: 4px;
+    background: var(--ui-bg-color-muted, #f4f6fa);
+    border-left: 3px solid var(--ui-fg-color-muted, #6c757d);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.cam-rs-header:first-child { margin-top: 0; }
+.cam-rs-count {
+    color: var(--ui-fg-color-muted, #6c757d);
+    font-weight: 400;
+}
+
+/* Tile */
+.cam-tile {
+    position: relative;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+    transition: box-shadow 0.1s, transform 0.1s;
+}
+.cam-tile:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+}
+
+.cam-tile--sm { padding: 5px; font-size: 11px; }
+.cam-tile--md { padding: 8px; font-size: 12px; }
+.cam-tile--lg { padding: 10px; font-size: 13px; }
+
+/* State backgrounds - subtle tints with strong left border */
+.cam-tile--ok       { background: #e9f7ec; border-color: #1e8e3e; }
+.cam-tile--warn     { background: #fff4e0; border-color: #e67700; }
+.cam-tile--rs       { background: #f2ecfa; border-color: #6f42c1; }
+.cam-tile--down     { background: #fbe7e7; border-color: #c62828; }
+.cam-tile--unknown  { background: #f1f3f5; border-color: #6c757d; }
+
+/* Status dot in top right */
+.cam-tile__dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.cam-tile--ok      .cam-tile__dot { background: #1e8e3e; box-shadow: 0 0 0 2px #1e8e3e33; }
+.cam-tile--warn    .cam-tile__dot { background: #e67700; }
+.cam-tile--rs      .cam-tile__dot { background: #6f42c1; }
+.cam-tile--down    .cam-tile__dot { background: #c62828; animation: cam-pulse 1.4s infinite; }
+.cam-tile--unknown .cam-tile__dot { background: #6c757d; }
+
+@keyframes cam-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 #c6282899; }
+    50%      { box-shadow: 0 0 0 5px #c6282800; }
+}
+
+.cam-tile__name {
+    font-weight: 600;
+    padding-right: 14px; /* leave room for dot */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cam-tile__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--ui-fg-color-muted, #555);
+    margin-top: auto;
+}
+
+.cam-rec--on  { color: #c62828; font-weight: 600; }
+.cam-rec--off { color: #888; }
+
+.cam-ret        { color: #555; }
+.cam-ret--warn  { color: #e67700; font-weight: 600; }
+.cam-ret--low   { color: #c62828; font-weight: 700; }
+
+/* Dark theme tweaks */
+body.theme-dark .cam-tile--ok      { background: #1e3a24; }
+body.theme-dark .cam-tile--warn    { background: #3a2a10; }
+body.theme-dark .cam-tile--rs      { background: #2a1f3a; }
+body.theme-dark .cam-tile--down    { background: #3a1a1a; }
+body.theme-dark .cam-tile--unknown { background: #2a2d31; }
+body.theme-dark .cam-rs-header     { background: #2a2d31; }
+body.theme-dark .cam-tile          { color: #e8eaed; }
+body.theme-dark .cam-tile__footer  { color: #b0b3b8; }

@@ -1,0 +1,50 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a2b3c4d5e6f71890abcd1234567890ff
+      name: Templates/Video
+  templates:
+    - uuid: 'a7890123456789012789012345678abc'
+      template: 'Template Milestone Recording Server'
+      name: 'Milestone XProtect Recording Server'
+      description: |
+        Apply to the Windows host running XProtect Professional+ Management
+        Server. Discovers all cameras and creates Zabbix hosts automatically.
+        Requires Zabbix agent 2 + UserParameter script + MIP SDK (see docs).
+      groups:
+        - name: Templates/Video
+      macros:
+        - macro: '{$STORAGE.WARN_PCT}'
+          value: '85'
+        - macro: '{$STORAGE.CRIT_PCT}'
+          value: '95'
+        - macro: '{$CAMERA.HOST_GROUP}'
+          value: 'Cameras/Bosch'
+          description: 'Host group for auto-created camera hosts'
+        - macro: '{$CAMERA.TEMPLATE}'
+          value: 'Template Bosch Camera via Milestone'
+      items:
+      # ... your items unchanged ...
+      discovery_rules:
+      # ... your discovery rule unchanged ...
+
+  triggers:
+    - uuid: '14567890123456789456789012345f234'
+      expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.WARN_PCT}'
+      name: 'Milestone storage >{$STORAGE.WARN_PCT}%'
+      priority: WARNING
+
+    - uuid: '25678901234567890567890123456f345'
+      expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.CRIT_PCT}'
+      name: 'Milestone storage >{$STORAGE.CRIT_PCT}% CRITICAL'
+      priority: HIGH
+
+    - uuid: '36789012345678901678901234567f456'
+      expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Recording Server,state])<>0'
+      name: 'Recording Server service not running'
+      priority: DISASTER
+
+    - uuid: '47890123456789012789012345678f567'
+      expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Event Server,state])<>0'
+      name: 'Event Server service not running'
+      priority: HIGH
