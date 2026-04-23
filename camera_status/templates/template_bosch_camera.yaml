@@ -2,225 +2,77 @@ zabbix_export:
   version: '7.0'
   template_groups:
     - uuid: 7b645fd22e46459f93f5240834c6a88b
-      name: Templates/Video Surveillance
+      name: Templates/Video
   host_groups:
-    - uuid: d5ba1abcdbe44eb59824765739393178
-      name: 'Video Surveillance'
+    - uuid: 570ab5fdc001423a8758df1b30099f2b
+      name: Cameras/Bosch
   templates:
-    # =================================================================
-    # Master template - holds the two LLD rules + host prototypes
-    # =================================================================
-    - uuid: 7afe282d420e449ab5945b335c1c2883
-      template: 'Bosch Cameras via Milestone XProtect'
-      name: 'Bosch Cameras via Milestone XProtect'
-      description: |
-        Hybrid monitoring for Bosch IP cameras via Milestone XProtect
-        Professional+ Management Server, with direct ICMP/HTTP probes to
-        the cameras as an independent liveness check.
-
-        Requires the milestone_zbx.py external check helper script on the
-        Zabbix server (or proxy).
-
-        Link THIS template to one seed host - that's where the LLD rules
-        run. The child templates are linked automatically to discovered
-        hosts via the host prototypes.
-      vendor:
-        name: 'Custom - Stephen'
-        version: '1.0.4'
-      groups:
-        - name: Templates/Video Surveillance
-      macros:
-        - macro: '{$MILESTONE.HELPER}'
-          value: 'milestone_zbx.py'
-          description: 'External check script name'
-
-      discovery_rules:
-        - uuid: bb62743550c84c399fdea6a1ee1934e5
-          name: 'Milestone Recording Servers'
-          key: 'milestone.discover.rs'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[discover,recording_servers]'
-          delay: 1h
-          lifetime: 7d
-          description: 'Discovers Milestone Recording Servers and creates them as sub-hosts'
-          host_prototypes:
-            - uuid: 3063b4b0a5b54417924333faf5b05d5e
-              host: 'RS {#RS.NAME}'
-              name: 'Milestone RS: {#RS.NAME}'
-              group_links:
-                - group:
-                    name: 'Video Surveillance'
-              templates:
-                - name: 'Bosch Cameras via Milestone XProtect - RS'
-              macros:
-                - macro: '{$RS.GUID}'
-                  value: '{#RS.GUID}'
-                  description: 'GUID of this Recording Server in Milestone'
-              tags:
-                - tag: milestone_role
-                  value: recording_server
-                - tag: rs_guid
-                  value: '{#RS.GUID}'
-                - tag: rs_name
-                  value: '{#RS.NAME}'
-              custom_interfaces: 'NO'
-
-        - uuid: 0df6fcdeaab240dc9218bbdb7b8b1292
-          name: 'Milestone Cameras'
-          key: 'milestone.discover.cameras'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[discover,cameras]'
-          delay: 1h
-          lifetime: 7d
-          description: 'Discovers cameras configured in Milestone and creates them as sub-hosts'
-          filter:
-            evaltype: AND
-            conditions:
-              - macro: '{#CAM.ENABLED}'
-                value: '1'
-                formulaid: A
-          host_prototypes:
-            - uuid: b8fc50dbfa3343768b858ef162bce26b
-              host: 'CAM {#CAM.NAME}'
-              name: 'Camera: {#CAM.NAME}'
-              group_links:
-                - group:
-                    name: 'Video Surveillance'
-              templates:
-                - name: 'Bosch Cameras via Milestone XProtect - Camera'
-              macros:
-                - macro: '{$CAM.GUID}'
-                  value: '{#CAM.GUID}'
-                  description: 'GUID of this camera in Milestone'
-              tags:
-                - tag: milestone_role
-                  value: camera
-                - tag: camera_guid
-                  value: '{#CAM.GUID}'
-                - tag: camera_name
-                  value: '{#CAM.NAME}'
-                - tag: rs_name
-                  value: '{#RS.NAME}'
-              custom_interfaces: 'NO'
-
-    # =================================================================
-    # Child template: Recording Server
-    # =================================================================
-    - uuid: 90069e9f8e9744b08bebc8df9bf495b0
-      template: 'Bosch Cameras via Milestone XProtect - RS'
-      name: 'Bosch Cameras via Milestone XProtect - RS'
-      description: |
-        Per Recording Server items. Attached by LLD host prototype.
-
-        The discovered host is expected to have user macro {$RS.GUID}
-        populated (the host prototype sets this automatically).
-      groups:
-        - name: Templates/Video Surveillance
-      macros:
-        - macro: '{$MILESTONE.HELPER}'
-          value: 'milestone_zbx.py'
-          description: 'External check script name'
-        - macro: '{$RS.GUID}'
-          value: ''
-          description: 'Populated per-host by LLD'
-        - macro: '{$STORAGE.FREE.WARN.PCT}'
-          value: '15'
-          description: 'Warn if RS primary storage free % falls below this'
-        - macro: '{$STORAGE.FREE.HIGH.PCT}'
-          value: '5'
-          description: 'High severity if RS primary storage free % falls below this'
-
-      valuemaps:
-        - uuid: 4521df34febe42f592b8465b91176eb9
-          name: 'Service State'
-          mappings:
-            - value: '0'
-              newvalue: 'Stopped'
-            - value: '1'
-              newvalue: 'Running'
-            - value: '-1'
-              newvalue: 'Unknown'
-
-      items:
-        - uuid: 41f3dad27e804fcda7d67ebca9c02246
-          name: 'RS service state'
-          key: 'milestone.rs.service'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[rs_service,{$RS.GUID}]'
-          value_type: UNSIGNED
-          delay: 2m
-          history: 90d
-          trends: 365d
-          description: '1 = running, 0 = stopped, -1 = unknown'
-          valuemap:
-            name: 'Service State'
-          tags:
-            - tag: component
-              value: recording_server
-            - tag: metric
-              value: service_state
-          triggers:
-            - uuid: 26938fdc4ccd4baa82c2ad5dce227377
-              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.service)=0'
-              name: 'Recording Server {HOST.NAME} service is stopped'
-              priority: HIGH
-              description: 'The Milestone Recording Server service has stopped; all cameras on this RS will be offline for recording.'
-
-        - uuid: 8be92687833843caabdc6ba11c5fe242
-          name: 'RS primary storage free %'
-          key: 'milestone.rs.storage.free.pct'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[rs_storage_free_pct,{$RS.GUID}]'
-          value_type: FLOAT
-          units: '%'
-          delay: 5m
-          history: 90d
-          trends: 365d
-          tags:
-            - tag: component
-              value: recording_server
-            - tag: metric
-              value: storage_free_pct
-          triggers:
-            - uuid: 4dc0102cfb4c490ca9d6e4a64bd11acf
-              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)<{$STORAGE.FREE.HIGH.PCT} and last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)>=0'
-              name: 'RS {HOST.NAME} primary storage critically low'
-              priority: HIGH
-            - uuid: 7828c958baa84c1ca38887b851ae2168
-              expression: 'last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)<{$STORAGE.FREE.WARN.PCT} and last(/Bosch Cameras via Milestone XProtect - RS/milestone.rs.storage.free.pct)>={$STORAGE.FREE.HIGH.PCT}'
-              name: 'RS {HOST.NAME} primary storage low'
-              priority: WARNING
-
-    # =================================================================
-    # Child template: Camera
-    # =================================================================
     - uuid: a6409fb5c704434682937ae656e0d500
-      template: 'Bosch Cameras via Milestone XProtect - Camera'
-      name: 'Bosch Cameras via Milestone XProtect - Camera'
+      template: 'Template Bosch Camera via Milestone'
+      name: 'Template Bosch Camera via Milestone'
       description: |
-        Per-camera items. Combines Milestone-sourced state with direct
-        ICMP/HTTP probes to the Bosch device.
+        Per-camera template. Hybrid monitoring of a Bosch IP camera through:
+          - Milestone XProtect REST API (online/recording/retention) - via the
+            parent Management Server host's credentials, resolved at runtime.
+          - Bosch camera web API (RCP+ legacy and /api/1.0/ on newer firmware)
+            talked to directly over HTTP for independent liveness.
+          - ICMP ping as the cheapest up/down check.
 
-        The discovered host is expected to have user macro {$CAM.GUID}
-        populated (the host prototype sets this automatically).
+        The discovered host is expected to have macro {$CAMERA.GUID} set by
+        the parent template's camera LLD rule. Its agent interface IP should
+        point at the camera itself (used for Bosch direct checks and ICMP).
+
+        This template exposes the item keys the Bosch/Milestone Camera Status
+        dashboard widget consumes:
+          camera.online, camera.recording, camera.last_frame_ts,
+          camera.retention_days, camera.storage_used_pct, camera.stream_name,
+          camera.milestone_guid.
+
       groups:
-        - name: Templates/Video Surveillance
+        - name: Templates/Video
       macros:
-        - macro: '{$MILESTONE.HELPER}'
-          value: 'milestone_zbx.py'
-          description: 'External check script name'
-        - macro: '{$CAM.GUID}'
+        - macro: '{$CAMERA.GUID}'
           value: ''
-          description: 'Populated per-host by LLD'
-        - macro: '{$CAMERA.HTTP.TIMEOUT}'
+          description: 'Populated per host by the parent LLD rule.'
+        - macro: '{$MILESTONE.HOST}'
+          value: ''
+          description: 'Hostname/IP of the Milestone Management Server. If empty, the template resolves it from the parent Zabbix host by hostmacro lookup.'
+        - macro: '{$MILESTONE.USER}'
+          value: ''
+          description: 'XProtect user; inherits from the parent Management Server host unless overridden.'
+        - macro: '{$MILESTONE.PASSWORD}'
+          type: SECRET_TEXT
+          description: 'Password for {$MILESTONE.USER}; inherits from parent unless overridden.'
+        - macro: '{$MILESTONE.CONN}'
+          value: 'https'
+          description: 'Connection scheme for the API Gateway: http or https.'
+        - macro: '{$MILESTONE.HTTP_TIMEOUT}'
+          value: '30'
+          description: 'HTTP timeout in seconds for each Milestone API call.'
+        - macro: '{$BOSCH.USER}'
+          value: 'service'
+          description: 'Bosch camera login (default service account).'
+        - macro: '{$BOSCH.PASSWORD}'
+          type: SECRET_TEXT
+          description: 'Bosch camera password.'
+        - macro: '{$BOSCH.CONN}'
+          value: 'http'
+          description: 'Scheme used to talk to the camera directly: http or https.'
+        - macro: '{$BOSCH.PORT}'
+          value: '80'
+          description: 'TCP port for Bosch web API / RCP+ (default 80, 443 for HTTPS).'
+        - macro: '{$BOSCH.HTTP_TIMEOUT}'
           value: '5s'
-          description: 'HTTP probe timeout (with unit) for direct Bosch check'
-        - macro: '{$RETENTION.WARN.DAYS}'
+          description: 'Timeout for direct HTTP probes to the camera.'
+        - macro: '{$FRAME.STALE.SEC}'
+          value: '120'
+          description: 'Warn if no new recorded frame arrived in more than this many seconds.'
+        - macro: '{$RETENTION.WARN_DAYS}'
           value: '14'
-          description: 'Warn if retention falls below this many days'
-        - macro: '{$RETENTION.HIGH.DAYS}'
+          description: 'Warn if recording retention drops below this many days.'
+        - macro: '{$RETENTION.CRIT_DAYS}'
           value: '7'
-          description: 'High severity if retention falls below this many days'
+          description: 'High severity if retention drops below this many days.'
 
       valuemaps:
         - uuid: 5d7e21cd143e482da452f28d4429819d
@@ -243,17 +95,167 @@ zabbix_export:
               newvalue: 'Unknown'
 
       items:
-        - uuid: 65f92714330a49989c5ad9d068410edc
+        # ---------------------------------------------------------------
+        # Master fetch: Milestone REST API for this camera specifically.
+        # A single SCRIPT call produces a JSON blob; every Milestone-sourced
+        # item below is a DEPENDENT item with a JSONPath preprocessor.
+        # ---------------------------------------------------------------
+        - uuid: 1065f92714330a49989c5ad9d068410f
+          name: 'Milestone API master fetch (this camera)'
+          key: 'milestone.cam.info'
+          type: SCRIPT
+          value_type: TEXT
+          delay: '2m'
+          history: '1d'
+          timeout: '60s'
+          description: 'Fetches current status + latest recorded segment for this camera from the Milestone MIP VMS REST API. Drives all dependent items.'
+          parameters:
+            - name: 'conn'
+              value: '{$MILESTONE.CONN}'
+            - name: 'host'
+              value: '{$MILESTONE.HOST}'
+            - name: 'user'
+              value: '{$MILESTONE.USER}'
+            - name: 'password'
+              value: '{$MILESTONE.PASSWORD}'
+            - name: 'guid'
+              value: '{$CAMERA.GUID}'
+            - name: 'timeout'
+              value: '{$MILESTONE.HTTP_TIMEOUT}'
+          params: |
+            // Per-camera fetch against Milestone MIP VMS REST API.
+            var p = JSON.parse(value);
+            if (!p.guid) {
+                return JSON.stringify({status:'ERROR: {$CAMERA.GUID} not set',
+                    guid:'', name:'', online:-1, recording:-1, lastFrameTs:0,
+                    retentionDays:0, error:''});
+            }
+            var base = p.conn + '://' + p.host;
+
+            function die(msg, extra) {
+                var e = {status:'ERROR: '+msg, guid:p.guid, name:'', online:-1,
+                         recording:-1, lastFrameTs:0, retentionDays:0, error:''};
+                if (extra) for (var k in extra) e[k] = extra[k];
+                return JSON.stringify(e);
+            }
+
+            // OAuth2 token
+            var token;
+            try {
+                var r = new HttpRequest();
+                r.addHeader('Content-Type: application/x-www-form-urlencoded');
+                r.addHeader('Accept: application/json');
+                var body = 'grant_type=password&client_id=GrantValidatorClient' +
+                           '&username=' + encodeURIComponent(p.user) +
+                           '&password=' + encodeURIComponent(p.password);
+                var t = r.post(base + '/API/IDP/connect/token', body);
+                if (r.getStatus() !== 200) return die('IDP HTTP '+r.getStatus());
+                token = JSON.parse(t).access_token;
+            } catch (e) { return die('IDP: '+e); }
+
+            function api(path) {
+                var r = new HttpRequest();
+                r.addHeader('Authorization: Bearer ' + token);
+                r.addHeader('Accept: application/json');
+                var resp = r.get(base + '/api/rest/v1/' + path);
+                if (r.getStatus() !== 200) {
+                    throw path + ': HTTP ' + r.getStatus();
+                }
+                return JSON.parse(resp);
+            }
+
+            var result = {
+                status: 'OK',
+                guid: p.guid,
+                name: '',
+                online: -1,
+                recording: -1,
+                lastFrameTs: 0,
+                retentionDays: 0,
+                error: ''
+            };
+
+            try {
+                var cam = api('cameras/' + p.guid);
+                result.name = cam.displayName || cam.name || cam.shortName || '';
+            } catch (e) { result.status = 'ERROR: camera: ' + e; return JSON.stringify(result); }
+
+            try {
+                var st = api('cameras/' + p.guid + '/currentStatus');
+                result.online    = st.isOnline    === true ? 1 : (st.isOnline    === false ? 0 : -1);
+                result.recording = st.isRecording === true ? 1 : (st.isRecording === false ? 0 : -1);
+                result.error     = st.errorString || '';
+            } catch (e) { /* status may be unavailable; leave -1 */ }
+
+            // Recorded segments: find newest end-time and span (retention).
+            // Window: last 400 days - covers sane retention ceilings.
+            try {
+                var now = new Date();
+                var end = now.toISOString();
+                var start = new Date(now.getTime() - 400*86400*1000).toISOString();
+                var segs = api('cameras/' + p.guid +
+                    '/recordedSegments?startTime=' + encodeURIComponent(start) +
+                    '&endTime=' + encodeURIComponent(end));
+                var arr = (segs && segs.array) || [];
+                if (arr.length > 0) {
+                    var oldestMs = Infinity, newestMs = 0;
+                    for (var i = 0; i < arr.length; i++) {
+                        var s = Date.parse(arr[i].startTime);
+                        var e = Date.parse(arr[i].endTime);
+                        if (s < oldestMs) oldestMs = s;
+                        if (e > newestMs) newestMs = e;
+                    }
+                    result.lastFrameTs = Math.floor(newestMs / 1000);
+                    result.retentionDays = +((newestMs - oldestMs) / 86400000).toFixed(2);
+                }
+            } catch (e) { /* recorded segments optional */ }
+
+            return JSON.stringify(result);
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: master_fetch
+
+        - uuid: 2165f92714330a49989c5ad9d068410f
+          name: 'Camera fetch status'
+          key: 'camera.fetch_status'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
+          value_type: CHAR
+          history: '30d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.status'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: fetch_status
+
+        - uuid: 3265f92714330a49989c5ad9d068410f
           name: 'Camera online (Milestone)'
-          key: 'milestone.cam.state'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[camera_state,{$CAM.GUID}]'
+          key: 'camera.online'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
           value_type: UNSIGNED
-          delay: 2m
-          history: 30d
-          trends: 180d
+          history: '30d'
+          trends: '180d'
           valuemap:
             name: 'Online State'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.online'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
           tags:
             - tag: component
               value: camera
@@ -261,22 +263,29 @@ zabbix_export:
               value: online_milestone
           triggers:
             - uuid: b16cf0011dac4644978c539782119e42
-              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.state)=0'
+              expression: 'last(/Template Bosch Camera via Milestone/camera.online)=0'
               name: 'Camera {HOST.NAME} offline (per Milestone)'
               priority: AVERAGE
-              description: 'Milestone reports the camera is not responding. Compare with the ICMP probe to isolate whether the camera or the Recording Server is the problem.'
+              description: 'Milestone reports the camera is not responding. Compare with the ICMP probe and bosch.rcp.alive to isolate whether the camera or the recording server is the problem.'
 
-        - uuid: fca4205ff9b54466a45780c1fb1c4685
+        - uuid: 4365f92714330a49989c5ad9d068410f
           name: 'Camera recording (Milestone)'
-          key: 'milestone.cam.recording'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[recording_state,{$CAM.GUID}]'
+          key: 'camera.recording'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
           value_type: UNSIGNED
-          delay: 2m
-          history: 30d
-          trends: 180d
+          history: '30d'
+          trends: '180d'
           valuemap:
             name: 'Recording State'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.recording'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
           tags:
             - tag: component
               value: camera
@@ -284,21 +293,47 @@ zabbix_export:
               value: recording_state
           triggers:
             - uuid: 1e85f619a4e14524a2f2a3672b92adaa
-              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.recording)=0 and last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.state)=1'
+              expression: 'last(/Template Bosch Camera via Milestone/camera.recording)=0 and last(/Template Bosch Camera via Milestone/camera.online)=1'
               name: 'Camera {HOST.NAME} online but NOT recording'
               priority: HIGH
               description: 'Camera is reachable but Milestone is not recording it - investigate retention rule, licensing, or archive storage.'
 
-        - uuid: e885e9632d154383b9825152e055ee09
-          name: 'Retention (days)'
-          key: 'milestone.cam.retention'
-          type: EXTERNAL
-          params: '{$MILESTONE.HELPER}[retention_days,{$CAM.GUID}]'
+        - uuid: 5465f92714330a49989c5ad9d068410f
+          name: 'Camera last frame timestamp'
+          key: 'camera.last_frame_ts'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
+          value_type: UNSIGNED
+          units: unixtime
+          history: '30d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.lastFrameTs'
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: last_frame_ts
+
+        - uuid: 6565f92714330a49989c5ad9d068410f
+          name: 'Camera retention (days)'
+          key: 'camera.retention_days'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
           value_type: FLOAT
           units: d
-          delay: 15m
-          history: 90d
-          trends: 365d
+          history: '90d'
+          trends: '365d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.retentionDays'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
           tags:
             - tag: component
               value: camera
@@ -306,22 +341,91 @@ zabbix_export:
               value: retention_days
           triggers:
             - uuid: 10d615d6332c4de3b26029c8b3002371
-              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)<{$RETENTION.HIGH.DAYS}'
-              name: 'Camera {HOST.NAME} retention below {$RETENTION.HIGH.DAYS}d'
+              expression: 'last(/Template Bosch Camera via Milestone/camera.retention_days)<{$RETENTION.CRIT_DAYS}'
+              name: 'Camera {HOST.NAME} retention below {$RETENTION.CRIT_DAYS}d'
               priority: HIGH
             - uuid: cda357e160cd47e28be7d7bed81eaa63
-              expression: 'last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)<{$RETENTION.WARN.DAYS} and last(/Bosch Cameras via Milestone XProtect - Camera/milestone.cam.retention)>={$RETENTION.HIGH.DAYS}'
-              name: 'Camera {HOST.NAME} retention below {$RETENTION.WARN.DAYS}d'
+              expression: 'last(/Template Bosch Camera via Milestone/camera.retention_days)<{$RETENTION.WARN_DAYS} and last(/Template Bosch Camera via Milestone/camera.retention_days)>={$RETENTION.CRIT_DAYS}'
+              name: 'Camera {HOST.NAME} retention below {$RETENTION.WARN_DAYS}d'
               priority: WARNING
 
-        - uuid: 931a0e04af4c4d89a5d8420ba57d3096
+        - uuid: 7665f92714330a49989c5ad9d068410f
+          name: 'Camera stream name'
+          key: 'camera.stream_name'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
+          value_type: CHAR
+          history: '7d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.name'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: stream_name
+
+        - uuid: 8765f92714330a49989c5ad9d068410f
+          name: 'Camera Milestone GUID'
+          key: 'camera.milestone_guid'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
+          value_type: CHAR
+          history: '7d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.guid'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 24h
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: milestone_guid
+
+        - uuid: 9865f92714330a49989c5ad9d068410f
+          name: 'Camera storage used %'
+          key: 'camera.storage_used_pct'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.cam.info'
+          value_type: FLOAT
+          units: '%'
+          history: '30d'
+          trends: '180d'
+          description: 'Placeholder. The per-camera storage utilisation is not exposed in REST; the dashboard widget treats missing values as unknown. Overall RS storage % lives on the parent Milestone server host.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return 0;'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          tags:
+            - tag: component
+              value: storage
+            - tag: metric
+              value: used_pct
+
+        # ---------------------------------------------------------------
+        # Direct camera checks via the Bosch camera web API.
+        # ---------------------------------------------------------------
+        - uuid: a965f92714330a49989c5ad9d068410f
           name: 'ICMP ping'
           key: 'icmpping'
           type: SIMPLE
           value_type: UNSIGNED
-          delay: 1m
-          history: 7d
-          trends: 90d
+          delay: '1m'
+          history: '7d'
+          trends: '90d'
           tags:
             - tag: component
               value: camera
@@ -329,29 +433,107 @@ zabbix_export:
               value: icmp
           triggers:
             - uuid: 0147eb600bd9456a97ac19a302c020a6
-              expression: 'max(/Bosch Cameras via Milestone XProtect - Camera/icmpping,#3)=0'
+              expression: 'max(/Template Bosch Camera via Milestone/icmpping,#3)=0'
               name: 'Camera {HOST.NAME} unreachable (ICMP)'
               priority: AVERAGE
-              description: 'Three consecutive ICMP failures. Combined with the Milestone online trigger, both-firing means the camera is genuinely down; ICMP-only means Milestone may be stale.'
+              description: 'Three consecutive ICMP failures. Combined with the Milestone online trigger, both firing means the camera is genuinely down; ICMP-only means Milestone may be stale.'
 
-        - uuid: 3b191718662c42c392aace1cbe9b4911
+        - uuid: ba65f92714330a49989c5ad9d068410f
           name: 'Bosch RCP+ device probe'
-          key: 'web.page.get[{HOST.CONN},/rcp.xml?command=0x0a04,80]'
-          type: SIMPLE
-          value_type: TEXT
-          delay: 5m
-          history: 1d
-          timeout: '{$CAMERA.HTTP.TIMEOUT}'
+          key: 'bosch.rcp.alive'
+          type: HTTP_AGENT
+          url: '{$BOSCH.CONN}://{HOST.CONN}:{$BOSCH.PORT}/rcp.xml'
+          query_fields:
+            - name: 'command'
+              value: '0x0a04'
+            - name: 'num'
+              value: '0'
+            - name: 'type'
+              value: 'P_OCTET'
+            - name: 'direction'
+              value: 'READ'
+          authtype: BASIC
+          username: '{$BOSCH.USER}'
+          password: '{$BOSCH.PASSWORD}'
+          request_method: GET
+          retrieve_mode: HEADERS
+          value_type: UNSIGNED
+          delay: '2m'
+          history: '7d'
+          trends: '90d'
+          timeout: '{$BOSCH.HTTP_TIMEOUT}'
+          description: 'Directly talks to the camera over the legacy Bosch RCP+ interface. 1 = HTTP 200, 0 otherwise. RCP+ command 0x0a04 is the minimal device-info read that every Bosch IP camera supports.'
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - 'HTTP/[0-9.]+ (\d+)'
+                - '\1'
+            - type: JAVASCRIPT
+              parameters:
+                - 'return value === "200" ? 1 : 0;'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
           tags:
             - tag: component
               value: camera
             - tag: metric
-              value: rcp_probe
+              value: rcp_alive
+          triggers:
+            - uuid: cb65f92714330a49989c5ad9d068410f
+              expression: 'max(/Template Bosch Camera via Milestone/bosch.rcp.alive,#3)=0'
+              name: 'Bosch RCP+ probe failing on {HOST.NAME}'
+              priority: AVERAGE
+              description: 'Three consecutive failed RCP+ HTTP requests. Points at the camera itself (auth, firmware hang, network) rather than Milestone.'
+
+        - uuid: dc65f92714330a49989c5ad9d068410f
+          name: 'Bosch API health'
+          key: 'bosch.api.health'
+          type: HTTP_AGENT
+          url: '{$BOSCH.CONN}://{HOST.CONN}:{$BOSCH.PORT}/api/1.0/status/general'
+          authtype: BASIC
+          username: '{$BOSCH.USER}'
+          password: '{$BOSCH.PASSWORD}'
+          request_method: GET
+          retrieve_mode: BODY
+          headers:
+            - name: 'Accept'
+              value: 'application/json'
+          value_type: TEXT
+          delay: '5m'
+          history: '7d'
+          timeout: '{$BOSCH.HTTP_TIMEOUT}'
+          description: 'Newer Bosch cameras expose a JSON status endpoint at /api/1.0/status/general. Older models may return 404 - in which case rely on bosch.rcp.alive.'
           preprocessing:
-            - type: REGEX
-              parameters:
-                - 'HTTP/1\.[01] (\d+)'
-                - '\1'
             - type: DISCARD_UNCHANGED_HEARTBEAT
               parameters:
                 - 1h
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: bosch_api_health
+
+        - uuid: ed65f92714330a49989c5ad9d068410f
+          name: 'Bosch firmware version'
+          key: 'bosch.api.firmware'
+          type: DEPENDENT
+          master_item:
+            key: 'bosch.api.health'
+          value_type: CHAR
+          history: '30d'
+          description: 'Firmware version parsed from the Bosch /api/1.0/status/general JSON response.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$..firmwareVersion'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: 'unknown'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          tags:
+            - tag: component
+              value: camera
+            - tag: metric
+              value: firmware

@@ -1,129 +1,179 @@
 # Bosch Cameras via Milestone — Zabbix Monitoring Pack
 
 Custom Zabbix widget, templates, and dashboard for monitoring Bosch security
-cameras through a Milestone XProtect Professional+ Management Server, with a
-secondary direct-to-camera ICMP/HTTP health check for early warning.
+cameras through a Milestone XProtect Management Server.
+
+**No external scripts or agents required on the Milestone host.** Both
+templates use native Zabbix SCRIPT items (JavaScript running on the Zabbix
+server/proxy) and HTTP_AGENT items to talk directly to the Milestone MIP VMS
+REST API and the Bosch camera web API.
 
 ## Contents
 
 ```
 widgets/camera_status/      Custom Zabbix 7.x frontend widget
-templates/                  Two YAML templates (camera + Milestone server)
-agent/                      PowerShell + UserParameter config for the Milestone server
+templates/                  Two YAML templates (Milestone server + camera)
 dashboard/                  Dashboard export referencing the widget
 ```
 
 ## Architecture
 
 ```
-  Bosch cameras  ←── ICMP/HTTP direct check ──→  Zabbix Server
-       │                                              ↑
-       ↓                                              │
-  Milestone XProtect Pro+  ──── MIP SDK ──→  PowerShell UserParameter
-  (Management + Recording)                   on Milestone host
-                                                      │
-                                                      └──→ Zabbix agent 2
+Zabbix Server / Proxy
+  │
+  ├── SCRIPT item (JS) ────── OAuth2 token ──► Milestone API Gateway
+  │   milestone.info                            /API/IDP/connect/token
+  │                           REST GET ───────► /api/rest/v1/cameras
+  │                                             /api/rest/v1/recordingServers
+  │                                             /api/rest/v1/recordingServers/{id}/storages
+  │
+  └── Per-camera host (auto-created by LLD)
+        │
+        ├── SCRIPT item (JS) ─── per-camera token ──► /api/rest/v1/cameras/{guid}
+        │   milestone.cam.info                         /api/rest/v1/cameras/{guid}/currentStatus
+        │                                              /api/rest/v1/cameras/{guid}/recordedSegments
+        │
+        ├── HTTP_AGENT ────────────────────────────► Bosch /api/1.0/status/general  (JSON REST)
+        │   bosch.api.health
+        │
+        ├── HTTP_AGENT (headers only) ─────────────► Bosch /rcp.xml?command=0x0a04 (legacy RCP+)
+        │   bosch.rcp.alive
+        │
+        └── SIMPLE ─────────────────────────────────► ICMP ping
+            icmpping
 ```
 
-Camera hosts in Zabbix are **auto-created** by LLD on the Milestone server
-host. You do not manually add each camera.
+### What changed from the PowerShell/MIP SDK approach
+
+| Before | After |
+|---|---|
+| PowerShell + MIP SDK DLLs on the Milestone server | No software installed on Milestone host |
+| Zabbix agent UserParameters on Milestone server | Zabbix server/proxy calls REST directly |
+| EXTERNAL check placeholder script | Native SCRIPT items (JavaScript in Zabbix) |
+| SIMPLE `web.page.get` RCP+ probe | HTTP_AGENT items with auth, JSONPath preprocessing |
+
+## Requirements
+
+- **Zabbix 7.0+** (SCRIPT item type with JavaScript runtime, HTTP_AGENT `query_fields`)
+- **XProtect 2023 R2+** — REST API under `/api/rest/v1/` with per-camera status endpoint.  
+  XProtect 2021 R2–2023 R1 has partial REST support; `currentStatus` and `recordedSegments`
+  may not be available. Use the SOAP branch for older installs.
+- **API Gateway** co-installed with the Management Server (standard for all current XProtect editions)
+- A Milestone user with these role permissions:
+  - *Info → Allow Web Client Login*
+  - *Overall Security → Management Server → Connect*
+  - *Overall Security → Management Server → Status API*
+  - *Overall Security → Cameras → Read*
 
 ## Install order
 
-### 1. Milestone server preparation
-
-1. Install the **MIP SDK** on the Milestone server (Management Client ships
-   with a compatible SDK; the standalone MIP SDK gives you the full DLL set).
-2. Create a dedicated Milestone user with read-only role, note the credentials.
-3. Create `C:\ProgramData\zabbix\milestone.config.json`:
-   ```json
-   { "ServerUri": "http://localhost/", "Username": "svc_zabbix", "Password": "…" }
-   ```
-   ACL the file to `SYSTEM` + the Zabbix service account only.
-4. Copy `agent/Get-MilestoneCameraStatus.ps1` to
-   `C:\Program Files\Zabbix Agent 2\scripts\`.
-5. Copy `agent/milestone.conf` to
-   `C:\Program Files\Zabbix Agent 2\zabbix_agent2.d\plugins.d\`.
-6. Edit `zabbix_agent2.conf` → set `Timeout=30` (PowerShell + MIP cold-start
-   is slow).
-7. Restart the Zabbix agent service.
-8. Sanity check from the Zabbix server:
-   ```
-   zabbix_get -s milestone-mgmt -k milestone.storage.used_pct
-   zabbix_get -s milestone-mgmt -k milestone.camera.discover
-   ```
-
-### 2. Import templates
+### 1. Import templates
 
 In Zabbix UI → *Data collection → Templates → Import*:
 
-1. `templates/template_bosch_camera.yaml` first
-2. `templates/template_milestone_server.yaml` second (references the first
-   via host prototype)
+1. `templates/template_bosch_camera.yaml` first (camera child template)
+2. `templates/template_milestone_server.yaml` second (references the first via host prototype)
 
-### 3. Add the Milestone server as a host
+### 2. Add the Milestone server host
 
-Create a Zabbix host for the Milestone Windows box, assign
-`Template Milestone Recording Server`, agent interface on 10050. Within an
-hour, LLD will discover all cameras and create `CAM-<guid>` hosts in the
-`Cameras/Bosch` group automatically.
+Create a Zabbix host for the Milestone Management Server:
 
-For each camera host, if you want the ICMP + HTTP direct checks to work, set
-the host's **agent interface IP** to the camera's IP and set macro
-`{$CAMERA.IP}` = the same IP (the simple check items need it textually).
+- **Agent interface** — point to the Management Server IP/DNS (used as `{HOST.CONN}` for API calls)
+- **Template** — `Template Milestone Recording Server`
+- **Macros** (set on the host, not the template):
 
-### 4. Install the widget
+| Macro | Value |
+|---|---|
+| `{$MILESTONE.USER}` | XProtect local user (Basic auth) or Windows domain user |
+| `{$MILESTONE.PASSWORD}` | Password (mark as Secret Text) |
+| `{$MILESTONE.CONN}` | `https` (or `http` if your API Gateway is not TLS) |
 
-Frontend widgets on Zabbix 7.x are installed as modules:
+No Zabbix agent needs to be installed on the Milestone server.
 
-```
+Within one LLD cycle (`{$MILESTONE.LLD_FREQ}`, default 50 min) Zabbix will
+discover every enabled camera and auto-create hosts in the `Cameras/Bosch` group.
+
+### 3. Configure per-camera hosts
+
+Each discovered camera host inherits `{$MILESTONE.USER}` / `{$MILESTONE.PASSWORD}` /
+`{$MILESTONE.CONN}` from the parent Management Server host via prototype macros.
+You only need to set additional macros if they differ per camera:
+
+| Macro | Default | When to override |
+|---|---|---|
+| `{$BOSCH.USER}` | `service` | Camera uses a different account |
+| `{$BOSCH.PASSWORD}` | _(empty)_ | Always set this per-camera or at group level |
+| `{$BOSCH.CONN}` | `http` | Set to `https` for TLS-enabled cameras |
+| `{$BOSCH.PORT}` | `80` | Change if camera listens on a non-default port |
+| `{$FRAME.STALE.SEC}` | `120` | Increase for motion-only cameras |
+| `{$RETENTION.WARN_DAYS}` | `14` | Adjust to your retention policy |
+| `{$RETENTION.CRIT_DAYS}` | `7` | Adjust to your retention policy |
+
+For direct Bosch checks (ICMP, RCP+, `/api/1.0/`), the host's **agent interface
+IP must point to the camera's IP address**.
+
+### 4. Install the dashboard widget
+
+```bash
 cp -r widgets/camera_status /usr/share/zabbix/modules/
 chown -R www-data:www-data /usr/share/zabbix/modules/camera_status
 ```
 
-Then in the UI: *Administration → General → Modules → Scan directory →
-enable `Bosch/Milestone Camera Status`*.
+In Zabbix UI: *Administration → General → Modules → Scan directory →*
+enable `Bosch/Milestone Camera Status`.
 
 ### 5. Import the dashboard
 
-*Data collection → Dashboards → Import* →
-`dashboard/dashboard_cameras.yaml`.
+*Monitoring → Dashboards → Import* → `dashboard/dashboard_cameras.yaml`.
 
 ## Widget configuration
 
-When adding the widget to a dashboard:
+| Field | Meaning |
+|---|---|
+| Host groups | Usually `Cameras/Bosch` |
+| Layout | Grid = tiles, List = dense rows |
+| Columns | Grid columns (2–12) |
+| Show problems only | Hide healthy cameras — good for a NOC view |
+| Retention warn threshold | Days below which the tile turns yellow |
+| Frame staleness threshold | Seconds since last frame before warning |
 
-| Field                   | Meaning                                          |
-|-------------------------|--------------------------------------------------|
-| Host groups             | Usually `Cameras/Bosch`                          |
-| Layout                  | Grid = tiles, List = dense one-line rows         |
-| Columns                 | Grid columns (2–12)                              |
-| Show problems only      | Hide healthy cameras — good for a NOC view       |
-| Retention warn threshold| Days below which the tile flips to warning       |
-| Frame staleness threshold | Seconds since last frame before warning        |
+Tiles are colour-coded:
+- **Green** border — all checks healthy
+- **Yellow** — at least one warning (retention low, stale frame, not recording)
+- **Red** — camera reported offline by Milestone
 
-Tiles are color-coded:
-- Green left-border — healthy
-- Yellow — one or more warnings (retention low, stale frame, storage >90%,
-  online but not recording)
-- Red — camera reported offline
+## Item keys produced by the camera template
 
-Clicking a tile's name opens the camera's host in Zabbix.
+These are the keys the dashboard widget reads from each camera host:
 
-## Notes and caveats
+| Key | Type | Description |
+|---|---|---|
+| `camera.online` | Unsigned | 1 = online (Milestone), 0 = offline, -1 = unknown |
+| `camera.recording` | Unsigned | 1 = recording, 0 = not recording, -1 = unknown |
+| `camera.last_frame_ts` | Unsigned | Unix timestamp of newest recorded segment end |
+| `camera.retention_days` | Float | Days of recordings available |
+| `camera.storage_used_pct` | Float | Placeholder (0); real storage % is on the Milestone host |
+| `camera.stream_name` | Char | Camera display name from Milestone |
+| `camera.milestone_guid` | Char | Camera GUID in XProtect |
+| `bosch.rcp.alive` | Unsigned | 1 = HTTP 200 from RCP+ endpoint, 0 = fail |
+| `bosch.api.health` | Text | Raw JSON from Bosch `/api/1.0/status/general` |
+| `bosch.api.firmware` | Char | Firmware version extracted from Bosch API |
+| `icmpping` | Unsigned | 1 = reachable, 0 = ICMP timeout |
 
-- **XProtect Pro+ SNMP is limited.** That's why this pack uses the MIP SDK
-  via PowerShell rather than SNMP. If you upgrade to XProtect Corporate
-  someday, you can replace the PowerShell items with SNMP traps/polls.
-- **MIP SDK login is expensive.** Each invocation initializes the SDK and
-  logs in. For a site with >50 cameras, consider rewriting the script as a
-  long-running C# service that maintains a session and exposes metrics over
-  localhost HTTP, with Zabbix hitting that. Ping me if you want that
-  variant — it's a one-afternoon project.
-- **Direct ONVIF polling** is *not* done by this pack on purpose. Bosch
-  cameras under load can have ONVIF get flaky, and you'd duplicate what
-  Milestone already knows. ICMP + HTTP(S) on the camera web UI is enough
-  for the early-warning layer.
-- **Adjust `{$CAMERA.FRAME_STALE_SEC}`** per camera if some are on motion-
-  only recording — a motion-only camera that hasn't seen motion in 5
-  minutes isn't actually broken.
+## Notes
+
+- **Token lifetime** — The Milestone IDP token defaults to 3600 s. The
+  `{$MILESTONE.LLD_FREQ}` macro defaults to 50 min so discovery always
+  re-authenticates inside the token window. Per-camera SCRIPT items each
+  acquire their own token on every 2-minute cycle; token cost is negligible
+  against the REST calls.
+- **Bosch `/api/1.0/` availability** — Only cameras running firmware with the
+  RESTful configuration API expose this path. Older FLEXIDOME and AUTODOME
+  cameras may return 404; `bosch.rcp.alive` covers them via legacy RCP+.
+- **Motion-only cameras** — Raise `{$FRAME.STALE.SEC}` per camera if they
+  record on motion only. A camera that hasn't triggered motion recently is
+  not broken.
+- **XProtect editions without full REST** — If `currentStatus` returns 404,
+  the per-camera SCRIPT item falls back to `-1` (unknown) for online/recording
+  rather than raising an error. The camera host will still appear in the widget
+  with unknown state.
