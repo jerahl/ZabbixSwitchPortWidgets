@@ -9,74 +9,374 @@ zabbix_export:
   templates:
     - uuid: e178298b1cc24666a075358f0d9bf027
       template: 'Template Milestone Recording Server'
-      name: 'Milestone XProtect Recording Server'
+      name: 'Milestone XProtect Management Server'
       description: |
-        Apply to the Windows host running XProtect Professional+ Management
-        Server. Discovers all cameras and creates Zabbix hosts automatically.
-        Requires Zabbix agent 2 + UserParameter script + MIP SDK (see docs).
+        Agentless monitoring of a Milestone XProtect Management Server via the
+        native MIP VMS REST API (OAuth2 token from /API/IDP/connect/token,
+        resources under /api/rest/v1/). The API Gateway must be co-installed
+        with the Management Server.
+
+        Tested on Zabbix 7.4 and XProtect 2023 R2+. Earlier XProtect versions
+        that lack the REST API are not supported - use the SOAP-only branch.
+
+        Link to a host whose agent interface resolves to the Management Server.
+        {HOST.CONN} is the REST base. The template discovers every camera and
+        creates a Zabbix host for each one via host prototype.
+
+        Required macros:
+          {$MILESTONE.USER}     - Local XProtect or Windows user
+          {$MILESTONE.PASSWORD} - user password (secret)
+          {$MILESTONE.CONN}     - http or https (default https)
       groups:
         - name: Templates/Video
       macros:
+        - macro: '{$MILESTONE.USER}'
+          value: ''
+          description: 'XProtect user (Basic or Windows). Role needs: Allow Web Client login, Management Server Status API, Cameras Read.'
+        - macro: '{$MILESTONE.PASSWORD}'
+          type: SECRET_TEXT
+          description: 'Password for {$MILESTONE.USER}.'
+        - macro: '{$MILESTONE.CONN}'
+          value: 'https'
+          description: 'Connection scheme for the API Gateway: http or https.'
+        - macro: '{$MILESTONE.AUTH_GRANT}'
+          value: 'password'
+          description: 'OAuth2 grant_type: password (Basic user) or windows_credentials (Windows user).'
+        - macro: '{$MILESTONE.LLD_FREQ}'
+          value: '50m'
+          description: 'Discovery refresh interval. Keep below XProtect token lifetime (default 60m).'
+        - macro: '{$MILESTONE.HTTP_TIMEOUT}'
+          value: '30'
+          description: 'HTTP timeout in seconds for each Milestone API call.'
         - macro: '{$STORAGE.WARN_PCT}'
           value: '85'
+          description: 'Warn when aggregate storage used % exceeds this.'
         - macro: '{$STORAGE.CRIT_PCT}'
           value: '95'
+          description: 'High severity when aggregate storage used % exceeds this.'
         - macro: '{$CAMERA.HOST_GROUP}'
           value: 'Cameras/Bosch'
-          description: 'Host group for auto-created camera hosts'
+          description: 'Host group assigned to auto-created camera hosts.'
         - macro: '{$CAMERA.TEMPLATE}'
           value: 'Template Bosch Camera via Milestone'
+          description: 'Template linked to each discovered camera host.'
+
       items:
-        - uuid: ddfc2200cd1a480f91a135365b387b7e
+        - uuid: 1f61d5a6d6e644e5b9b1e41c0fb1f40c
+          name: 'Milestone: API master fetch'
+          key: 'milestone.info'
+          type: SCRIPT
+          value_type: TEXT
+          delay: '{$MILESTONE.LLD_FREQ}'
+          history: '7d'
+          timeout: '60s'
+          description: |
+            Master item. Authenticates to the Milestone Management Server via the
+            IDP token endpoint, then fetches cameras, recording servers and their
+            storages via the MIP VMS REST API. Returns a single JSON blob that
+            drives every dependent item and LLD rule on this host.
+          parameters:
+            - name: 'conn'
+              value: '{$MILESTONE.CONN}'
+            - name: 'host'
+              value: '{HOST.CONN}'
+            - name: 'user'
+              value: '{$MILESTONE.USER}'
+            - name: 'password'
+              value: '{$MILESTONE.PASSWORD}'
+            - name: 'grant'
+              value: '{$MILESTONE.AUTH_GRANT}'
+            - name: 'timeout'
+              value: '{$MILESTONE.HTTP_TIMEOUT}'
+          params: |
+            // Milestone XProtect master fetch - Zabbix 7.x SCRIPT item.
+            // Gets a bearer token from /API/IDP/connect/token, then walks the
+            // REST API under /api/rest/v1/ to collect camera, recording server
+            // and storage state. Returns JSON; dependent items extract fields.
+
+            var p = JSON.parse(value);
+            var base = p.conn + '://' + p.host;
+            var timeout = parseInt(p.timeout || '30', 10);
+
+            function die(msg) {
+                return JSON.stringify({
+                    status: 'ERROR: ' + msg,
+                    generatedAt: Math.floor(Date.now() / 1000),
+                    cameras: [],
+                    recordingServers: [],
+                    storages: []
+                });
+            }
+
+            function req() {
+                var r = new HttpRequest();
+                r.setHttpAuth(HTTPAUTH_NONE);
+                return r;
+            }
+
+            // --- 1. OAuth2 token ------------------------------------------
+            var token = null;
+            try {
+                var r = req();
+                r.addHeader('Content-Type: application/x-www-form-urlencoded');
+                r.addHeader('Accept: application/json');
+                var body;
+                if (p.grant === 'windows_credentials') {
+                    // Windows grant - Basic user/password over NTLM is not
+                    // supported inside the JS runtime; fall through to Basic.
+                    body = 'grant_type=windows_credentials&client_id=GrantValidatorClient';
+                } else {
+                    body = 'grant_type=password' +
+                           '&client_id=GrantValidatorClient' +
+                           '&username=' + encodeURIComponent(p.user) +
+                           '&password=' + encodeURIComponent(p.password);
+                }
+                var resp = r.post(base + '/API/IDP/connect/token', body);
+                if (r.getStatus() !== 200) {
+                    return die('IDP token HTTP ' + r.getStatus());
+                }
+                token = JSON.parse(resp).access_token;
+                if (!token) {
+                    return die('IDP returned no access_token');
+                }
+            } catch (e) {
+                return die('IDP request failed: ' + e);
+            }
+
+            // --- 2. REST GET helper ---------------------------------------
+            function api(path) {
+                var r = req();
+                r.addHeader('Authorization: Bearer ' + token);
+                r.addHeader('Accept: application/json');
+                var resp = r.get(base + '/api/rest/v1/' + path);
+                if (r.getStatus() !== 200) {
+                    throw path + ': HTTP ' + r.getStatus();
+                }
+                return JSON.parse(resp);
+            }
+
+            var out = {
+                status: 'OK',
+                generatedAt: Math.floor(Date.now() / 1000),
+                cameras: [],
+                recordingServers: [],
+                storages: []
+            };
+
+            // --- 3. Recording servers + storages --------------------------
+            try {
+                var rsList = (api('recordingServers').array) || [];
+                for (var i = 0; i < rsList.length; i++) {
+                    var rs = rsList[i];
+                    var rsEntry = {
+                        id: rs.id,
+                        name: rs.displayName || rs.name || '',
+                        hostName: rs.hostName || '',
+                        enabled: rs.enabled === false ? 0 : 1
+                    };
+                    out.recordingServers.push(rsEntry);
+
+                    try {
+                        var storages = (api('recordingServers/' + rs.id + '/storages').array) || [];
+                        for (var j = 0; j < storages.length; j++) {
+                            var st = storages[j];
+                            out.storages.push({
+                                recordingServerId: rs.id,
+                                recordingServerName: rsEntry.name,
+                                id: st.id,
+                                name: st.displayName || st.name || '',
+                                totalBytes: +(st.diskSpaceInBytes || st.maximumSizeInBytes || 0),
+                                usedBytes:  +(st.usedSpaceInBytes || 0)
+                            });
+                        }
+                    } catch (e) { /* keep going - one bad RS shouldn't kill the fetch */ }
+                }
+            } catch (e) {
+                out.status = 'ERROR: recordingServers: ' + e;
+            }
+
+            // --- 4. Cameras + per-camera status ---------------------------
+            try {
+                var cams = (api('cameras').array) || [];
+                for (var k = 0; k < cams.length; k++) {
+                    var c = cams[k];
+                    var st = { isOnline: null, isRecording: null, errorString: '' };
+                    try { st = api('cameras/' + c.id + '/currentStatus') || st; } catch (e) {}
+                    out.cameras.push({
+                        id: c.id,
+                        name: c.displayName || c.name || c.shortName || c.id,
+                        enabled: c.enabled === false ? 0 : 1,
+                        recordingServerId: c.recordingServerId || '',
+                        recordingServerName: c.recordingServerName || '',
+                        online:    st.isOnline    === true ? 1 : (st.isOnline    === false ? 0 : -1),
+                        recording: st.isRecording === true ? 1 : (st.isRecording === false ? 0 : -1),
+                        error: st.errorString || ''
+                    });
+                }
+            } catch (e) {
+                out.status = 'ERROR: cameras: ' + e;
+            }
+
+            return JSON.stringify(out);
+          tags:
+            - tag: component
+              value: milestone
+            - tag: metric
+              value: master_fetch
+
+        - uuid: b5f8d4a6c0a74a8e9a1d4c3b2a1e5f7a
+          name: 'Milestone: fetch status'
+          key: 'milestone.info.status'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
+          value_type: CHAR
+          history: '30d'
+          description: 'OK or ERROR string from the last milestone.info run.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.status'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          tags:
+            - tag: component
+              value: milestone
+            - tag: metric
+              value: fetch_status
+          triggers:
+            - uuid: 1a1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c
+              expression: 'find(/Template Milestone Recording Server/milestone.info.status,,"regexp","^ERROR")=1'
+              name: 'Milestone: API fetch failing on {HOST.NAME}'
+              priority: HIGH
+              description: 'The master data fetch from the Milestone Management Server REST API is failing. Check credentials, network path to the API Gateway, and that the user has the required XProtect role.'
+
+        - uuid: c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4
+          name: 'Milestone: camera count'
+          key: 'milestone.cameras.count'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
+          value_type: UNSIGNED
+          history: '30d'
+          trends: '365d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.cameras.length()'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          tags:
+            - tag: component
+              value: milestone
+            - tag: metric
+              value: camera_count
+
+        - uuid: d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5
+          name: 'Milestone: recording server count'
+          key: 'milestone.rs.count'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
+          value_type: UNSIGNED
+          history: '30d'
+          trends: '365d'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.recordingServers.length()'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          tags:
+            - tag: component
+              value: milestone
+            - tag: metric
+              value: rs_count
+
+        - uuid: e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6
           name: 'Milestone: storage used %'
-          type: ZABBIX_ACTIVE
           key: 'milestone.storage.used_pct'
-          delay: 5m
-          history: 30d
-          trends: 365d
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
           value_type: FLOAT
           units: '%'
+          history: '30d'
+          trends: '365d'
+          description: 'Aggregate used % across every recording server storage volume.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var d = JSON.parse(value);
+                  var total = 0, used = 0;
+                  for (var i = 0; i < d.storages.length; i++) {
+                      total += +d.storages[i].totalBytes;
+                      used  += +d.storages[i].usedBytes;
+                  }
+                  return total > 0 ? (used / total * 100).toFixed(2) : 0;
           tags:
             - tag: component
               value: storage
-        - uuid: 09886bd2b11f4272a29a9a44867954e2
-          name: 'Event Server service state'
-          type: ZABBIX_ACTIVE
-          key: 'service.info[Milestone XProtect Event Server,state]'
-          delay: 1m
-          history: 7d
-          value_type: UNSIGNED
-          tags:
-            - tag: component
-              value: services
-        - uuid: 4f11ae437b7949b7a0fa80c587bb91c6
-          name: 'Recording Server service state'
-          type: ZABBIX_ACTIVE
-          key: 'service.info[Milestone XProtect Recording Server,state]'
-          delay: 1m
-          history: 7d
-          value_type: UNSIGNED
-          tags:
-            - tag: component
-              value: services
-        - uuid: f8e4050a08e34fcc90336aac7e97f592
-          name: 'Management Server service state'
-          type: ZABBIX_ACTIVE
-          key: 'service.info[Milestone XProtect Management Server,state]'
-          delay: 1m
-          history: 7d
-          value_type: UNSIGNED
-          tags:
-            - tag: component
-              value: services
+            - tag: metric
+              value: used_pct
+          triggers:
+            - uuid: f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7
+              expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.WARN_PCT} and last(/Template Milestone Recording Server/milestone.storage.used_pct)<={$STORAGE.CRIT_PCT}'
+              name: 'Milestone aggregate storage above {$STORAGE.WARN_PCT}%'
+              priority: WARNING
+            - uuid: a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8
+              expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.CRIT_PCT}'
+              name: 'Milestone aggregate storage above {$STORAGE.CRIT_PCT}% CRITICAL'
+              priority: HIGH
+
       discovery_rules:
         - uuid: 55630679610f4ad88f7b09889bc41595
           name: 'Camera discovery'
-          type: ZABBIX_ACTIVE
-          key: 'milestone.camera.discover'
-          delay: 1h
-          lifetime: 7d
-          description: 'Discovers all cameras registered in Milestone'
+          key: 'milestone.discover.cameras'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
+          delay: '0'
+          lifetime: '7d'
+          description: 'Creates a Zabbix host per Milestone camera, using the camera GUID as the host primary name. LLD JSON is extracted from milestone.info.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var d = JSON.parse(value);
+                  var out = [];
+                  for (var i = 0; i < d.cameras.length; i++) {
+                      var c = d.cameras[i];
+                      out.push({
+                          '{#CAMERA_GUID}':    c.id,
+                          '{#CAMERA_NAME}':    c.name,
+                          '{#CAMERA_ENABLED}': c.enabled ? '1' : '0',
+                          '{#RECORDER_ID}':    c.recordingServerId,
+                          '{#RECORDER}':       c.recordingServerName
+                      });
+                  }
+                  return JSON.stringify(out);
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#CAMERA_ENABLED}'
+                value: '1'
+                formulaid: A
+          lld_macro_paths:
+            - lld_macro: '{#CAMERA_GUID}'
+              path: '$.["{#CAMERA_GUID}"]'
+            - lld_macro: '{#CAMERA_NAME}'
+              path: '$.["{#CAMERA_NAME}"]'
+            - lld_macro: '{#CAMERA_ENABLED}'
+              path: '$.["{#CAMERA_ENABLED}"]'
+            - lld_macro: '{#RECORDER_ID}'
+              path: '$.["{#RECORDER_ID}"]'
+            - lld_macro: '{#RECORDER}'
+              path: '$.["{#RECORDER}"]'
           host_prototypes:
             - uuid: cba8a468a5c24cf59e20b552e32c7db1
               host: 'CAM-{#CAMERA_GUID}'
@@ -84,25 +384,84 @@ zabbix_export:
               group_links:
                 - group:
                     name: 'Cameras/Bosch'
+              templates:
+                - name: 'Template Bosch Camera via Milestone'
               macros:
                 - macro: '{$CAMERA.GUID}'
                   value: '{#CAMERA_GUID}'
+                  description: 'Camera GUID in the Milestone XProtect Management Server.'
                 - macro: '{$MILESTONE.RECORDER}'
                   value: '{#RECORDER}'
-  triggers:
-    - uuid: 41d0e870cf5b49a081a2a75fb361c81b
-      expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.WARN_PCT}'
-      name: 'Milestone storage >{$STORAGE.WARN_PCT}%'
-      priority: WARNING
-    - uuid: 0f9279beb4af4fcaabce09ba495d531f
-      expression: 'last(/Template Milestone Recording Server/milestone.storage.used_pct)>{$STORAGE.CRIT_PCT}'
-      name: 'Milestone storage >{$STORAGE.CRIT_PCT}% CRITICAL'
-      priority: HIGH
-    - uuid: c62490c4638a43a9b0d33858dc4730e2
-      expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Recording Server,state])<>0'
-      name: 'Recording Server service not running'
-      priority: DISASTER
-    - uuid: 6044010103284f5d9ef3b4cc76f95918
-      expression: 'last(/Template Milestone Recording Server/service.info[Milestone XProtect Event Server,state])<>0'
-      name: 'Event Server service not running'
-      priority: HIGH
+                  description: 'Name of the recording server this camera is bound to.'
+              tags:
+                - tag: milestone_role
+                  value: camera
+                - tag: camera_guid
+                  value: '{#CAMERA_GUID}'
+                - tag: camera_name
+                  value: '{#CAMERA_NAME}'
+                - tag: rs_name
+                  value: '{#RECORDER}'
+              custom_interfaces: 'YES'
+              interfaces:
+                - type: AGENT
+                  useip: 'NO'
+                  ip: ''
+                  dns: ''
+                  port: '10050'
+                  main: 'YES'
+
+        - uuid: 6630679610f4ad88f7b09889bc41596
+          name: 'Recording server discovery'
+          key: 'milestone.discover.rs'
+          type: DEPENDENT
+          master_item:
+            key: 'milestone.info'
+          delay: '0'
+          lifetime: '7d'
+          description: 'Discovers Milestone Recording Servers. Creates per-RS items for reachable state.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var d = JSON.parse(value);
+                  var out = [];
+                  for (var i = 0; i < d.recordingServers.length; i++) {
+                      var rs = d.recordingServers[i];
+                      out.push({
+                          '{#RS_GUID}':    rs.id,
+                          '{#RS_NAME}':    rs.name,
+                          '{#RS_HOST}':    rs.hostName,
+                          '{#RS_ENABLED}': rs.enabled ? '1' : '0'
+                      });
+                  }
+                  return JSON.stringify(out);
+          lld_macro_paths:
+            - lld_macro: '{#RS_GUID}'
+              path: '$.["{#RS_GUID}"]'
+            - lld_macro: '{#RS_NAME}'
+              path: '$.["{#RS_NAME}"]'
+            - lld_macro: '{#RS_HOST}'
+              path: '$.["{#RS_HOST}"]'
+            - lld_macro: '{#RS_ENABLED}'
+              path: '$.["{#RS_ENABLED}"]'
+          item_prototypes:
+            - uuid: 7a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d
+              name: 'RS {#RS_NAME}: enabled'
+              key: 'milestone.rs.enabled[{#RS_GUID}]'
+              type: DEPENDENT
+              master_item:
+                key: 'milestone.info'
+              value_type: UNSIGNED
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.recordingServers[?(@.id=="{#RS_GUID}")].enabled.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              tags:
+                - tag: component
+                  value: recording_server
+                - tag: rs_name
+                  value: '{#RS_NAME}'
