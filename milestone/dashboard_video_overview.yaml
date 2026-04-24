@@ -1,0 +1,184 @@
+zabbix_export:
+  version: '7.4'
+  dashboards:
+    - name: 'Video Surveillance Overview'
+      display_period: '30'
+      auto_start: 'YES'
+      pages:
+        - name: 'Milestone + Bosch'
+          widgets:
+            # Row 1 — top KPIs
+            - type: problems
+              name: 'Top: Video surveillance problems'
+              x: '0'
+              'y': '0'
+              width: '72'
+              height: '6'
+              fields:
+                - type: INTEGER
+                  name: show
+                  value: '3'          # recent problems
+                - type: INTEGER
+                  name: show_tags
+                  value: '3'
+                - type: STRING
+                  name: 'tags.0.tag'
+                  value: component
+                - type: INTEGER
+                  name: 'tags.0.operator'
+                  value: '1'           # EQUALS
+                - type: STRING
+                  name: 'tags.0.value'
+                  value: recording-server
+                - type: STRING
+                  name: 'tags.1.tag'
+                  value: component
+                - type: INTEGER
+                  name: 'tags.1.operator'
+                  value: '1'
+                - type: STRING
+                  name: 'tags.1.value'
+                  value: camera
+                - type: INTEGER
+                  name: evaltype
+                  value: '2'           # OR
+
+            # Row 2 — Milestone hosts host-availability bar
+            - type: hostavail
+              name: 'Milestone host availability'
+              x: '0'
+              'y': '6'
+              width: '36'
+              height: '5'
+              fields:
+                - type: HOST_GROUP
+                  name: 'groupids.0'
+                  value:
+                    name: 'Video/Milestone'
+
+            - type: hostavail
+              name: 'Bosch camera availability'
+              x: '36'
+              'y': '6'
+              width: '36'
+              height: '5'
+              fields:
+                - type: HOST_GROUP
+                  name: 'groupids.0'
+                  value:
+                    name: 'Video/Bosch cameras'
+
+            # Row 3 — top hosts by encoder load (Bosch)
+            - type: tophosts
+              name: 'Bosch cameras: top encoder load'
+              x: '0'
+              'y': '11'
+              width: '36'
+              height: '8'
+              fields:
+                - type: HOST_GROUP
+                  name: 'groupids.0'
+                  value:
+                    name: 'Video/Bosch cameras'
+                - type: STRING
+                  name: 'columns.0.data'
+                  value: bosch.encoder.load
+                - type: STRING
+                  name: 'columns.0.name'
+                  value: 'Encoder load (%)'
+                - type: INTEGER
+                  name: 'columns.0.aggregate_function'
+                  value: '1'          # avg
+                - type: INTEGER
+                  name: 'columns.0.time_period.from_type'
+                  value: '0'
+                - type: STRING
+                  name: 'columns.0.time_period.from'
+                  value: 'now-1h'
+                - type: STRING
+                  name: 'columns.0.time_period.to'
+                  value: 'now'
+                - type: INTEGER
+                  name: count
+                  value: '10'
+
+            - type: tophosts
+              name: 'Bosch cameras: ICMP latency (p95-ish, last hour)'
+              x: '36'
+              'y': '11'
+              width: '36'
+              height: '8'
+              fields:
+                - type: HOST_GROUP
+                  name: 'groupids.0'
+                  value:
+                    name: 'Video/Bosch cameras'
+                - type: STRING
+                  name: 'columns.0.data'
+                  value: icmppingsec
+                - type: STRING
+                  name: 'columns.0.name'
+                  value: 'Round-trip'
+                - type: INTEGER
+                  name: 'columns.0.aggregate_function'
+                  value: '6'          # max
+                - type: STRING
+                  name: 'columns.0.time_period.from'
+                  value: 'now-1h'
+                - type: STRING
+                  name: 'columns.0.time_period.to'
+                  value: 'now'
+                - type: INTEGER
+                  name: count
+                  value: '10'
+
+            # Row 4 — Milestone: recording-server handshake age across RSs
+            - type: tophosts
+              name: 'Milestone RS: seconds since last handshake'
+              x: '0'
+              'y': '19'
+              width: '36'
+              height: '8'
+              fields:
+                - type: HOST_GROUP
+                  name: 'groupids.0'
+                  value:
+                    name: 'Video/Milestone'
+                - type: INTEGER
+                  name: show
+                  value: '1'
+                - type: STRING
+                  name: tags
+                  value: recording-server
+                - type: STRING
+                  name: 'columns.0.data'
+                  value: 'milestone.rs.handshake.age'
+                - type: STRING
+                  name: 'columns.0.name'
+                  value: 'Handshake age (s)'
+                - type: INTEGER
+                  name: count
+                  value: '10'
+
+            # Clock/info
+            - type: clock
+              name: ''
+              x: '36'
+              'y': '19'
+              width: '12'
+              height: '4'
+              fields:
+                - type: INTEGER
+                  name: time_type
+                  value: '0'
+
+            - type: url
+              name: 'Milestone Management Client'
+              x: '48'
+              'y': '19'
+              width: '24'
+              height: '4'
+              fields:
+                - type: STRING
+                  name: url
+                  value: 'https://{$MILESTONE.HOST}/installation/'
