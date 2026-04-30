@@ -86,13 +86,14 @@ $body->addItem($summary);
 
 // ----------------------------------------------------------------------
 // Fault table — header rendered server-side, body filled by JS.
-// Status-only schema: Severity, Host, Camera, Last check.
+// Schema: Severity, Camera, MAC, IP, Last check.
 // ----------------------------------------------------------------------
 $thead = (new CTag('thead', true))->addItem(
     (new CTag('tr', true))
         ->addItem((new CTag('th', true, _('Severity')))->setAttribute('data-sort', 'status'))
-        ->addItem((new CTag('th', true, _('Host')))->setAttribute('data-sort', 'host_name'))
         ->addItem((new CTag('th', true, _('Camera')))->setAttribute('data-sort', 'cam_name'))
+        ->addItem((new CTag('th', true, _('MAC')))->setAttribute('data-sort', 'mac'))
+        ->addItem((new CTag('th', true, _('IP')))->setAttribute('data-sort', 'ip'))
         ->addItem((new CTag('th', true, _('Last check')))->setAttribute('data-sort', 'lastclock'))
 );
 $tbody = (new CTag('tbody', true))->addClass('mcs-rows');

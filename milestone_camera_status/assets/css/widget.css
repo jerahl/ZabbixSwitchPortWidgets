@@ -126,15 +126,32 @@ div.dashboard-widget-milestone_camera_status table.mcs-table {
     table-layout: fixed;
 }
 
-/* Column widths — severity pill is small, IP is fixed-ish, rest flex. */
+/* Column widths: Severity | Camera | MAC | IP | Last check.
+   Severity, MAC, IP, and Last check are fixed-ish; Camera flexes to
+   absorb leftover space.
+
+   Width sources:
+     - MAC: aa:bb:cc:dd:ee:ff is 17 chars at ~7.5px in the mono font
+       used here (~128px), plus 16px of cell padding → 170px gives a
+       small margin so the value doesn't run right up to the column edge.
+     - IP: 'xxx.xxx.xxx.xxx' worst case is 15 chars (~115px) plus
+       padding → 150px is comfortable for IPv4. (IPv6 still wraps; the
+       widget displays IPv4 here.)
+     - Last check: locale-formatted dates can run up to ~22 chars
+       depending on browser (e.g. '12/31/2025, 11:59:59 PM') →
+       195px keeps it on one line in en-US.
+*/
 div.dashboard-widget-milestone_camera_status table.mcs-table th:nth-child(1) {
-    width: 90px;
+    /*width: 90px;*/
+}
+div.dashboard-widget-milestone_camera_status table.mcs-table th:nth-child(3) {
+    /*width: 170px;*/
+}
+div.dashboard-widget-milestone_camera_status table.mcs-table th:nth-child(4) {
+    /*width: 150px;*/
 }
 div.dashboard-widget-milestone_camera_status table.mcs-table th:nth-child(5) {
-    width: 130px;
-}
-div.dashboard-widget-milestone_camera_status table.mcs-table th:nth-child(6) {
-    width: 150px;
+    /*width: 195px;*/
 }
 
 div.dashboard-widget-milestone_camera_status table.mcs-table thead th {
@@ -332,4 +349,24 @@ div.dashboard-widget-milestone_camera_status .mcs-filter-clear:hover {
 div.dashboard-widget-milestone_camera_status .mcs-filter-clear:focus {
     outline: 2px solid rgba(100, 150, 255, 0.55);
     outline-offset: 1px;
+}
+
+/* ---------- Clickable rows (broadcast camera selection) ---------- */
+
+div.dashboard-widget-milestone_camera_status table.mcs-table tbody tr.mcs-row-clickable {
+    cursor: pointer;
+    transition: background 0.10s ease;
+}
+div.dashboard-widget-milestone_camera_status table.mcs-table tbody tr.mcs-row-clickable:hover {
+    /* Use a subtle blue tint, similar to the filter bar, so it's clear
+       the row is interactive but the existing zebra striping still
+       shows through underneath. */
+    background: rgba(100, 150, 255, 0.12);
+}
+
+/* Inline link inside a clickable row should still feel like a link.
+   Override the row hover background so the underline-on-hover affordance
+   is preserved when the operator is targeting the link specifically. */
+div.dashboard-widget-milestone_camera_status table.mcs-table tbody tr.mcs-row-clickable a:hover {
+    border-bottom-style: solid;
 }

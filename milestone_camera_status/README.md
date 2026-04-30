@@ -3,10 +3,19 @@
 A custom dashboard widget for the Milestone XProtect Zabbix template that:
 
 1. **Summarises** every camera by current state across one or more host groups (Total / OK / ESS fault / Ping down / Offline / Disabled / No data).
-2. **Lists fault cameras only** in a sortable table with severity pill, host, camera name, parent hardware name, IP, and last check time.
-3. Stays empty (just the summary tiles) when everything is healthy — no row spam on a clean site.
+2. **Lists fault cameras only** in a sortable table with severity pill, camera name, MAC, IP, and last check time.
+3. **Cross-references PacketFence on click**: clicking any fault row broadcasts a `mcs:cameraSelected` DOM event with the camera's hostid, MAC, IP, name, and host. Pair with the **Camera Device (PacketFence)** widget on the same dashboard to see the corresponding PacketFence node card.
+4. Stays empty (just the summary tiles) when everything is healthy — no row spam on a clean site.
 
-The widget reads data from the `milestone.cam.status[<id>]` calculated items produced by the Milestone XProtect template. It is not tied to a specific host — pick any host group containing your Milestone hosts and the widget will aggregate across all of them.
+The widget reads from three calculated/agent items per camera produced by the Milestone XProtect template:
+
+| Key | Purpose |
+|---|---|
+| `milestone.cam.status[<guid>]` | Combined status (-1, 0, 1, 2, 3) |
+| `milestone.cam.mac[<guid>]` | Camera hardware MAC |
+| `milestone.cam.address[<guid>]` | Current IPv4 address |
+
+Only cameras with a status item show up in the summary tiles. MAC and IP are looked up as siblings by GUID; if either is missing, the column shows `—` and the row is still clickable (the companion PF widget falls back to the IP if the MAC isn't available).
 
 ## Installation
 
@@ -72,15 +81,26 @@ milestone_camera_status/
 
 The backend `WidgetView` controller does two API calls per refresh:
 
-1. `Item.get` with `search.key_=milestone.cam.status[` across the selected host groups — returns one row per camera with the current status code.
-2. A second `Item.get` for the sibling `milestone.cam.address[*]` and `milestone.cam.hwname[*]` items, scoped to only the hostids returned by step 1, so we have IPs and hardware names for the fault rows.
+1. `Item.get` with `search.key_=milestone.cam.status` across the selected hosts — returns one row per camera with the current status code.
+2. A second `Item.get` for the sibling `milestone.cam.mac[*]` and `milestone.cam.address[*]` items, scoped to only the hostids that have at least one fault row, so we have MACs and IPs for the fault rows without a wasteful query for healthy cameras.
 
-Tally counts, filter to faults, sort severity-desc + host-asc + camera-asc, cap to `max_rows`, ship as JSON. The frontend `class.widget.js` then renders the tiles and the table, attaching click handlers so column headers can re-sort without another server round-trip.
+Tally counts, filter to faults, sort severity-desc + host-asc + camera-asc, cap to `max_rows`, ship as JSON. The frontend `class.widget.js` then renders the tiles and the table, attaching click handlers so column headers can re-sort, summary tiles can filter, and rows can broadcast a `mcs:cameraSelected` event to companion widgets — all without another server round-trip.
 
 The default refresh rate is 60s; change it via the standard widget refresh-rate selector.
+
+### Click-to-lookup integration
+
+When an operator clicks a fault row, the widget:
+
+1. Stores `{hostid, mac, ip, name, host}` under the `mcs_camera_selection` key in `sessionStorage`, so a dashboard reload restores the selection in the companion widget.
+2. Dispatches `mcs:cameraSelected` as a DOM `CustomEvent` on `document`, with the same payload in `event.detail`.
+
+The **Camera Device (PacketFence)** widget (sibling module `milestone_camera_packetfence`) listens for that event and renders a PF node card for the selected camera. Other widgets can listen for the same event for their own integrations.
 
 ## Troubleshooting
 
 - **Widget not in the Add Widget list**: check **Users → Modules** that the module is **Enabled**, not just registered. A JSON syntax error in `manifest.json` causes silent rejection — `tail -f /var/log/zabbix/web/zabbix_*.log` while you Scan to catch errors.
 - **"No `milestone.cam.status[*]` items found"**: the selected host groups don't contain any hosts with the Milestone template, or the template's camera LLD hasn't run yet. Run the cameras-refresh cron and wait for one LLD discovery cycle.
+- **MAC / IP columns show `—`**: the `milestone.cam.mac[<guid>]` or `milestone.cam.address[<guid>]` items don't exist on the host, or have no last value yet. Rows are still clickable; the companion PacketFence widget will look up the camera by whichever value is present (MAC preferred, IP fallback).
+- **Click does nothing on the companion widget**: confirm the *Camera Device (PacketFence)* widget is on the same dashboard and that it's the version that listens for `mcs:cameraSelected`. Check `document.addEventListener('mcs:cameraSelected', e => console.log(e.detail))` in the browser console while clicking a row.
 - **Permissions**: the Zabbix user viewing the dashboard needs read access to the camera items. Check user-group permissions on the host groups.

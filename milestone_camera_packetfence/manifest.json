@@ -1,0 +1,30 @@
+{
+	"manifest_version": 2.0,
+	"id": "milestone_camera_packetfence",
+	"type": "widget",
+	"name": "Camera Device (PacketFence)",
+	"namespace": "MilestoneCameraPacketFence",
+	"version": "1.0",
+	"author": "Custom",
+	"description": "Looks up the selected camera (MAC/IP from the Milestone Camera Status widget) in PacketFence and renders the matching node card.",
+	"widget": {
+		"js_class": "WidgetMilestoneCameraPacketFence",
+		"size": {
+			"width": 12,
+			"height": 4
+		}
+	},
+	"actions": {
+		"widget.milestone_camera_packetfence.view": {
+			"class": "WidgetView"
+		}
+	},
+	"assets": {
+		"js": [
+			"class.widget.js"
+		],
+		"css": [
+			"widget.css"
+		]
+	}
+}

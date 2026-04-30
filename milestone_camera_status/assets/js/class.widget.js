@@ -25,7 +25,7 @@
 
 class WidgetMilestoneCameraStatus extends CWidget {
 
-    static VERSION_MARKER = 'js-v7-2026-04-29-tile-filter';
+    static VERSION_MARKER = 'js-v9-2026-04-30-no-host-column';
 
     // Map from tile data-field to the status code(s) that bucket holds.
     // Only fault buckets are clickable — OK, Disabled, No data tiles
@@ -61,6 +61,7 @@ class WidgetMilestoneCameraStatus extends CWidget {
         if (!this._wired) {
             this._wireSortHandlers();
             this._wireFilterHandlers();
+            this._wireRowClickHandler();
             this._wired = true;
         }
 
@@ -206,8 +207,11 @@ class WidgetMilestoneCameraStatus extends CWidget {
 
         // -------- Fault table --------
         const sorted = this._sortRows(visible_rows);
+        // Stash the sorted list so the delegated row-click handler can
+        // resolve a clicked <tr>'s data-row-index back to the row object.
+        this._visible_rows = sorted;
         const tbody = this._body.querySelector('.mcs-rows');
-        tbody.innerHTML = sorted.map((r) => this._rowHtml(r)).join('');
+        tbody.innerHTML = sorted.map((r, i) => this._rowHtml(r, i)).join('');
 
         // -------- Sort indicator on header --------
         const ths = this._body.querySelectorAll('th[data-sort]');
@@ -299,7 +303,50 @@ class WidgetMilestoneCameraStatus extends CWidget {
         return copy;
     }
 
-    _rowHtml(r) {
+    /**
+     * Delegated click handler on the tbody. We stop the listener from
+     * firing on clicks inside the inner <a> elements so the existing host
+     * and item links still navigate normally — only clicks on bare row
+     * background or on the MAC/IP/severity cells trigger the broadcast.
+     */
+    _wireRowClickHandler() {
+        if (!this._body) return;
+        const tbody = this._body.querySelector('.mcs-rows');
+        if (!tbody) return;
+        tbody.addEventListener('click', (ev) => {
+            // Let inner anchors do their normal navigation.
+            if (ev.target.closest('a')) return;
+
+            const tr = ev.target.closest('tr[data-row-index]');
+            if (!tr) return;
+            const idx = Number(tr.getAttribute('data-row-index'));
+            const row = (this._visible_rows || [])[idx];
+            if (!row) return;
+
+            this._dispatchCameraSelected(row);
+        });
+    }
+
+    /**
+     * Persist the selection in sessionStorage so the companion widget can
+     * restore it after a dashboard reload, then dispatch the DOM event
+     * the companion listens for.
+     */
+    _dispatchCameraSelected(row) {
+        const detail = {
+            hostid: row.hostid,
+            mac:    row.mac || null,
+            ip:     row.ip  || null,
+            name:   row.cam_name,
+            host:   row.host_name,
+        };
+        try {
+            sessionStorage.setItem('mcs_camera_selection', JSON.stringify(detail));
+        } catch (e) {}
+        document.dispatchEvent(new CustomEvent('mcs:cameraSelected', {detail}));
+    }
+
+    _rowHtml(r, idx) {
         const status_cls = {
             1: 'mcs-pill--ess',
             2: 'mcs-pill--ping',
@@ -315,16 +362,21 @@ class WidgetMilestoneCameraStatus extends CWidget {
             ? new Date(r.lastclock * 1000).toLocaleString()
             : '—';
 
-        // Host link: jumps to the host's monitoring page so operators can
-        // drill in. Item link on the camera name: jumps to latest data.
-        const host_url = `zabbix.php?action=host.view&filter_host=${encodeURIComponent(r.host_tech)}&filter_set=1`;
+        // Item link on the camera name jumps to latest data so operators
+        // can drill in without leaving the dashboard. (Host column was
+        // removed — the host name is still broadcast in the click event
+        // for companion widgets, just not displayed in the table.)
         const item_url = `history.php?action=showvalues&itemids[]=${encodeURIComponent(r.itemid)}`;
 
+        const mac = r.mac ? this._esc(r.mac) : '<span class="mcs-dim">—</span>';
+        const ip  = r.ip  ? this._esc(r.ip)  : '<span class="mcs-dim">—</span>';
+
         return [
-            '<tr>',
+            `<tr data-row-index="${idx}" class="mcs-row-clickable" title="${this._esc(this._t('Click to look up in PacketFence'))}">`,
                 `<td><span class="mcs-pill ${status_cls}">${this._esc(status_label)}</span></td>`,
-                `<td><a href="${this._esc(host_url)}" target="_blank" rel="noopener">${this._esc(r.host_name)}</a></td>`,
                 `<td><a href="${this._esc(item_url)}" target="_blank" rel="noopener">${this._esc(r.cam_name)}</a></td>`,
+                `<td class="mcs-mono">${mac}</td>`,
+                `<td class="mcs-mono">${ip}</td>`,
                 `<td class="mcs-mono mcs-dim">${this._esc(last_check)}</td>`,
             '</tr>'
         ].join('');

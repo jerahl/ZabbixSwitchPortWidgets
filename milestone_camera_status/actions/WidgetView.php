@@ -3,12 +3,16 @@
  * Milestone camera status widget — view action.
  *
  * Backend that the widget fetches via AJAX. Pulls the latest values for
- * milestone.cam.status[*] items in the configured host groups and ships
- * them to the JS class as JSON via CControllerResponseData.
+ * milestone.cam.status[*] items in the configured hosts and, for every
+ * host that has at least one fault row, also pulls the sibling
+ * milestone.cam.mac[*] / milestone.cam.address[*] items so each fault
+ * row can carry MAC and IP. Result is shipped to the JS class as JSON
+ * via CControllerResponseData.
  *
- * Status items only — no sibling lookups for IP / hardware name. The
- * fault table shows host name and camera name; that's enough to identify
- * what's down.
+ * Click-to-lookup: each fault row is rendered with a data-row-index
+ * attribute on the JS side; a delegated tbody click handler dispatches
+ * a 'mcs:cameraSelected' DOM event so a companion widget (e.g.
+ * milestone_camera_packetfence) can react.
  */
 
 declare(strict_types=1);
@@ -32,14 +36,18 @@ class WidgetView extends CControllerDashboardWidgetView
     private const STATUS_BOTH      = 3;  // ping down + ESS comm fault
 
     /**
-     * Item-key prefix we look up. The template's calculated item produces
-     * keys of shape 'milestone.cam.status[<guid>]'.
+     * Item-key prefixes we look up. The Milestone template produces keys of
+     * shape 'milestone.cam.<facet>[<guid>]' for each camera, where <facet>
+     * is one of 'status' (calculated combined state), 'mac' (HW MAC), and
+     * 'address' (current IPv4).
      *
-     * Note: 'startSearch' anchors at the start of key_, so this doesn't
-     * accidentally match 'milestone.cam.status_extra' or similar — and
-     * the Milestone template doesn't define such keys anyway.
+     * Note: 'startSearch' anchors at the start of key_, so these don't
+     * accidentally match 'milestone.cam.status_extra' or similar — and the
+     * Milestone template doesn't define such keys anyway.
      */
-    private const KEY_STATUS_PREFIX = 'milestone.cam.status';
+    private const KEY_STATUS_PREFIX  = 'milestone.cam.status';
+    private const KEY_MAC_PREFIX     = 'milestone.cam.mac';
+    private const KEY_ADDRESS_PREFIX = 'milestone.cam.address';
 
     protected function doAction(): void
     {
@@ -73,7 +81,7 @@ class WidgetView extends CControllerDashboardWidgetView
             'truncated' => false,
             'error'     => null,
             'debug_info' => [
-                '_VERSION_MARKER'    => 'v5-2026-04-29-status-only',
+                '_VERSION_MARKER'    => 'v6-2026-04-30-mac-ip-clickable',
                 'hostids_queried'    => count($hostids),
                 'items_found'        => 0,
                 'phase'              => 'init',
@@ -183,12 +191,22 @@ class WidgetView extends CControllerDashboardWidgetView
 
             // Only fault states make it into the table.
             if (in_array((int)$parsed_lv, [self::STATUS_ESS_ONLY, self::STATUS_PING_ONLY, self::STATUS_BOTH], true)) {
+                // Extract GUID from key 'milestone.cam.status[<guid>]' so we
+                // can correlate with sibling mac/address items below.
+                $guid = '';
+                if (preg_match('/\[([^\]]+)\]\s*$/u', (string)$item['key_'], $km)) {
+                    $guid = $km[1];
+                }
+
                 $rows[] = [
                     'host_name' => $host['name'],
                     'host_tech' => $host['host'],
                     'hostid'    => $host['hostid'],
                     'itemid'    => $itemid,
                     'cam_name'  => self::cleanItemName($item['name']),
+                    'cam_guid'  => $guid,
+                    'mac'       => null,
+                    'ip'        => null,
                     'status'    => $parsed_lv,
                     'lastclock' => (int)$item['lastclock'],
                 ];
@@ -196,6 +214,70 @@ class WidgetView extends CControllerDashboardWidgetView
         }
 
         $payload['debug_info']['lastvalue_samples'] = $diag_lastvalues;
+
+        // ------------------------------------------------------------------
+        // Second pass: fetch MAC and IP items for the hosts that have at
+        // least one fault row, and attach by GUID. We only do this for
+        // fault rows since OK cameras aren't displayed — no need to
+        // enrich them.
+        //
+        // Both prefixes share a single API call where possible. We pass
+        // both keys to 'search.key_' as separate elements; Zabbix's API
+        // doesn't support an OR of substrings in one filter, so we issue
+        // two queries and merge.
+        // ------------------------------------------------------------------
+        $fault_hostids = array_values(array_unique(array_map(
+            static fn(array $r): string => (string)$r['hostid'],
+            $rows
+        )));
+
+        if ($fault_hostids) {
+            $enrich_map = []; // [hostid][guid] => ['mac' => ..., 'ip' => ...]
+            try {
+                $payload['debug_info']['phase'] = 'querying_enrich_items';
+                $enrich_items = API::Item()->get([
+                    'output'      => ['itemid', 'hostid', 'key_', 'lastvalue'],
+                    'hostids'     => $fault_hostids,
+                    'search'      => ['key_' => [self::KEY_MAC_PREFIX, self::KEY_ADDRESS_PREFIX]],
+                    'startSearch' => true,
+                    'searchByAny' => true,
+                ]);
+                $payload['debug_info']['enrich_items_found'] = is_array($enrich_items)
+                    ? count($enrich_items) : 0;
+            } catch (\Throwable $e) {
+                // Non-fatal — just leave mac/ip empty. The fault table is
+                // still useful without these columns.
+                $payload['debug_info']['enrich_exception'] = $e->getMessage();
+                $enrich_items = [];
+            }
+
+            foreach ($enrich_items as $eitem) {
+                $key  = (string)($eitem['key_'] ?? '');
+                $hid  = (string)($eitem['hostid'] ?? '');
+                $val  = $eitem['lastvalue'] ?? null;
+                if ($val === null || $val === '') continue;
+                if (!preg_match('/\[([^\]]+)\]\s*$/u', $key, $km)) continue;
+                $guid = $km[1];
+
+                if (!isset($enrich_map[$hid][$guid])) {
+                    $enrich_map[$hid][$guid] = ['mac' => null, 'ip' => null];
+                }
+                if (strncmp($key, self::KEY_MAC_PREFIX, strlen(self::KEY_MAC_PREFIX)) === 0) {
+                    $enrich_map[$hid][$guid]['mac'] = self::normalizeMac((string)$val);
+                } elseif (strncmp($key, self::KEY_ADDRESS_PREFIX, strlen(self::KEY_ADDRESS_PREFIX)) === 0) {
+                    $enrich_map[$hid][$guid]['ip'] = trim((string)$val);
+                }
+            }
+
+            foreach ($rows as &$r) {
+                $hid  = (string)$r['hostid'];
+                $guid = (string)($r['cam_guid'] ?? '');
+                if ($guid === '' || !isset($enrich_map[$hid][$guid])) continue;
+                $r['mac'] = $enrich_map[$hid][$guid]['mac'];
+                $r['ip']  = $enrich_map[$hid][$guid]['ip'];
+            }
+            unset($r);
+        }
 
         // Stable sort: severity desc (3 before 2 before 1), then host name,
         // then camera name. Worst problems at the top.
@@ -224,5 +306,22 @@ class WidgetView extends CControllerDashboardWidgetView
             return $m[1];
         }
         return $item_name;
+    }
+
+    /**
+     * Normalize a MAC string to lowercase colon-separated form. Returns
+     * null if the value doesn't parse cleanly. Accepts the common
+     * Milestone-template variants: aa:bb:cc:dd:ee:ff, AA-BB-CC-DD-EE-FF,
+     * aabbccddeeff. Whitespace and trailing separators are tolerated.
+     */
+    private static function normalizeMac(string $raw): ?string
+    {
+        $s = strtolower(trim($raw));
+        // Strip everything that isn't a hex digit, then re-insert colons.
+        $hex = preg_replace('/[^0-9a-f]/', '', $s);
+        if ($hex === null || strlen($hex) !== 12) {
+            return null;
+        }
+        return implode(':', str_split($hex, 2));
     }
 }
