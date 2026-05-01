@@ -51,7 +51,7 @@ class WidgetView extends CControllerDashboardWidgetView
     {
         $name       = $this->getInput('name', $this->widget->getDefaultName());
         $show_debug = (bool)($this->fields_values['show_debug'] ?? false);
-        $mode       = (string)($this->fields_values['source_mode'] ?? WidgetForm::SOURCE_EVENT);
+        $mode       = (int)($this->fields_values['source_mode'] ?? WidgetForm::SOURCE_EVENT);
 
         if ($mode === WidgetForm::SOURCE_HOST_ITEMS) {
             $this->runHostItems($name, $show_debug);

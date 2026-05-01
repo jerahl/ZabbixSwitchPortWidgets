@@ -31,8 +31,10 @@ use Zabbix\Widgets\Fields\{
 
 class WidgetForm extends CWidgetForm
 {
-    public const SOURCE_EVENT      = 'event';
-    public const SOURCE_HOST_ITEMS = 'host_items';
+    // Integer keys — CWidgetFieldRadioButtonList casts submitted values to
+    // int during validation, so string keys (e.g. 'event') always fail.
+    public const SOURCE_EVENT      = 0;
+    public const SOURCE_HOST_ITEMS = 1;
 
     public function addFields(): self
     {
