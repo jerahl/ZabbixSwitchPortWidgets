@@ -348,3 +348,70 @@
 .pd-stat__header {
 	align-items: center;
 }
+
+/* ── PoE cycle button ─────────────────────────────────────────────────────── */
+.pd-poe-cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.pd-poe-cycle-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	background: #422006;
+	color: #fbbf24;
+	border: 1px solid #d97706;
+	border-radius: 3px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: all .12s ease;
+	line-height: 1;
+}
+.pd-poe-cycle-btn:hover:not(:disabled) {
+	background: #78350f;
+	color: #fde68a;
+	border-color: #f59e0b;
+}
+.pd-poe-cycle-btn:focus {
+	outline: none;
+	box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4);
+}
+.pd-poe-cycle-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+.pd-poe-cycle-btn--busy svg {
+	animation: pd-spin 1s linear infinite;
+}
+.pd-poe-cycle-btn__label {
+	display: inline-block;
+}
+
+@keyframes pd-spin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}
+
+.pd-poe-cycle-status {
+	font-size: 10px;
+	font-weight: 600;
+	color: #94a3b8;
+	min-height: 12px;
+	transition: color .15s ease;
+}
+.pd-poe-cycle-status--info    { color: #38bdf8; }
+.pd-poe-cycle-status--success { color: #4ade80; }
+.pd-poe-cycle-status--error   { color: #f87171; }
+
+.pd-poe-cycle-hint {
+	font-size: 12px;
+	color: #fbbf24;
+	cursor: help;
+}

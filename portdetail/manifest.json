@@ -4,7 +4,7 @@
 	"type": "widget",
 	"name": "Switch Port Detail",
 	"namespace": "PortDetail",
-	"version": "2.6",
+	"version": "2.8",
 	"author": "Custom",
 	"description": "Displays detailed stats for a selected switch port. Set Override host to the Switch Port Status widget.",
 	"widget": {
@@ -30,6 +30,10 @@
 	"actions": {
 		"widget.portdetail.view": {
 			"class": "WidgetView"
+		},
+		"widget.portdetail.cyclepoe": {
+			"class": "CyclePoe",
+			"view": "layout.json"
 		}
 	},
 	"assets": {

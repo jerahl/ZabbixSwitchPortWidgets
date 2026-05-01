@@ -14,6 +14,9 @@
 		new CWidgetFieldTimePeriodView($data['fields']['time_period'])
 	)
 	->addField(
+		new CWidgetFieldCheckBoxView($data['fields']['enable_poe_cycle'])
+	)
+	->addField(
 		new CWidgetFieldCheckBoxView($data['fields']['show_debug'])
 	)
 	->show();

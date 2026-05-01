@@ -30,10 +30,13 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 	protected function doAction(): void {
 		$show_debug = (bool) ($this->fields_values['show_debug'] ?? true);
+		$enable_poe_cycle = (bool) ($this->fields_values['enable_poe_cycle'] ?? true);
 		$debug = [];
 
 		// ── STEP 1: Discover hostid ──────────────────────────────────────────
 		$debug['step_1_hostid'] = [];
+
+        $debug['step_1_hostid']['enable_poe_cycle'] = json_encode($enable_poe_cycle);
 
 		// Source A: override_hostid from fields_values (framework broadcast mechanism)
 		$override_val = $this->fields_values['override_hostid'] ?? [];
@@ -88,11 +91,12 @@ class WidgetView extends CControllerDashboardWidgetView {
 			$debug['waiting_reason'] = implode(', ', $reason);
 
 			$this->setResponse(new CControllerResponseData([
-				'name'       => $this->getInput('name', $this->widget->getDefaultName()),
-				'waiting'    => true,
-				'debug_info' => $debug,
-				'show_debug' => $show_debug,
-				'user'       => ['debug_mode' => $this->getDebugMode()],
+				'name'             => $this->getInput('name', $this->widget->getDefaultName()),
+				'waiting'          => true,
+				'debug_info'       => $debug,
+				'show_debug'       => $show_debug,
+				'enable_poe_cycle' => $enable_poe_cycle,
+				'user'             => ['debug_mode' => $this->getDebugMode()],
 			]));
 			return;
 		}
@@ -133,12 +137,13 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 		if (!$items) {
 			$this->setResponse(new CControllerResponseData([
-				'name'       => $this->getInput('name', $this->widget->getDefaultName()),
-				'error'      => 'No items found for host ' . $sw_hostid . ' port index ' . $idx,
-				'waiting'    => false,
-				'debug_info' => $debug,
-				'show_debug' => $show_debug,
-				'user'       => ['debug_mode' => $this->getDebugMode()],
+				'name'             => $this->getInput('name', $this->widget->getDefaultName()),
+				'error'            => 'No items found for host ' . $sw_hostid . ' port index ' . $idx,
+				'waiting'          => false,
+				'debug_info'       => $debug,
+				'show_debug'       => $show_debug,
+				'enable_poe_cycle' => $enable_poe_cycle,
+				'user'             => ['debug_mode' => $this->getDebugMode()],
 			]));
 			return;
 		}
@@ -297,8 +302,18 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 		$port_label = 'Port ' . (int)($idx / 1000) . ':' . ($idx % 100) ;
 		if (isset($by_type['status']) && preg_match('/\.(\d+)\]$/', $by_type['status']['key_'], $m)) {
-			$port_label = 'Port ' . $m[1];
+			$port_label = 'Port ' . (int)( $m[1] / 1000) . ':' . ( $m[1] % 100);
 		}
+
+		// ── STEP 9b: Build the port spec sent to rConfig ─────────────────────
+		// Stacked switches encode ifIndex as <member>*1000 + <port>, where
+		// member is 1–8 and port is 1–99 (max 8 switches in a stack, no
+		// chassis with ≥100 ports in this fleet). The rConfig snippet's
+		// {interface_name} dynamic variable expects the colon form, e.g.
+		// ifIndex 1007 → "1:7". Derive directly from $idx — the regex-on-
+		// item-name approach is fragile (depends on Zabbix template naming).
+		$iface_name = (int)($idx / 1000) . ':' . ($idx % 100);
+		$debug['step_9b_iface_name'] = ['resolved' => $iface_name, 'from_idx' => $idx];
 
 		// Map of metric_name => itemid for broadcasting to Graph (classic) widgets
 		$itemids = [];
@@ -313,6 +328,9 @@ class WidgetView extends CControllerDashboardWidgetView {
 			'name'               => $this->getInput('name', $this->widget->getDefaultName()),
 			'waiting'            => false,
 			'host'               => $host,
+			'hostid'             => (int) $hostid,
+			'snmp_index'         => $idx,
+			'iface_name'         => $iface_name,
 			'port_label'         => $port_label,
 			'alias'              => isset($by_type['alias']) ? (string)$by_type['alias']['lastvalue'] : '',
 			'itemids'            => $itemids,
@@ -324,6 +342,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 			'out_label'          => $out_bps !== null ? self::fmtBps($out_bps) : null,
 			'utilization'        => $utilization,
 			'poe_info'           => $poe_info,
+			'enable_poe_cycle'   => $enable_poe_cycle,
 			'port_state'         => self::portStateCss($oper_val, $admin_val),
 			'oper_val'           => $oper_val,
 			'admin_val'          => $admin_val,

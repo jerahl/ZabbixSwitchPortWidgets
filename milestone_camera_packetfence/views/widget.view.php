@@ -49,6 +49,7 @@ function camPfRenderDevice(array $dev, string $pf_admin_url): string {
 	$last_dhcp = htmlspecialchars((string) ($dev['last_dhcp'] ?? ''));
 	$not_in_pf = !empty($dev['not_in_pf']);
 	$events    = $dev['security_events'] ?? [];
+	$loc       = $dev['location'] ?? null;
 
 	$status_css = match (strtolower($status)) {
 		'reg', 'registered'     => 'pf-status--ok',
@@ -94,6 +95,43 @@ function camPfRenderDevice(array $dev, string $pf_admin_url): string {
 	if ($last_dhcp) $out .= camPfDetailRow('Last DHCP',    $last_dhcp);
 	if ($ua && strlen($ua) < 80) $out .= camPfDetailRow('User-Agent', $ua);
 	$out .= '</div>';
+
+	// Location (switch / port / role) from PacketFence locationlogs
+	if (is_array($loc)) {
+		$sw       = htmlspecialchars((string) ($loc['switch']          ?? ''));
+		$sw_ip    = htmlspecialchars((string) ($loc['switch_ip']       ?? ''));
+		$port     = htmlspecialchars((string) ($loc['port']            ?? ''));
+		$ifdesc   = htmlspecialchars((string) ($loc['ifDesc']          ?? ''));
+		$vlan     = htmlspecialchars((string) ($loc['vlan']            ?? ''));
+		$role     = htmlspecialchars((string) ($loc['role']            ?? ''));
+		$ssid     = htmlspecialchars((string) ($loc['ssid']            ?? ''));
+		$ctype    = htmlspecialchars((string) ($loc['connection_type'] ?? ''));
+		$dot1x    = htmlspecialchars((string) ($loc['dot1x_username']  ?? ''));
+		$start    = htmlspecialchars((string) ($loc['start_time']      ?? ''));
+
+		$has_any = $sw !== '' || $port !== '' || $vlan !== '' || $role !== ''
+			|| $ssid !== '' || $ctype !== '' || $dot1x !== '';
+		if ($has_any) {
+			$out .= '<div class="pf-card__details pf-card__details--location">';
+			if ($sw !== '') {
+				$sw_html = $sw;
+				if ($sw_ip !== '') $sw_html .= ' <span class="pf-mono">(' . $sw_ip . ')</span>';
+				$out .= camPfDetailRow('Switch', $sw_html);
+			}
+			if ($port !== '') {
+				$port_html = $port;
+				if ($ifdesc !== '' && $ifdesc !== $port) $port_html .= ' <span class="pf-mono">' . $ifdesc . '</span>';
+				$out .= camPfDetailRow('Port', $port_html);
+			}
+			if ($vlan !== '')   $out .= camPfDetailRow('VLAN',       $vlan);
+			if ($role !== '')   $out .= camPfDetailRow('Role',       $role);
+			if ($ssid !== '')   $out .= camPfDetailRow('SSID',       $ssid);
+			if ($ctype !== '')  $out .= camPfDetailRow('Connection', $ctype);
+			if ($dot1x !== '')  $out .= camPfDetailRow('802.1X User', $dot1x);
+			if ($start !== '')  $out .= camPfDetailRow('Since',      $start);
+			$out .= '</div>';
+		}
+	}
 
 	// Security events
 	if ($events) {
