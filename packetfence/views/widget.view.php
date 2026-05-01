@@ -42,6 +42,7 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	$scope     = htmlspecialchars((string) ($dev['dhcp_scope'] ?? ''));
 	$not_in_pf = !empty($dev['not_in_pf']);
 	$events    = $dev['security_events'] ?? [];
+	$loc       = $dev['location'] ?? null;
 
 	// Prefer PF hostname when present, fall back to DHCP hostname
 	$hostname = $pf_host !== '' ? $pf_host : $dhcp_host;
@@ -90,6 +91,43 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 	if ($last_seen) $out .= pfDetailRow('Last seen',    $last_seen);
 	if ($ua && strlen($ua) < 80) $out .= pfDetailRow('User-Agent', $ua);
 	$out .= '</div>';
+
+	// Location (switch / port / role) from PacketFence locationlogs
+	if (is_array($loc)) {
+		$sw       = htmlspecialchars((string) ($loc['switch']          ?? ''));
+		$sw_ip    = htmlspecialchars((string) ($loc['switch_ip']       ?? ''));
+		$port     = htmlspecialchars((string) ($loc['port']            ?? ''));
+		$ifdesc   = htmlspecialchars((string) ($loc['ifDesc']          ?? ''));
+		$vlan     = htmlspecialchars((string) ($loc['vlan']            ?? ''));
+		$role     = htmlspecialchars((string) ($loc['role']            ?? ''));
+		$ssid     = htmlspecialchars((string) ($loc['ssid']            ?? ''));
+		$ctype    = htmlspecialchars((string) ($loc['connection_type'] ?? ''));
+		$dot1x    = htmlspecialchars((string) ($loc['dot1x_username']  ?? ''));
+		$start    = htmlspecialchars((string) ($loc['start_time']      ?? ''));
+
+		$has_any = $sw !== '' || $port !== '' || $vlan !== '' || $role !== ''
+			|| $ssid !== '' || $ctype !== '' || $dot1x !== '';
+		if ($has_any) {
+			$out .= '<div class="pf-card__details pf-card__details--location">';
+			if ($sw !== '') {
+				$sw_html = $sw;
+				if ($sw_ip !== '') $sw_html .= ' <span class="pf-mono">(' . $sw_ip . ')</span>';
+				$out .= pfDetailRow('Switch', $sw_html);
+			}
+			if ($port !== '') {
+				$port_html = $port;
+				if ($ifdesc !== '' && $ifdesc !== $port) $port_html .= ' <span class="pf-mono">' . $ifdesc . '</span>';
+				$out .= pfDetailRow('Port', $port_html);
+			}
+			if ($vlan !== '')   $out .= pfDetailRow('VLAN',       $vlan);
+			if ($role !== '')   $out .= pfDetailRow('Role',       $role);
+			if ($ssid !== '')   $out .= pfDetailRow('SSID',       $ssid);
+			if ($ctype !== '')  $out .= pfDetailRow('Connection', $ctype);
+			if ($dot1x !== '')  $out .= pfDetailRow('802.1X User', $dot1x);
+			if ($start !== '')  $out .= pfDetailRow('Since',      $start);
+			$out .= '</div>';
+		}
+	}
 
 	// Security events
 	if ($events) {

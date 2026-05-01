@@ -206,8 +206,43 @@ class WidgetView extends CControllerDashboardWidgetView {
 
 		// ── STEP 8: Build device cards, one per MAC ─────────────────────────
 		$devices = [];
+		$debug['step_8_locations'] = [];
 		foreach ($macs as $mac) {
 			$node = $node_items[$mac] ?? null;
+
+			// Latest locationlog (switch / port / role) for this MAC
+			$location = null;
+			$loc_result = self::pfRequest(
+				$pf_url . '/api/v1/locationlogs/search',
+				'POST',
+				$token,
+				[
+					'cursor' => 0,
+					'limit'  => 1,
+					'sort'   => ['start_time DESC'],
+					'fields' => [
+						'mac', 'switch', 'switch_ip', 'switch_mac', 'port',
+						'vlan', 'role', 'ssid', 'connection_type',
+						'connection_sub_type', 'dot1x_username', 'realm',
+						'session_id', 'ifDesc', 'start_time', 'end_time',
+					],
+					'query'  => [
+						'op'    => 'equals',
+						'field' => 'mac',
+						'value' => $mac,
+					],
+				],
+				$verify_ssl
+			);
+			$debug['step_8_locations'][$mac] = [
+				'http'  => $loc_result['http_code'] ?? null,
+				'error' => $loc_result['error']     ?? null,
+				'count' => is_array($loc_result['data']['items'] ?? null)
+					? count($loc_result['data']['items']) : 0,
+			];
+			if ($loc_result['ok'] && !empty($loc_result['data']['items'])) {
+				$location = $loc_result['data']['items'][0];
+			}
 
 			$security_events = [];
 			if ($node) {
@@ -243,7 +278,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				}
 			}
 
-			$devices[] = self::buildDeviceCard($mac, $node, $security_events, $show_debug);
+			$devices[] = self::buildDeviceCard($mac, $node, $security_events, $location, $show_debug);
 		}
 		$debug['step_8_devices'] = count($devices);
 
@@ -468,7 +503,9 @@ class WidgetView extends CControllerDashboardWidgetView {
 		];
 	}
 
-	private static function buildDeviceCard(string $mac, ?array $node, array $events, bool $show_debug): array {
+	private static function buildDeviceCard(string $mac, ?array $node, array $events, ?array $location, bool $show_debug): array {
+		$location_card = self::buildLocationCard($location);
+
 		if ($node === null) {
 			return [
 				'mac'             => $mac,
@@ -484,6 +521,7 @@ class WidgetView extends CControllerDashboardWidgetView {
 				'status'          => 'unknown',
 				'not_in_pf'       => true,
 				'security_events' => [],
+				'location'        => $location_card,
 			];
 		}
 
@@ -512,7 +550,32 @@ class WidgetView extends CControllerDashboardWidgetView {
 			'notes'            => $node['notes']          ?? null,
 			'voip'             => $node['voip']           ?? null,
 			'security_events'  => $events,
+			'location'         => $location_card,
 			'_raw'             => $show_debug ? $node : null,
+			'_raw_location'    => $show_debug ? $location : null,
+		];
+	}
+
+	private static function buildLocationCard(?array $loc): ?array {
+		if ($loc === null) {
+			return null;
+		}
+		return [
+			'switch'              => $loc['switch']              ?? null,
+			'switch_ip'           => $loc['switch_ip']           ?? null,
+			'switch_mac'          => $loc['switch_mac']          ?? null,
+			'port'                => $loc['port']                ?? null,
+			'ifDesc'              => $loc['ifDesc']              ?? null,
+			'vlan'                => $loc['vlan']                ?? null,
+			'role'                => $loc['role']                ?? null,
+			'ssid'                => $loc['ssid']                ?? null,
+			'connection_type'     => $loc['connection_type']     ?? null,
+			'connection_sub_type' => $loc['connection_sub_type'] ?? null,
+			'dot1x_username'      => $loc['dot1x_username']      ?? null,
+			'realm'               => $loc['realm']               ?? null,
+			'session_id'          => $loc['session_id']          ?? null,
+			'start_time'          => $loc['start_time']          ?? null,
+			'end_time'            => $loc['end_time']            ?? null,
 		];
 	}
 
