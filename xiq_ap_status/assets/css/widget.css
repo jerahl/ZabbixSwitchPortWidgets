@@ -1,0 +1,292 @@
+/*
+ * XIQ AP status widget — styles. Mirrors milestone_camera_status; class
+ * prefix changed from .mcs- to .xas- and tile palette adapted for the
+ * AP status vocabulary (config mismatch + disconnected).
+ */
+
+div.dashboard-widget-xiq_ap_status .xas-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-size: 12px;
+}
+
+/* ---------- Summary tiles ---------- */
+
+div.dashboard-widget-xiq_ap_status .xas-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 4px;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.08);
+    border-left: 3px solid transparent;
+    min-width: 0;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-tile-value {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-tile-label {
+    margin-top: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-tile--ok {
+    border-left-color: var(--status-na-color, #59db8f);
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--mismatch {
+    border-left-color: var(--status-warning-color, #ffd54f);
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--offline {
+    border-left-color: var(--status-disaster-color, #ff465c);
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--total,
+div.dashboard-widget-xiq_ap_status .xas-tile--nodata {
+    border-left-color: rgba(127, 127, 127, 0.3);
+}
+
+div.dashboard-widget-xiq_ap_status .xas-tile--mismatch.xas-tile--active {
+    background: rgba(255, 213, 79, 0.14);
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--offline.xas-tile--active {
+    background: rgba(255, 70, 92, 0.10);
+}
+
+/* ---------- Fault table ---------- */
+
+div.dashboard-widget-xiq_ap_status .xas-table-wrap {
+    flex: 1 1 auto;
+    overflow: auto;
+    border-top: 1px solid rgba(127, 127, 127, 0.2);
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table th,
+div.dashboard-widget-xiq_ap_status table.xas-table td {
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table thead th {
+    position: sticky;
+    top: 0;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.3);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table thead th::after {
+    content: '';
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 6px;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+div.dashboard-widget-xiq_ap_status table.xas-table thead th.xas-sort-asc::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid currentColor;
+    opacity: 0.7;
+}
+div.dashboard-widget-xiq_ap_status table.xas-table thead th.xas-sort-desc::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    opacity: 0.7;
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table tbody tr:nth-child(even) {
+    background: var(--table-stripe-color, rgba(127, 127, 127, 0.05));
+}
+
+div.dashboard-widget-xiq_ap_status table.xas-table a {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted rgba(127, 127, 127, 0.4);
+}
+div.dashboard-widget-xiq_ap_status table.xas-table a:hover {
+    border-bottom-style: solid;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+}
+div.dashboard-widget-xiq_ap_status .xas-dim {
+    opacity: 0.65;
+}
+
+/* ---------- Severity pills ---------- */
+
+div.dashboard-widget-xiq_ap_status .xas-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #fff;
+    line-height: 1.4;
+}
+div.dashboard-widget-xiq_ap_status .xas-pill--mismatch {
+    background: var(--status-warning-color, #ffd54f);
+    color: #333;
+}
+div.dashboard-widget-xiq_ap_status .xas-pill--offline {
+    background: var(--status-disaster-color, #ff465c);
+}
+div.dashboard-widget-xiq_ap_status .xas-pill--unknown {
+    background: rgba(127, 127, 127, 0.5);
+}
+
+/* ---------- Empty / error / truncation ---------- */
+
+div.dashboard-widget-xiq_ap_status .xas-empty {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    opacity: 0.7;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-truncated {
+    padding: 4px 8px;
+    font-size: 11px;
+    text-align: center;
+    opacity: 0.7;
+    border-top: 1px dashed rgba(127, 127, 127, 0.3);
+}
+
+@media (max-width: 600px) {
+    div.dashboard-widget-xiq_ap_status .xas-summary {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    div.dashboard-widget-xiq_ap_status .xas-tile-value {
+        font-size: 16px;
+    }
+}
+
+/* ---------- Clickable tiles + filter bar ---------- */
+
+div.dashboard-widget-xiq_ap_status .xas-tile--clickable {
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--clickable:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--clickable:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.55) inset;
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--clickable:focus:not(:focus-visible) {
+    box-shadow: none;
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--selected {
+    background: rgba(100, 150, 255, 0.16);
+    border-left-width: 5px;
+    padding-left: 2px;
+}
+div.dashboard-widget-xiq_ap_status .xas-tile--selected .xas-tile-label {
+    opacity: 1;
+}
+
+div.dashboard-widget-xiq_ap_status .xas-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+    background: rgba(100, 150, 255, 0.08);
+    border-bottom: 1px solid rgba(100, 150, 255, 0.25);
+    font-size: 11px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+div.dashboard-widget-xiq_ap_status .xas-filter-bar[hidden] {
+    display: none;
+}
+div.dashboard-widget-xiq_ap_status .xas-filter-label {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    flex: 1 1 auto;
+}
+div.dashboard-widget-xiq_ap_status .xas-filter-clear {
+    flex: 0 0 auto;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    color: inherit;
+    background: rgba(127, 127, 127, 0.15);
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+div.dashboard-widget-xiq_ap_status .xas-filter-clear:hover {
+    background: rgba(127, 127, 127, 0.28);
+}
+div.dashboard-widget-xiq_ap_status .xas-filter-clear:focus {
+    outline: 2px solid rgba(100, 150, 255, 0.55);
+    outline-offset: 1px;
+}
+
+/* ---------- Clickable rows ---------- */
+
+div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable {
+    cursor: pointer;
+    transition: background 0.10s ease;
+}
+div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable:hover {
+    background: rgba(100, 150, 255, 0.12);
+}
+div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable a:hover {
+    border-bottom-style: solid;
+}
