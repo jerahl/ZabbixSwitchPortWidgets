@@ -224,6 +224,11 @@ button.pf-action:disabled {
 	border-color: #fca5a5;
 	background: rgba(252, 165, 165, 0.08);
 }
+.pf-action--cyclepoe:hover {
+	color: #fbbf24;
+	border-color: #fbbf24;
+	background: rgba(251, 191, 36, 0.08);
+}
 .pf-action-status {
 	font-size: 11px;
 	color: #94a3b8;

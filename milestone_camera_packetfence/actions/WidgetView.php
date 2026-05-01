@@ -2,6 +2,7 @@
 
 namespace Modules\MilestoneCameraPacketFence\Actions;
 
+use API;
 use CControllerDashboardWidgetView;
 use CControllerResponseData;
 
@@ -369,6 +370,11 @@ class WidgetView extends CControllerDashboardWidgetView {
 		if ($loc === null) {
 			return null;
 		}
+
+		$switch_ip = (string) ($loc['switch_ip'] ?? '');
+		$switch_hostid = self::resolveSwitchHostId($switch_ip);
+		[$snmp_index, $iface_name] = self::derivePortSpec($loc);
+
 		return [
 			'switch'              => $loc['switch']              ?? null,
 			'switch_ip'           => $loc['switch_ip']           ?? null,
@@ -385,7 +391,69 @@ class WidgetView extends CControllerDashboardWidgetView {
 			'session_id'          => $loc['session_id']          ?? null,
 			'start_time'          => $loc['start_time']          ?? null,
 			'end_time'            => $loc['end_time']            ?? null,
+			// Resolved fields needed by the Cycle PoE button. The button is
+			// only rendered when both switch_hostid and iface_name are set.
+			'switch_hostid'       => $switch_hostid,
+			'snmp_index'          => $snmp_index,
+			'iface_name'          => $iface_name,
 		];
+	}
+
+	/**
+	 * Look up the Zabbix host that owns the given switch IP. Matches against
+	 * any host interface (SNMP or otherwise). Returns null on no match or
+	 * ambiguous match — we'd rather show no button than cycle the wrong port.
+	 */
+	private static function resolveSwitchHostId(string $switch_ip): ?int {
+		if ($switch_ip === '' || $switch_ip === '0.0.0.0') {
+			return null;
+		}
+		$ifaces = API::HostInterface()->get([
+			'output' => ['hostid'],
+			'filter' => ['ip' => $switch_ip],
+		]);
+		$hostids = array_unique(array_map('intval', array_column($ifaces, 'hostid')));
+		if (count($hostids) !== 1) {
+			return null;
+		}
+		return (int) $hostids[0];
+	}
+
+	/**
+	 * Derive [snmp_index, iface_name] from a PacketFence locationlog.
+	 *
+	 * The portdetail rConfig snippet expects iface_name in "<member>:<port>"
+	 * form (e.g. "1:7"). Most PF deployments populate `port` with the SNMP
+	 * ifIndex (numeric); stacked Cisco switches encode that as
+	 * member*1000 + port. Some PF configs populate `port` with the ifName
+	 * (e.g. "GigabitEthernet1/0/7") instead — in that case, fall back to
+	 * regex parsing.
+	 *
+	 * Returns [null, null] when the port spec can't be derived; the view
+	 * suppresses the PoE button in that case.
+	 */
+	private static function derivePortSpec(?array $loc): array {
+		if ($loc === null) {
+			return [null, null];
+		}
+		$port   = $loc['port']   ?? null;
+		$ifDesc = $loc['ifDesc'] ?? null;
+
+		if (is_numeric($port)) {
+			$idx = (int) $port;
+			if ($idx >= 1000) {
+				return [$idx, ((int) ($idx / 1000)) . ':' . ($idx % 100)];
+			}
+			// Single-switch (no stack): treat ifIndex as member 1.
+			return [$idx, '1:' . $idx];
+		}
+
+		foreach ([(string) $port, (string) $ifDesc] as $s) {
+			if ($s !== '' && preg_match('#(\d+)/\d+/(\d+)\s*$#', $s, $m)) {
+				return [null, $m[1] . ':' . $m[2]];
+			}
+		}
+		return [null, null];
 	}
 
 	private static function pfLogin(string $base_url, string $user, string $pass, bool $verify_ssl): array {

@@ -161,6 +161,25 @@ function camPfRenderDevice(array $dev, string $pf_admin_url): string {
 		$out .= '<button type="button" class="pf-action pf-action--restart"'
 			. ' data-pf-action="restart_switchport" data-pf-mac="' . $mac_attr . '"'
 			. ' title="Bounce the switch port this MAC is connected to">Restart switchport</button>';
+
+		// Cycle PoE — only available when we resolved the switch to a Zabbix
+		// host AND derived an iface name in "member:port" form from the PF
+		// locationlog. Posts to the existing portdetail.cyclepoe action.
+		if (is_array($loc)
+				&& !empty($loc['switch_hostid'])
+				&& !empty($loc['iface_name'])) {
+			$sw_hid    = (int) $loc['switch_hostid'];
+			$snmp_idx  = (int) ($loc['snmp_index'] ?? 0);
+			$iface     = htmlspecialchars((string) $loc['iface_name'], ENT_QUOTES);
+			$sw_label  = htmlspecialchars((string) ($loc['switch'] ?? $loc['switch_ip'] ?? ''));
+			$out .= '<button type="button" class="pf-action pf-action--cyclepoe"'
+				. ' data-pf-action="cycle_poe"'
+				. ' data-pf-hostid="' . $sw_hid . '"'
+				. ' data-pf-snmp-index="' . $snmp_idx . '"'
+				. ' data-pf-iface="' . $iface . '"'
+				. ' title="Cycle PoE on ' . $sw_label . ' port ' . $iface . ' via rConfig">Cycle PoE</button>';
+		}
+
 		$out .= '<span class="pf-action-status" data-pf-status-for="' . $mac_attr . '"></span>';
 	}
 	$out .= '</div>';

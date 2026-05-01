@@ -83,8 +83,11 @@ class WidgetPacketFence extends CWidget {
 			const url = new Curl('zabbix.php');
 			url.setArgument('action', 'widget.packetfence.action');
 
-			const body = new URLSearchParams();
-			body.append('widgetid',  this.getWidgetId());
+			// Mirror the standard widget refresh body so the server-side
+			// CControllerDashboardWidgetView populates $this->fields_values
+			// from saved widget config (PF URL/credentials live there). Then
+			// add our action-specific params on top.
+			const body = WidgetPacketFence.#serializeWidgetRequest(this.getUpdateRequestData());
 			body.append('mac',       mac);
 			body.append('pf_action', action);
 
@@ -93,7 +96,7 @@ class WidgetPacketFence extends CWidget {
 				headers: {'Content-Type': 'application/x-www-form-urlencoded'},
 				body
 			});
-			const data = await resp.json();
+			const data = await WidgetPacketFence.#parseActionResponse(resp);
 
 			if (data && data.ok) {
 				if (status) {
@@ -122,5 +125,72 @@ class WidgetPacketFence extends CWidget {
 		if (this.#sw_snmpIndex !== null) data.sw_snmpIndex = this.#sw_snmpIndex;
 		if (this.#sw_hostid    !== null) data.sw_hostid    = this.#sw_hostid;
 		return data;
+	}
+
+	/**
+	 * Convert the object returned by getUpdateRequestData() into a flat
+	 * URLSearchParams body, expanding `fields` into `fields[name]=value`
+	 * entries the way Zabbix's standard widget refresh does. This is what
+	 * makes $this->fields_values populated server-side.
+	 */
+	static #serializeWidgetRequest(data) {
+		const body = new URLSearchParams();
+		for (const [k, v] of Object.entries(data || {})) {
+			if (v === undefined || v === null) continue;
+			if (k === 'fields' && typeof v === 'object') {
+				for (const [fk, fv] of Object.entries(v)) {
+					if (fv === undefined || fv === null) continue;
+					if (Array.isArray(fv)) {
+						fv.forEach(item => body.append(`fields[${fk}][]`, String(item)));
+					} else {
+						body.append(`fields[${fk}]`, String(fv));
+					}
+				}
+			} else {
+				body.append(k, String(v));
+			}
+		}
+		return body;
+	}
+
+	/**
+	 * Parse our action response. Zabbix sometimes wraps action output in the
+	 * standard HTML page chrome (with the JSON dropped in verbatim from
+	 * CControllerResponseData's main_block) — try strict JSON first, then
+	 * fall back to extracting the embedded {"ok":...} object.
+	 */
+	static async #parseActionResponse(resp) {
+		const text = await resp.text();
+		try {
+			const outer = JSON.parse(text);
+			return (outer && outer.main_block !== undefined)
+				? JSON.parse(outer.main_block)
+				: outer;
+		} catch (_) {}
+
+		// HTML-wrapped fallback: scan for the first balanced {"ok":...} object.
+		const start = text.indexOf('{"ok"');
+		if (start !== -1) {
+			let depth = 0, inStr = false, esc = false;
+			for (let i = start; i < text.length; i++) {
+				const ch = text[i];
+				if (inStr) {
+					if (esc)        { esc = false; }
+					else if (ch === '\\') { esc = true; }
+					else if (ch === '"')  { inStr = false; }
+				} else {
+					if (ch === '"')  inStr = true;
+					else if (ch === '{') depth++;
+					else if (ch === '}') {
+						depth--;
+						if (depth === 0) {
+							try { return JSON.parse(text.slice(start, i + 1)); }
+							catch (_) { return null; }
+						}
+					}
+				}
+			}
+		}
+		return null;
 	}
 }
