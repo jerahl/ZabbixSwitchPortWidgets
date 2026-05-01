@@ -17,6 +17,9 @@
 	"actions": {
 		"widget.packetfence.view": {
 			"class": "WidgetView"
+		},
+		"widget.packetfence.action": {
+			"class": "WidgetAction"
 		}
 	},
 	"assets": {

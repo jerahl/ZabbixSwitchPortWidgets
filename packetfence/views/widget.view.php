@@ -151,6 +151,16 @@ function pfRenderDevice(array $dev, string $pf_admin_url): string {
 		$out .= '<a class="pf-action" href="' . htmlspecialchars($node_url) . '" target="_blank" rel="noopener">'
 			. 'View in PacketFence</a>';
 	}
+	if (!$not_in_pf) {
+		$mac_attr = htmlspecialchars((string) $dev['mac']);
+		$out .= '<button type="button" class="pf-action pf-action--reeval"'
+			. ' data-pf-action="reevaluate_access" data-pf-mac="' . $mac_attr . '"'
+			. ' title="Re-apply PacketFence access policy for this MAC">Reevaluate access</button>';
+		$out .= '<button type="button" class="pf-action pf-action--restart"'
+			. ' data-pf-action="restart_switchport" data-pf-mac="' . $mac_attr . '"'
+			. ' title="Bounce the switch port this MAC is connected to">Restart switchport</button>';
+		$out .= '<span class="pf-action-status" data-pf-status-for="' . $mac_attr . '"></span>';
+	}
 	$out .= '</div>';
 
 	$out .= '</div>';

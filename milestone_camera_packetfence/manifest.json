@@ -17,6 +17,9 @@
 	"actions": {
 		"widget.milestone_camera_packetfence.view": {
 			"class": "WidgetView"
+		},
+		"widget.milestone_camera_packetfence.action": {
+			"class": "WidgetAction"
 		}
 	},
 	"assets": {
