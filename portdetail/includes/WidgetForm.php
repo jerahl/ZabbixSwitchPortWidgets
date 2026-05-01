@@ -16,6 +16,10 @@ use Zabbix\Widgets\Fields\{
  * The Override host field binds to the Switch Port Status widget so we know
  * which host is selected. The time_period field defaults to the dashboard's
  * time period so sparklines automatically respect the dashboard zoom.
+ *
+ * The enable_poe_cycle checkbox controls whether the "Cycle PoE" button is
+ * rendered alongside the PoE badge. The button calls the rConfig API server-
+ * side using credentials supplied via Zabbix host macros — see README.
  */
 class WidgetForm extends CWidgetForm {
 
@@ -33,6 +37,9 @@ class WidgetForm extends CWidgetForm {
 					])
 					->setDefaultPeriod(['from' => 'now-1h', 'to' => 'now'])
 					->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK)
+			)
+			->addField(
+				(new CWidgetFieldCheckBox('enable_poe_cycle', _('Show "Cycle PoE" button')))->setDefault(1)
 			)
 			->addField(
 				(new CWidgetFieldCheckBox('show_debug', _('Show debug info')))->setDefault(1)

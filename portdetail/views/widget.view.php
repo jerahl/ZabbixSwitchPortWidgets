@@ -259,7 +259,40 @@ $body .= '</div>';
 if ($poe) {
 	$body .= '<div class="pd-traffic__row">';
 	$body .= '<span class="pd-traffic__label">PoE</span>';
+	$body .= '<span class="pd-poe-cell">';
 	$body .= '<span class="pd-poe-badge ' . htmlspecialchars($poe['css']) . '">' . htmlspecialchars($poe['label']) . '</span>';
+
+	// "Cycle PoE" button — only shown when:
+	//   • a PoE item exists for this port (we're already inside the if($poe))
+	//   • the widget is configured to expose it (enable_poe_cycle)
+	//   • we have a hostid + snmp_index + iface_name to send to the action
+	$can_cycle = !empty($data['enable_poe_cycle'])
+		&& !empty($data['hostid'])
+		&& !empty($data['snmp_index'])
+		&& !empty($data['iface_name']);
+
+	if ($can_cycle) {
+		$body .= '<button type="button" class="pd-poe-cycle-btn"'
+			. ' data-hostid="'     . (int) $data['hostid']     . '"'
+			. ' data-snmp-index="' . (int) $data['snmp_index'] . '"'
+			. ' data-iface="'      . htmlspecialchars($data['iface_name'], ENT_QUOTES) . '"'
+			. ' title="' . htmlspecialchars(_s('Cycle PoE on %1$s via rConfig', $data['iface_name'])) . '"'
+			. ' aria-label="' . htmlspecialchars(_s('Cycle PoE on %1$s', $data['iface_name'])) . '">'
+			. '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+			. '<path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/>'
+			. '<path d="M13.5 2.5v3h-3"/>'
+			. '</svg>'
+			. '<span class="pd-poe-cycle-btn__label">' . _('Cycle') . '</span>'
+			. '</button>';
+		$body .= '<span class="pd-poe-cycle-status" role="status" aria-live="polite"></span>';
+	} elseif (!empty($data['enable_poe_cycle']) && empty($data['iface_name'])) {
+		// Helpful hint when the cycle button is enabled but we couldn't
+		// resolve the interface name — usually a template-naming issue.
+		$body .= '<span class="pd-poe-cycle-hint" title="'
+			. htmlspecialchars(_('Could not resolve interface name from item names. Cycle disabled.')) . '">⚠</span>';
+	}
+
+	$body .= '</span>';
 	$body .= '</div>';
 }
 $body .= '</div>';
