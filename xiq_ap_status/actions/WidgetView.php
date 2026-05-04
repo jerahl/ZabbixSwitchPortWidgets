@@ -1,291 +1,253 @@
-<?php
-/**
- * XIQ AP status widget — view action.
- *
- * Pulls latest values for xiq.ap.connected[*] / xiq.ap.configmismatch[*] /
- * xiq.ap.ip[*] / xiq.ap.mac[*] across the configured hosts, groups them by
- * serial, and returns a per-AP row with a synthesized fault status. Mirrors
- * the milestone_camera_status data flow so the JS layer can render it the
- * same way.
- *
- * Click-to-lookup: each fault row carries data-row-index on the JS side; a
- * delegated click handler dispatches a 'pf:deviceSelected' DOM event so the
- * unified PacketFence widget (planned next) can react. The legacy
- * 'mcs:cameraSelected' event is also dispatched for compatibility with the
- * existing milestone_camera_packetfence widget while the unified widget is
- * in flight.
- *
- * MAC item is optional — the shipping XIQ template doesn't expose it as a
- * per-AP item, only as the {#MAC} LLD macro. If you add an item prototype
- * `xiq.ap.mac[{#SERIAL}]` to the template, this widget picks it up
- * automatically; otherwise rows just show '—' in the MAC column.
- */
-
-declare(strict_types=1);
+<?php declare(strict_types = 0);
 
 namespace Modules\XiqApStatus\Actions;
 
 use API;
 use CControllerDashboardWidgetView;
 use CControllerResponseData;
+use CWebUser;
 
-class WidgetView extends CControllerDashboardWidgetView
-{
-    /** Synthesized per-AP status codes used by both controller and JS. */
-    private const STATUS_OK              = 0;
-    private const STATUS_CONFIG_MISMATCH = 1;
-    private const STATUS_DISCONNECTED    = 2;
+/**
+ * XIQ AP Status — read-side controller.
+ *
+ * Pulls items discovered by the "Extreme XIQ APs by API" template, groups
+ * them by AP using the per-item `ap_serial` / `ap_mac` / `ap_id` tags, and
+ * builds one row per AP for the table. Action eligibility flags are passed
+ * through to the JS so the kebab menu only renders enabled actions.
+ *
+ * The action token does NOT flow through this controller. Actions are
+ * dispatched separately to WidgetAction.php which reads the token from the
+ * filesystem at the moment of the action.
+ */
+class WidgetView extends CControllerDashboardWidgetView {
 
-    private const KEY_CONNECTED  = 'xiq.ap.connected';
-    private const KEY_MISMATCH   = 'xiq.ap.configmismatch';
-    private const KEY_IP         = 'xiq.ap.ip';
-    private const KEY_MAC        = 'xiq.ap.mac';
+	/** Item-key prefixes the template defines. */
+	private const KEY_CONNECTED   = 'xiq.ap.connected[';
+	private const KEY_CLIENTS     = 'xiq.ap.clients[';
+	private const KEY_VERSION     = 'xiq.ap.version[';
+	private const KEY_LAST        = 'xiq.ap.lastconnect[';
+	private const KEY_IP          = 'xiq.ap.ip[';
+	private const KEY_UPTIME      = 'xiq.ap.uptime[';
+	private const KEY_CFGMISMATCH = 'xiq.ap.configmismatch[';
 
-    protected function doAction(): void
-    {
-        $max_rows = (int)($this->fields_values['max_rows'] ?? 100);
+	protected function doAction(): void {
+		$debug = ['step_0_init' => ['user_type' => CWebUser::getType()]];
 
-        $hostids = [];
-        if (!empty($this->fields_values['hostids'])) {
-            $hostids = (array)$this->fields_values['hostids'];
-        }
+		$name        = $this->getInput('name', $this->widget->getDefaultName());
+		$max_rows    = (int) ($this->fields_values['max_rows'] ?? 1500);
+		$sort_down   = (bool) ($this->fields_values['show_disconnected_first'] ?? true);
+		$show_debug  = (bool) ($this->fields_values['show_debug'] ?? false);
 
-        $payload = [
-            'name'    => $this->getInput('name', $this->widget->getDefaultName()),
-            'summary' => [
-                'total'           => 0,
-                'ok'              => 0,
-                'config_mismatch' => 0,
-                'disconnected'    => 0,
-                'no_data'         => 0,
-            ],
-            'rows'      => [],
-            'truncated' => false,
-            'error'     => null,
-            'debug_info' => [
-                '_VERSION_MARKER'    => 'xiq-v1-2026-05-01',
-                'hostids_queried'    => count($hostids),
-                'items_found'        => 0,
-                'phase'              => 'init',
-                'fields_values_keys' => array_keys($this->fields_values ?? []),
-            ],
-            'user' => ['debug_mode' => $this->getDebugMode()],
-        ];
+		// The host(s) the user picked in the form. Single-select in practice
+		// for this widget — we use the first one if a list is provided.
+		$hostids = (array) ($this->fields_values['hostids'] ?? []);
+		$hostid  = $hostids ? (int) reset($hostids) : 0;
+		$debug['step_1_hostid'] = $hostid;
 
-        if (!$hostids) {
-            $payload['error'] = _('No host selected.');
-            $this->setResponse(new CControllerResponseData($payload));
-            return;
-        }
+		if ($hostid <= 0) {
+			$this->respond($name, [
+				'rows'    => [],
+				'summary' => self::emptySummary(),
+				'error'   => _('No XIQ host configured. Set "XIQ host" in the widget configuration.'),
+				'flags'   => $this->actionFlags(),
+				'urls'    => $this->urlFields(),
+				'config'  => $this->configFields(),
+				'debug'   => $debug,
+				'show_debug' => $show_debug,
+			]);
+			return;
+		}
 
-        // ------------------------------------------------------------------
-        // Single batched API call: pull every xiq.ap.* item across the
-        // configured hosts. searchByAny=true makes the four key prefixes
-        // OR together. We'll bucket per-(hostid, serial) below.
-        // ------------------------------------------------------------------
-        try {
-            $payload['debug_info']['phase'] = 'querying_items';
-            $items = API::Item()->get([
-                'output'       => ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'lastclock'],
-                'selectHosts'  => ['hostid', 'host', 'name'],
-                'hostids'      => $hostids,
-                'search'       => ['key_' => [
-                    self::KEY_CONNECTED,
-                    self::KEY_MISMATCH,
-                    self::KEY_IP,
-                    self::KEY_MAC,
-                ]],
-                'startSearch'  => true,
-                'searchByAny'  => true,
-                'preservekeys' => true,
-            ]);
-        } catch (\Throwable $e) {
-            $payload['debug_info']['phase']     = 'item_query_failed';
-            $payload['debug_info']['exception'] = $e->getMessage();
-            $payload['error'] = _('Item API call failed: ').$e->getMessage();
-            $this->setResponse(new CControllerResponseData($payload));
-            return;
-        }
+		// Resolve host display name for the panel header.
+		$hosts = API::Host()->get([
+			'output'  => ['hostid', 'host', 'name'],
+			'hostids' => [$hostid],
+		]);
+		$host_label = $hosts ? ($hosts[0]['name'] ?: $hosts[0]['host']) : '';
+		$debug['step_2_host_label'] = $host_label;
 
-        $payload['debug_info']['items_found'] = is_array($items) ? count($items) : 0;
-        $payload['debug_info']['phase']       = 'items_returned';
+		// Fetch ALL items on the host whose key starts with one of the AP
+		// key prefixes. We pull everything in one call and group locally —
+		// way fewer DB hits than per-prototype calls.
+		$items = API::Item()->get([
+			'output'      => ['itemid', 'key_', 'name', 'lastvalue', 'lastclock', 'value_type'],
+			'hostids'     => [$hostid],
+			'selectTags'  => ['tag', 'value'],
+			'search'      => [
+				'key_' => [
+					self::KEY_CONNECTED,
+					self::KEY_CLIENTS,
+					self::KEY_VERSION,
+					self::KEY_LAST,
+					self::KEY_IP,
+					self::KEY_UPTIME,
+					self::KEY_CFGMISMATCH,
+				],
+			],
+			'searchByAny'    => true,
+			'startSearch'    => true,
+			'preservekeys'   => false,
+		]);
+		$debug['step_3_items_fetched'] = count($items);
 
-        if (!$items) {
-            $this->setResponse(new CControllerResponseData($payload));
-            return;
-        }
+		// Group by serial (from item tags). We expect 7 items per AP.
+		$grouped = [];
+		foreach ($items as $it) {
+			$serial = '';
+			$mac    = '';
+			$xiq_id = '';
+			foreach ($it['tags'] as $tag) {
+				if ($tag['tag'] === 'ap_serial') $serial = $tag['value'];
+				elseif ($tag['tag'] === 'ap_mac') $mac    = $tag['value'];
+				elseif ($tag['tag'] === 'ap_id')  $xiq_id = $tag['value'];
+			}
+			if ($serial === '') continue;
 
-        // ------------------------------------------------------------------
-        // Bucket items by (hostid, serial). Each AP becomes a single row
-        // built from up to four sibling items.
-        // ------------------------------------------------------------------
-        $aps = []; // [hostid][serial] => ['host'=>..., 'connected'=>?, 'mismatch'=>?, 'mac'=>?, 'ip'=>?, 'lastclock'=>?, 'hostname'=>?, 'itemid_connected'=>?]
+			if (!isset($grouped[$serial])) {
+				$grouped[$serial] = [
+					'serial' => $serial,
+					'mac'    => $mac,
+					'xiq_id' => $xiq_id,
+					'name'   => '',          // hostname; pulled from item name suffix
+				];
+			}
+			// Item names are shaped "AP <hostname>: <metric>" (per template) — we
+			// capture the first one we see and parse <hostname> out of it.
+			if ($grouped[$serial]['name'] === '' && !empty($it['name'])) {
+				if (preg_match('/^AP\s+(.+?):\s+/', (string) $it['name'], $m)) {
+					$grouped[$serial]['name'] = $m[1];
+				}
+			}
 
-        foreach ($items as $item) {
-            $host = $item['hosts'][0] ?? null;
-            if (!$host) {
-                continue;
-            }
-            $key = (string)$item['key_'];
+			// Bucket the lastvalue by item-key prefix.
+			$key = (string) $it['key_'];
+			$lv  = $it['lastvalue'];
+			$lc  = (int) $it['lastclock'];
 
-            // Match key prefix and pull serial out of [..]. We require the
-            // bracketed parameter — bare keys (no serial) wouldn't be from
-            // the XIQ template and are skipped.
-            if (!preg_match('/^(xiq\.ap\.(?:connected|configmismatch|ip|mac))\[([^\]]+)\]$/', $key, $m)) {
-                continue;
-            }
-            [$_, $base, $serial] = $m;
+			if     (str_starts_with($key, self::KEY_CONNECTED))   { $grouped[$serial]['connected']    = (int) $lv; $grouped[$serial]['connected_age'] = $lc; }
+			elseif (str_starts_with($key, self::KEY_CLIENTS))     { $grouped[$serial]['clients']      = (int) $lv; }
+			elseif (str_starts_with($key, self::KEY_VERSION))     { $grouped[$serial]['version']      = (string) $lv; }
+			elseif (str_starts_with($key, self::KEY_LAST))        { $grouped[$serial]['last_connect'] = (int) $lv; }
+			elseif (str_starts_with($key, self::KEY_IP))          { $grouped[$serial]['ip']           = (string) $lv; }
+			elseif (str_starts_with($key, self::KEY_UPTIME))      { $grouped[$serial]['uptime']       = (int) $lv; }
+			elseif (str_starts_with($key, self::KEY_CFGMISMATCH)) { $grouped[$serial]['cfg_mismatch'] = (int) $lv; }
+		}
+		$debug['step_4_aps'] = count($grouped);
 
-            $hid = (string)$host['hostid'];
-            if (!isset($aps[$hid][$serial])) {
-                $aps[$hid][$serial] = [
-                    'hostid'    => $hid,
-                    'host_name' => $host['name'],
-                    'host_tech' => $host['host'],
-                    'serial'    => $serial,
-                    'connected' => null,
-                    'mismatch'  => null,
-                    'mac'       => null,
-                    'ip'        => null,
-                    'hostname'  => null,
-                    'lastclock' => 0,
-                    'itemid_connected' => null,
-                ];
-            }
-            $row = &$aps[$hid][$serial];
+		// Build the row array.
+		$rows = [];
+		foreach ($grouped as $g) {
+			$rows[] = [
+				'serial'       => $g['serial'],
+				'mac'          => $g['mac']    ?? '',
+				'xiq_id'       => $g['xiq_id'] ?? '',
+				'name'         => $g['name']   ?: $g['serial'],
+				'ip'           => $g['ip']           ?? '',
+				'connected'    => $g['connected']    ?? 0,
+				'clients'      => $g['clients']      ?? 0,
+				'version'      => $g['version']      ?? '',
+				'last_connect' => $g['last_connect'] ?? 0,
+				'uptime'       => $g['uptime']       ?? 0,
+				'cfg_mismatch' => $g['cfg_mismatch'] ?? 0,
+			];
+		}
 
-            $raw = $item['lastvalue'] ?? null;
-            $lc  = (int)($item['lastclock'] ?? 0);
-            if ($lc > $row['lastclock']) {
-                $row['lastclock'] = $lc;
-            }
+		// Summary tiles.
+		$summary = self::emptySummary();
+		$summary['total'] = count($rows);
+		foreach ($rows as $r) {
+			if ($r['connected']) $summary['connected']++; else $summary['disconnected']++;
+			if ($r['cfg_mismatch']) $summary['cfg_mismatch']++;
+			$summary['clients_total'] += (int) $r['clients'];
+		}
 
-            switch ($base) {
-                case self::KEY_CONNECTED:
-                    $row['connected'] = ($raw === null || $raw === '') ? null : (int)$raw;
-                    $row['itemid_connected'] = $item['itemid'];
-                    if ($row['hostname'] === null) {
-                        $row['hostname'] = self::extractApHostname((string)$item['name']);
-                    }
-                    break;
-                case self::KEY_MISMATCH:
-                    $row['mismatch'] = ($raw === null || $raw === '') ? null : (int)$raw;
-                    break;
-                case self::KEY_IP:
-                    $row['ip'] = ($raw === null || $raw === '') ? null : trim((string)$raw);
-                    break;
-                case self::KEY_MAC:
-                    $row['mac'] = ($raw === null || $raw === '') ? null : self::normalizeMac((string)$raw);
-                    break;
-            }
-            unset($row);
-        }
+		// Sort: disconnected first (if enabled), then by name.
+		usort($rows, function ($a, $b) use ($sort_down) {
+			if ($sort_down) {
+				$cmp = ($a['connected'] <=> $b['connected']);
+				if ($cmp !== 0) return $cmp;
+			}
+			return strcasecmp($a['name'], $b['name']);
+		});
 
-        // ------------------------------------------------------------------
-        // Tally summary and pull fault rows. An AP is only counted in the
-        // summary if it has a connected item — otherwise it's "no_data".
-        // ------------------------------------------------------------------
-        $rows = [];
-        foreach ($aps as $hid => $by_serial) {
-            foreach ($by_serial as $serial => $ap) {
-                $payload['summary']['total']++;
-                $status = self::synthesizeStatus($ap['connected'], $ap['mismatch']);
-                if ($status === null) {
-                    $payload['summary']['no_data']++;
-                    continue;
-                }
-                switch ($status) {
-                    case self::STATUS_OK:
-                        $payload['summary']['ok']++;
-                        break;
-                    case self::STATUS_CONFIG_MISMATCH:
-                        $payload['summary']['config_mismatch']++;
-                        break;
-                    case self::STATUS_DISCONNECTED:
-                        $payload['summary']['disconnected']++;
-                        break;
-                }
+		// Truncation.
+		$truncated = false;
+		if (count($rows) > $max_rows) {
+			$truncated = true;
+			$rows = array_slice($rows, 0, $max_rows);
+		}
 
-                // Only fault rows go into the table.
-                if ($status === self::STATUS_OK) {
-                    continue;
-                }
-                $rows[] = [
-                    'host_name' => $ap['host_name'],
-                    'host_tech' => $ap['host_tech'],
-                    'hostid'    => $ap['hostid'],
-                    'itemid'    => $ap['itemid_connected'],
-                    'ap_name'   => $ap['hostname'] ?: $serial,
-                    'serial'    => $serial,
-                    'mac'       => $ap['mac'],
-                    'ip'        => $ap['ip'],
-                    'status'    => $status,
-                    'lastclock' => $ap['lastclock'],
-                ];
-            }
-        }
+		$this->respond($name, [
+			'rows'        => $rows,
+			'summary'     => $summary,
+			'error'       => null,
+			'truncated'   => $truncated,
+			'truncated_at'=> $truncated ? $max_rows : null,
+			'host_label'  => $host_label,
+			'flags'       => $this->actionFlags(),
+			'urls'        => $this->urlFields(),
+			'config'      => $this->configFields(),
+			'debug'       => $debug,
+			'show_debug'  => $show_debug,
+		]);
+	}
 
-        // Stable sort: severity desc (Disconnected before Config-mismatch),
-        // then host name, then AP name.
-        usort($rows, static function (array $a, array $b): int {
-            return [$b['status'], $a['host_name'], $a['ap_name']]
-                <=> [$a['status'], $b['host_name'], $b['ap_name']];
-        });
+	/** Action flags computed once and applied client-side AND server-side. */
+	private function actionFlags(): array {
+		$is_admin = in_array(CWebUser::getType(), [USER_TYPE_ZABBIX_ADMIN, USER_TYPE_SUPER_ADMIN]);
+		return [
+			'is_admin'        => $is_admin,
+			'enable_refresh'  => $is_admin && (bool) ($this->fields_values['enable_refresh'] ?? false),
+			'enable_reboot'   => $is_admin && (bool) ($this->fields_values['enable_reboot']  ?? false),
+			'enable_manage'   => $is_admin && (bool) ($this->fields_values['enable_manage']  ?? false),
+			'enable_cli'      => $is_admin && (bool) ($this->fields_values['enable_cli']     ?? false),
+		];
+	}
 
-        if (count($rows) > $max_rows) {
-            $rows = array_slice($rows, 0, $max_rows);
-            $payload['truncated']    = true;
-            $payload['truncated_at'] = $max_rows;
-        }
-        $payload['rows']                = $rows;
-        $payload['debug_info']['phase'] = 'done';
+	private function urlFields(): array {
+		return [
+			'xiq_url'       => rtrim((string) ($this->fields_values['xiq_url']       ?? ''), '/'),
+			'xiq_admin_url' => rtrim((string) ($this->fields_values['xiq_admin_url'] ?? ''), '/'),
+		];
+	}
 
-        $this->setResponse(new CControllerResponseData($payload));
-    }
+	/**
+	 * Non-secret config the JS needs to forward back to WidgetAction.php.
+	 * Note: action_token_path is a path, not a value — even if a malicious
+	 * client tampers with it, WidgetAction.php enforces the prefix allowlist.
+	 */
+	private function configFields(): array {
+		$allowlist_raw = (string) ($this->fields_values['cli_allowlist'] ?? '');
+		$allowlist = [];
+		foreach (preg_split('/\R+/', $allowlist_raw) as $line) {
+			$line = trim($line);
+			if ($line !== '' && str_starts_with($line, 'show ')) {
+				$allowlist[] = $line;
+			}
+		}
+		return [
+			'hostid'            => (int) (($this->fields_values['hostids'] ?? [0])[0] ?? 0),
+			'action_token_path' => (string) ($this->fields_values['action_token_path'] ?? ''),
+			'verify_ssl'        => (bool)   ($this->fields_values['verify_ssl']        ?? true),
+			'cli_allowlist'     => $allowlist,
+		];
+	}
 
-    /**
-     * Combine the connected (0/1) and config_mismatch (0/1) inputs into a
-     * single status code. Returns null if connected is unknown — the AP is
-     * counted as "no_data" and not displayed.
-     */
-    private static function synthesizeStatus(?int $connected, ?int $mismatch): ?int
-    {
-        if ($connected === null) {
-            return null;
-        }
-        if ($connected === 0) {
-            return self::STATUS_DISCONNECTED;
-        }
-        if ($mismatch === 1) {
-            return self::STATUS_CONFIG_MISMATCH;
-        }
-        return self::STATUS_OK;
-    }
+	private static function emptySummary(): array {
+		return [
+			'total'         => 0,
+			'connected'     => 0,
+			'disconnected'  => 0,
+			'cfg_mismatch'  => 0,
+			'clients_total' => 0,
+		];
+	}
 
-    /**
-     * Item names produced by the XIQ template look like
-     * "AP <hostname>: Connected". Extract the hostname so the table can
-     * show a friendly label instead of just the serial number.
-     */
-    private static function extractApHostname(string $item_name): ?string
-    {
-        if (preg_match('/^AP\s+(.+?):\s+Connected\s*$/u', $item_name, $m)) {
-            return trim($m[1]);
-        }
-        return null;
-    }
-
-    /**
-     * Normalize a MAC string to lowercase colon-separated form. Returns
-     * null if the value doesn't parse cleanly. XIQ returns colon form
-     * already, but accept the usual variants.
-     */
-    private static function normalizeMac(string $raw): ?string
-    {
-        $hex = preg_replace('/[^0-9a-f]/', '', strtolower(trim($raw)));
-        if ($hex === null || strlen($hex) !== 12) {
-            return null;
-        }
-        return implode(':', str_split($hex, 2));
-    }
+	private function respond(string $name, array $data): void {
+		$this->setResponse(new CControllerResponseData([
+			'name' => $name,
+			'data' => $data,
+			'user' => ['debug_mode' => $this->getDebugMode()],
+		]));
+	}
 }

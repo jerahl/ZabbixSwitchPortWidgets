@@ -1,292 +1,566 @@
-/*
- * XIQ AP status widget — styles. Mirrors milestone_camera_status; class
- * prefix changed from .mcs- to .xas- and tile palette adapted for the
- * AP status vocabulary (config mismatch + disconnected).
+/* XIQ AP Status widget styles.
+ *
+ * Theme strategy:
+ *   - Tokens at .xiq-body scope use light defaults.
+ *   - Dark overrides apply via @media (prefers-color-scheme: dark) AND via
+ *     several Zabbix dark-theme selectors so the widget tracks both OS-level
+ *     and Zabbix-app-level theming.
+ *   - All rules reference var(--xiq-...) tokens, never raw hex.
  */
 
-div.dashboard-widget-xiq_ap_status .xas-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    height: 100%;
-    padding: 4px;
-    box-sizing: border-box;
-    overflow: hidden;
-    font-size: 12px;
+/* ── Tokens (light defaults) ──────────────────────────────────────────── */
+.xiq-body {
+	--xiq-text-muted:     #555;
+	--xiq-tile-bg:        #f4f4f4;
+	--xiq-tile-border:    #ddd;
+	--xiq-row-hover:      rgba(0, 0, 0, 0.04);
+	--xiq-row-border:     #eee;
+	--xiq-thead-border:   #ddd;
+	--xiq-menu-bg:        #ffffff;
+	--xiq-menu-border:    #ccc;
+	--xiq-menu-shadow:    rgba(0, 0, 0, 0.10);
+	--xiq-menu-hover:     rgba(0, 0, 0, 0.06);
+
+	--xiq-pill-up-bg:     #d5f0df;
+	--xiq-pill-up-fg:     #1e6b39;
+	--xiq-pill-down-bg:   #fadbd8;
+	--xiq-pill-down-fg:   #922b21;
+	--xiq-pill-warn-bg:   #fdebd0;
+	--xiq-pill-warn-fg:   #7d6608;
+
+	--xiq-error-bg:       #fdecea;
+	--xiq-error-fg:       #922b21;
+	--xiq-error-border:   #f5b7b1;
+	--xiq-trunc-bg:       #fef9e7;
+	--xiq-trunc-fg:       #7d6608;
+	--xiq-trunc-border:   #f7dc6f;
+
+	--xiq-count-up:       #2c8a4e;
+	--xiq-count-down:     #c0392b;
+	--xiq-count-warn:     #d68910;
+
+	--xiq-status-pending-bg: #ebf5fb;
+	--xiq-status-pending-fg: #1f618d;
+	--xiq-status-success-bg: #d5f0df;
+	--xiq-status-success-fg: #1e6b39;
+	--xiq-status-error-bg:   #fadbd8;
+	--xiq-status-error-fg:   #922b21;
+
+	--xiq-debug-bg:       #f8f9f9;
+
+	padding: 8px;
+	font-size: 12px;
 }
 
-/* ---------- Summary tiles ---------- */
+/* ── Dark-mode token overrides ────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+	.xiq-body {
+		--xiq-text-muted:     #aaa;
+		--xiq-tile-bg:        #2a2a2a;
+		--xiq-tile-border:    #444;
+		--xiq-row-hover:      rgba(255, 255, 255, 0.05);
+		--xiq-row-border:     #333;
+		--xiq-thead-border:   #444;
+		--xiq-menu-bg:        #2a2a2a;
+		--xiq-menu-border:    #555;
+		--xiq-menu-shadow:    rgba(0, 0, 0, 0.4);
+		--xiq-menu-hover:     rgba(255, 255, 255, 0.08);
 
-div.dashboard-widget-xiq_ap_status .xas-summary {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 6px;
-    flex: 0 0 auto;
-}
+		--xiq-pill-up-bg:     #1d4d2c;
+		--xiq-pill-up-fg:     #a3e6b8;
+		--xiq-pill-down-bg:   #6b2120;
+		--xiq-pill-down-fg:   #f5b8b3;
+		--xiq-pill-warn-bg:   #6b4a08;
+		--xiq-pill-warn-fg:   #f5d486;
 
-div.dashboard-widget-xiq_ap_status .xas-tile {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 6px 4px;
-    border-radius: 4px;
-    background: rgba(127, 127, 127, 0.08);
-    border-left: 3px solid transparent;
-    min-width: 0;
-}
+		--xiq-error-bg:       #3d1f1d;
+		--xiq-error-fg:       #f5b8b3;
+		--xiq-error-border:   #6b2120;
+		--xiq-trunc-bg:       #3d3219;
+		--xiq-trunc-fg:       #f5d486;
+		--xiq-trunc-border:   #6b4a08;
 
-div.dashboard-widget-xiq_ap_status .xas-tile-value {
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-}
+		--xiq-count-up:       #6dcf8c;
+		--xiq-count-down:     #f08379;
+		--xiq-count-warn:     #f5c860;
 
-div.dashboard-widget-xiq_ap_status .xas-tile-label {
-    margin-top: 4px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    opacity: 0.7;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-    text-align: center;
-}
+		--xiq-status-pending-bg: #1c3d52;
+		--xiq-status-pending-fg: #a3d4f0;
+		--xiq-status-success-bg: #1d4d2c;
+		--xiq-status-success-fg: #a3e6b8;
+		--xiq-status-error-bg:   #6b2120;
+		--xiq-status-error-fg:   #f5b8b3;
 
-div.dashboard-widget-xiq_ap_status .xas-tile--ok {
-    border-left-color: var(--status-na-color, #59db8f);
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--mismatch {
-    border-left-color: var(--status-warning-color, #ffd54f);
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--offline {
-    border-left-color: var(--status-disaster-color, #ff465c);
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--total,
-div.dashboard-widget-xiq_ap_status .xas-tile--nodata {
-    border-left-color: rgba(127, 127, 127, 0.3);
+		--xiq-debug-bg:       #1f1f1f;
+	}
 }
 
-div.dashboard-widget-xiq_ap_status .xas-tile--mismatch.xas-tile--active {
-    background: rgba(255, 213, 79, 0.14);
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--offline.xas-tile--active {
-    background: rgba(255, 70, 92, 0.10);
+/* Zabbix-app dark theme: applies regardless of OS preference. The various
+ * selectors cover the different attribute/class strategies Zabbix has used
+ * across point releases. */
+.dark-theme .xiq-body,
+.theme-dark .xiq-body,
+[data-theme="dark"] .xiq-body,
+[theme="dark-theme"] .xiq-body,
+body.dark-theme .xiq-body,
+body.theme-dark .xiq-body {
+	--xiq-text-muted:     #aaa;
+	--xiq-tile-bg:        #2a2a2a;
+	--xiq-tile-border:    #444;
+	--xiq-row-hover:      rgba(255, 255, 255, 0.05);
+	--xiq-row-border:     #333;
+	--xiq-thead-border:   #444;
+	--xiq-menu-bg:        #2a2a2a;
+	--xiq-menu-border:    #555;
+	--xiq-menu-shadow:    rgba(0, 0, 0, 0.4);
+	--xiq-menu-hover:     rgba(255, 255, 255, 0.08);
+
+	--xiq-pill-up-bg:     #1d4d2c;
+	--xiq-pill-up-fg:     #a3e6b8;
+	--xiq-pill-down-bg:   #6b2120;
+	--xiq-pill-down-fg:   #f5b8b3;
+	--xiq-pill-warn-bg:   #6b4a08;
+	--xiq-pill-warn-fg:   #f5d486;
+
+	--xiq-error-bg:       #3d1f1d;
+	--xiq-error-fg:       #f5b8b3;
+	--xiq-error-border:   #6b2120;
+	--xiq-trunc-bg:       #3d3219;
+	--xiq-trunc-fg:       #f5d486;
+	--xiq-trunc-border:   #6b4a08;
+
+	--xiq-count-up:       #6dcf8c;
+	--xiq-count-down:     #f08379;
+	--xiq-count-warn:     #f5c860;
+
+	--xiq-status-pending-bg: #1c3d52;
+	--xiq-status-pending-fg: #a3d4f0;
+	--xiq-status-success-bg: #1d4d2c;
+	--xiq-status-success-fg: #a3e6b8;
+	--xiq-status-error-bg:   #6b2120;
+	--xiq-status-error-fg:   #f5b8b3;
+
+	--xiq-debug-bg:       #1f1f1f;
 }
 
-/* ---------- Fault table ---------- */
+/* ── Summary tiles ────────────────────────────────────────────────────── */
+.xiq-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.xiq-tile {
+	background: var(--xiq-tile-bg);
+	border: 1px solid var(--xiq-tile-border);
+	border-radius: 4px;
+	padding: 8px 12px;
+	text-align: center;
+}
+.xiq-tile__count {
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.1;
+}
+.xiq-tile__label {
+	font-size: 11px;
+	opacity: 0.75;
+	margin-top: 2px;
+}
+.xiq-tile--connected    .xiq-tile__count { color: var(--xiq-count-up); }
+.xiq-tile--disconnected .xiq-tile__count { color: var(--xiq-count-down); }
+.xiq-tile--mismatch     .xiq-tile__count { color: var(--xiq-count-warn); }
 
-div.dashboard-widget-xiq_ap_status .xas-table-wrap {
-    flex: 1 1 auto;
-    overflow: auto;
-    border-top: 1px solid rgba(127, 127, 127, 0.2);
+/* Clickable / filterable tiles */
+.xiq-tile {
+	cursor: pointer;
+	user-select: none;
+	transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.05s;
 }
-
-div.dashboard-widget-xiq_ap_status table.xas-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-    table-layout: fixed;
+.xiq-tile:hover {
+	background: var(--xiq-menu-hover, rgba(0, 0, 0, 0.06));
+	border-color: var(--xiq-menu-border, #bbb);
 }
-
-div.dashboard-widget-xiq_ap_status table.xas-table th,
-div.dashboard-widget-xiq_ap_status table.xas-table td {
-    padding: 4px 8px;
-    text-align: left;
-    vertical-align: middle;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 0;
+.xiq-tile:active {
+	transform: translateY(1px);
 }
-
-div.dashboard-widget-xiq_ap_status table.xas-table thead th {
-    position: sticky;
-    top: 0;
-    cursor: pointer;
-    user-select: none;
-    border-bottom: 1px solid rgba(127, 127, 127, 0.3);
-    font-weight: 600;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-div.dashboard-widget-xiq_ap_status table.xas-table thead th::after {
-    content: '';
-    display: inline-block;
-    width: 0;
-    height: 0;
-    margin-left: 6px;
-    vertical-align: middle;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-div.dashboard-widget-xiq_ap_status table.xas-table thead th.xas-sort-asc::after {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid currentColor;
-    opacity: 0.7;
-}
-div.dashboard-widget-xiq_ap_status table.xas-table thead th.xas-sort-desc::after {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid currentColor;
-    opacity: 0.7;
+.xiq-tile:focus-visible {
+	outline: 2px solid #4a90d9;
+	outline-offset: 1px;
 }
 
-div.dashboard-widget-xiq_ap_status table.xas-table tbody tr:nth-child(even) {
-    background: var(--table-stripe-color, rgba(127, 127, 127, 0.05));
+/* Active filter — generic ring (overridden per-category below for hue) */
+.xiq-tile--active {
+	border-color: #4a90d9;
+	box-shadow: 0 0 0 1px #4a90d9 inset;
+	background: rgba(74, 144, 217, 0.08);
+}
+/* Per-category active tints — match the count colour for each tile so the
+ * active state reads "this is the green/red/amber filter" at a glance. */
+.xiq-tile--connected.xiq-tile--active {
+	border-color: var(--xiq-count-up);
+	box-shadow: 0 0 0 1px var(--xiq-count-up) inset;
+	background: var(--xiq-pill-up-bg);
+}
+.xiq-tile--disconnected.xiq-tile--active {
+	border-color: var(--xiq-count-down);
+	box-shadow: 0 0 0 1px var(--xiq-count-down) inset;
+	background: var(--xiq-pill-down-bg);
+}
+.xiq-tile--mismatch.xiq-tile--active {
+	border-color: var(--xiq-count-warn);
+	box-shadow: 0 0 0 1px var(--xiq-count-warn) inset;
+	background: var(--xiq-pill-warn-bg);
 }
 
-div.dashboard-widget-xiq_ap_status table.xas-table a {
-    color: inherit;
-    text-decoration: none;
-    border-bottom: 1px dotted rgba(127, 127, 127, 0.4);
+/* ── Banners ──────────────────────────────────────────────────────────── */
+.xiq-error-banner {
+	background: var(--xiq-error-bg);
+	border: 1px solid var(--xiq-error-border);
+	color: var(--xiq-error-fg);
+	padding: 8px 12px;
+	border-radius: 4px;
+	margin-bottom: 8px;
 }
-div.dashboard-widget-xiq_ap_status table.xas-table a:hover {
-    border-bottom-style: solid;
-}
-
-div.dashboard-widget-xiq_ap_status .xas-mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11px;
-}
-div.dashboard-widget-xiq_ap_status .xas-dim {
-    opacity: 0.65;
-}
-
-/* ---------- Severity pills ---------- */
-
-div.dashboard-widget-xiq_ap_status .xas-pill {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #fff;
-    line-height: 1.4;
-}
-div.dashboard-widget-xiq_ap_status .xas-pill--mismatch {
-    background: var(--status-warning-color, #ffd54f);
-    color: #333;
-}
-div.dashboard-widget-xiq_ap_status .xas-pill--offline {
-    background: var(--status-disaster-color, #ff465c);
-}
-div.dashboard-widget-xiq_ap_status .xas-pill--unknown {
-    background: rgba(127, 127, 127, 0.5);
+.xiq-truncated-banner {
+	background: var(--xiq-trunc-bg);
+	border: 1px solid var(--xiq-trunc-border);
+	color: var(--xiq-trunc-fg);
+	padding: 6px 10px;
+	border-radius: 4px;
+	margin-bottom: 8px;
+	font-size: 11px;
 }
 
-/* ---------- Empty / error / truncation ---------- */
+/* ── Table ────────────────────────────────────────────────────────────── */
+.xiq-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.xiq-table thead th {
+	text-align: left;
+	padding: 6px 8px;
+	border-bottom: 2px solid var(--xiq-thead-border);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	user-select: none;
+}
+.xiq-table thead th:last-child { cursor: default; }
+.xiq-table tbody td {
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--xiq-row-border);
+	vertical-align: middle;
+}
+.xiq-row:hover td { background: var(--xiq-row-hover); }
+.xiq-cell--name .xiq-name { font-weight: 600; }
+.xiq-cell--name .xiq-name--link { color: inherit; text-decoration: none; cursor: pointer; }
+.xiq-cell--name .xiq-name--link:hover { text-decoration: underline; }
+.xiq-cell--name .xiq-sub  { font-size: 10px; opacity: 0.6; }
+.xiq-cell--actions { width: 32px; text-align: right; position: relative; }
 
-div.dashboard-widget-xiq_ap_status .xas-empty {
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 20px;
-    opacity: 0.7;
+/* ── Status pills ─────────────────────────────────────────────────────── */
+.xiq-pill {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 10px;
+	font-weight: 600;
+	border-radius: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.xiq-pill--up   { background: var(--xiq-pill-up-bg);   color: var(--xiq-pill-up-fg); }
+.xiq-pill--down { background: var(--xiq-pill-down-bg); color: var(--xiq-pill-down-fg); }
+.xiq-pill--warn { background: var(--xiq-pill-warn-bg); color: var(--xiq-pill-warn-fg); }
+
+/* ── Kebab menu ───────────────────────────────────────────────────────── */
+.xiq-kebab { position: relative; display: inline-block; }
+.xiq-kebab__toggle {
+	background: transparent;
+	border: 1px solid transparent;
+	padding: 0 6px;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+	border-radius: 3px;
+	color: inherit;
+}
+.xiq-kebab__toggle:hover { background: var(--xiq-menu-hover); }
+.xiq-kebab__menu {
+	display: none;
+	position: absolute;
+	right: 0;
+	top: 100%;
+	min-width: 180px;
+	background: var(--xiq-menu-bg);
+	border: 1px solid var(--xiq-menu-border);
+	border-radius: 4px;
+	box-shadow: 0 4px 8px var(--xiq-menu-shadow);
+	z-index: 1000;
+}
+.xiq-kebab--open .xiq-kebab__menu { display: block; }
+.xiq-menu__item {
+	display: block;
+	width: 100%;
+	background: none;
+	border: 0;
+	padding: 8px 12px;
+	text-align: left;
+	font-size: 12px;
+	cursor: pointer;
+	color: inherit;
+	text-decoration: none;
+}
+.xiq-menu__item:hover { background: var(--xiq-menu-hover); }
+
+/* ── Inline row status ────────────────────────────────────────────────── */
+.xiq-row-status {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 10px;
+	border-radius: 3px;
+	margin-left: 4px;
+}
+.xiq-row-status--pending { background: var(--xiq-status-pending-bg); color: var(--xiq-status-pending-fg); }
+.xiq-row-status--success { background: var(--xiq-status-success-bg); color: var(--xiq-status-success-fg); }
+.xiq-row-status--error   { background: var(--xiq-status-error-bg);   color: var(--xiq-status-error-fg); }
+
+/* ── CLI panel ────────────────────────────────────────────────────────── */
+/* CLI panel intentionally stays dark in BOTH themes — it's a terminal. */
+.xiq-cli-panel {
+	background: #1e1e1e;
+	color: #e6e6e6;
+	padding: 10px;
+	border-radius: 4px;
+	margin: 4px 0;
+}
+.xiq-cli-bar {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 8px;
+	color: #e6e6e6;
+}
+.xiq-cli-bar label { font-size: 11px; }
+.xiq-cli-select {
+	background: #2a2a2a;
+	color: #e6e6e6;
+	border: 1px solid #444;
+	padding: 4px 6px;
+	min-width: 240px;
+}
+.xiq-cli-run, .xiq-cli-close {
+	background: #444;
+	color: #e6e6e6;
+	border: 1px solid #555;
+	padding: 4px 12px;
+	cursor: pointer;
+	border-radius: 3px;
+}
+.xiq-cli-run:hover, .xiq-cli-close:hover { background: #555; }
+.xiq-cli-output {
+	background: #111;
+	color: #c8e6c9;
+	padding: 8px;
+	max-height: 400px;
+	overflow: auto;
+	font-family: 'Courier New', monospace;
+	font-size: 11px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	margin: 0;
+	border: 1px solid #333;
+	border-radius: 3px;
 }
 
-div.dashboard-widget-xiq_ap_status .xas-truncated {
-    padding: 4px 8px;
-    font-size: 11px;
-    text-align: center;
-    opacity: 0.7;
-    border-top: 1px dashed rgba(127, 127, 127, 0.3);
+/* ── Debug panel ──────────────────────────────────────────────────────── */
+.xiq-debug {
+	margin-top: 12px;
+	border-top: 1px dashed var(--xiq-tile-border);
+	padding-top: 8px;
+}
+.xiq-debug__pre {
+	background: var(--xiq-debug-bg);
+	padding: 8px;
+	font-size: 10px;
+	max-height: 200px;
+	overflow: auto;
+	color: inherit;
 }
 
-@media (max-width: 600px) {
-    div.dashboard-widget-xiq_ap_status .xas-summary {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    div.dashboard-widget-xiq_ap_status .xas-tile-value {
-        font-size: 16px;
-    }
+/* ── Toolbar (search + page-size) ────────────────────────────────────── */
+.xiq-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+	flex-wrap: wrap;
 }
 
-/* ---------- Clickable tiles + filter bar ---------- */
-
-div.dashboard-widget-xiq_ap_status .xas-tile--clickable {
-    cursor: pointer;
-    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--clickable:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--clickable:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.55) inset;
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--clickable:focus:not(:focus-visible) {
-    box-shadow: none;
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--selected {
-    background: rgba(100, 150, 255, 0.16);
-    border-left-width: 5px;
-    padding-left: 2px;
-}
-div.dashboard-widget-xiq_ap_status .xas-tile--selected .xas-tile-label {
-    opacity: 1;
+.xiq-search-wrap {
+	position: relative;
+	flex: 1 1 180px;
+	min-width: 140px;
+	max-width: 320px;
 }
 
-div.dashboard-widget-xiq_ap_status .xas-filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 4px 8px;
-    background: rgba(100, 150, 255, 0.08);
-    border-bottom: 1px solid rgba(100, 150, 255, 0.25);
-    font-size: 11px;
-    position: sticky;
-    top: 0;
-    z-index: 2;
+.xiq-search {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 4px 24px 4px 8px;
+	border: 1px solid var(--xiq-menu-border, #ccc);
+	border-radius: 4px;
+	font-size: 11px;
+	background: transparent;
+	color: inherit;
+	outline: none;
 }
-div.dashboard-widget-xiq_ap_status .xas-filter-bar[hidden] {
-    display: none;
+.xiq-search:focus {
+	border-color: #4a90d9;
+	box-shadow: 0 0 0 2px rgba(74,144,217,.18);
 }
-div.dashboard-widget-xiq_ap_status .xas-filter-label {
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    flex: 1 1 auto;
+/* Hide the browser's built-in × on search inputs */
+.xiq-search::-webkit-search-cancel-button { display: none; }
+
+.xiq-search-clear {
+	position: absolute;
+	right: 5px;
+	top: 50%;
+	transform: translateY(-50%);
+	background: none;
+	border: none;
+	padding: 0 2px;
+	cursor: pointer;
+	font-size: 13px;
+	line-height: 1;
+	color: var(--xiq-text-muted, #888);
+	opacity: 0.6;
 }
-div.dashboard-widget-xiq_ap_status .xas-filter-clear {
-    flex: 0 0 auto;
-    padding: 2px 10px;
-    font-size: 11px;
-    font-family: inherit;
-    color: inherit;
-    background: rgba(127, 127, 127, 0.15);
-    border: 1px solid rgba(127, 127, 127, 0.3);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 0.12s ease;
+.xiq-search-clear:hover { opacity: 1; }
+
+.xiq-page-size-wrap {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
 }
-div.dashboard-widget-xiq_ap_status .xas-filter-clear:hover {
-    background: rgba(127, 127, 127, 0.28);
+.xiq-page-size-label {
+	font-size: 11px;
+	color: var(--xiq-text-muted, #888);
 }
-div.dashboard-widget-xiq_ap_status .xas-filter-clear:focus {
-    outline: 2px solid rgba(100, 150, 255, 0.55);
-    outline-offset: 1px;
+.xiq-page-size {
+	font-size: 11px;
+	padding: 3px 4px;
+	border: 1px solid var(--xiq-menu-border, #ccc);
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
 }
 
-/* ---------- Clickable rows ---------- */
+/* ── Clickable rows / selected state ─────────────────────────────────── */
+.xiq-row {
+	cursor: pointer;
+	transition: background-color 0.1s;
+}
+.xiq-row:hover {
+	background-color: var(--xiq-row-hover, rgba(0,0,0,.04));
+}
+.xiq-row--selected,
+.xiq-row--selected:hover {
+	background-color: rgba(74, 144, 217, 0.12) !important;
+	outline: 1px solid rgba(74, 144, 217, 0.4);
+	outline-offset: -1px;
+}
 
-div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable {
-    cursor: pointer;
-    transition: background 0.10s ease;
+/* ── Pagination bar ───────────────────────────────────────────────────── */
+.xiq-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 6px;
+	font-size: 11px;
+	flex-wrap: wrap;
+	min-height: 26px;
 }
-div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable:hover {
-    background: rgba(100, 150, 255, 0.12);
+.xiq-page-info {
+	color: var(--xiq-text-muted, #888);
+	white-space: nowrap;
 }
-div.dashboard-widget-xiq_ap_status table.xas-table tbody tr.xas-row-clickable a:hover {
-    border-bottom-style: solid;
+.xiq-filter-note {
+	opacity: 0.75;
+	font-style: italic;
+}
+.xiq-page-nav {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+}
+.xiq-page-btn,
+.xiq-page-num {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 26px;
+	height: 22px;
+	padding: 0 6px;
+	border: 1px solid var(--xiq-menu-border, #ccc);
+	border-radius: 3px;
+	background: transparent;
+	color: inherit;
+	font-size: 11px;
+	cursor: pointer;
+	transition: background-color 0.12s, border-color 0.12s;
+	line-height: 1;
+}
+.xiq-page-btn:hover:not(:disabled),
+.xiq-page-num:hover:not(.xiq-page-num--active) {
+	background-color: var(--xiq-menu-hover, rgba(0,0,0,.06));
+	border-color: #4a90d9;
+}
+.xiq-page-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+.xiq-page-num--active {
+	background-color: #4a90d9;
+	border-color: #3a80c9;
+	color: #fff;
+	font-weight: 600;
+	cursor: default;
+}
+.xiq-page-ellipsis {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 2px;
+	color: var(--xiq-text-muted, #888);
+	font-size: 11px;
+	user-select: none;
+}
+
+/* Dark-mode pagination adjustments */
+@media (prefers-color-scheme: dark) {
+	.xiq-page-num--active {
+		background-color: #3a7bc8;
+		border-color: #2a6bb8;
+	}
+	.xiq-row--selected,
+	.xiq-row--selected:hover {
+		background-color: rgba(58, 123, 200, 0.18) !important;
+		outline-color: rgba(58, 123, 200, 0.45);
+	}
+}
+
+/* Zabbix dark-theme selector overrides */
+[theme="dark-theme"] .xiq-page-num--active,
+[color-scheme="dark"] .xiq-page-num--active {
+	background-color: #3a7bc8;
+	border-color: #2a6bb8;
+}
+[theme="dark-theme"] .xiq-row--selected,
+[color-scheme="dark"] .xiq-row--selected {
+	background-color: rgba(58, 123, 200, 0.18) !important;
+	outline-color: rgba(58, 123, 200, 0.45);
 }

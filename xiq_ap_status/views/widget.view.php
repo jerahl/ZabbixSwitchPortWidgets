@@ -1,86 +1,130 @@
-<?php
+<?php declare(strict_types=0);
 /**
- * XIQ AP status widget — view template.
+ * XIQ AP Status — view template.
  *
- * Mirrors milestone_camera_status: server-renders the summary tile shells
- * + table header, and embeds the live data payload as a JSON blob inside
- * <script type="application/json">. The JS class extracts the blob on
- * each setContents call. We can't return data alongside the body because
- * Zabbix's widget framework strips everything except {name, body, debug}.
+ * Renders summary tiles, an empty table shell, and a JSON payload blob.
+ * The JS reads the payload, fills the table, and wires up kebab actions.
+ *
+ * Toolbar (search + page-size) and .xiq-pagination are rendered as empty
+ * placeholder elements here; JS fills and wires them via _wireSearch(),
+ * _wirePageSizeSelect(), and _renderPagination().
  *
  * @var CView $this
  * @var array $data
  */
 
-declare(strict_types=0);
+$payload = $data['data'] ?? [];
 
-$body = (new CDiv())->addClass('xas-body');
+$body = (new CDiv())->addClass('xiq-body');
 
-$payload = [
-    'summary'      => $data['summary']      ?? [],
-    'rows'         => $data['rows']         ?? [],
-    'error'        => $data['error']        ?? null,
-    'truncated'    => $data['truncated']    ?? false,
-    'truncated_at' => $data['truncated_at'] ?? null,
-    'debug_info'   => $data['debug_info']   ?? null,
-];
-
+// JSON-in-HTML payload — consistent with how the camera-status widget
+// hands data to its JS class (Zabbix's widget framework strips extra keys
+// from the AJAX response, so this is the reliable channel).
 $body->addItem(
-    (new CTag('script', true, json_encode(
-        $payload,
-        JSON_HEX_TAG | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-    )))
-        ->setAttribute('type', 'application/json')
-        ->addClass('xas-data')
+	(new CTag('script', true, json_encode(
+		$payload,
+		JSON_HEX_TAG | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+	)))
+		->setAttribute('type', 'application/json')
+		->addClass('xiq-data')
 );
 
-$summary = (new CDiv())->addClass('xas-summary');
+// Summary tile row.
+$summary = (new CDiv())->addClass('xiq-summary');
 foreach ([
-    'total'           => [_('Total'),     'xas-tile--total'],
-    'ok'              => [_('OK'),        'xas-tile--ok'],
-    'config_mismatch' => [_('Mismatch'),  'xas-tile--mismatch'],
-    'disconnected'    => [_('Offline'),   'xas-tile--offline'],
-    'no_data'         => [_('No data'),   'xas-tile--nodata'],
+	'total'         => [_('Total APs'),     'xiq-tile--total'],
+	'connected'     => [_('Connected'),     'xiq-tile--connected'],
+	'disconnected'  => [_('Disconnected'),  'xiq-tile--disconnected'],
+	'cfg_mismatch'  => [_('Config drift'),  'xiq-tile--mismatch'],
+	'clients_total' => [_('Active clients'),'xiq-tile--clients'],
 ] as $field => [$label, $cls]) {
-    $summary->addItem(
-        (new CDiv())
-            ->addClass('xas-tile')
-            ->addClass($cls)
-            ->setAttribute('data-field', $field)
-            ->addItem((new CDiv('—'))->addClass('xas-tile-value'))
-            ->addItem((new CDiv($label))->addClass('xas-tile-label'))
-    );
+	$summary->addItem(
+		(new CDiv())
+			->addClass('xiq-tile')
+			->addClass($cls)
+			->setAttribute('data-field', $field)
+			->addItem((new CDiv(''))->addClass('xiq-tile__count'))
+			->addItem((new CDiv($label))->addClass('xiq-tile__label'))
+	);
 }
 $body->addItem($summary);
 
-$thead = (new CTag('thead', true))->addItem(
-    (new CTag('tr', true))
-        ->addItem((new CTag('th', true, _('Severity')))->setAttribute('data-sort', 'status'))
-        ->addItem((new CTag('th', true, _('AP')))->setAttribute('data-sort', 'ap_name'))
-        ->addItem((new CTag('th', true, _('MAC')))->setAttribute('data-sort', 'mac'))
-        ->addItem((new CTag('th', true, _('IP')))->setAttribute('data-sort', 'ip'))
-        ->addItem((new CTag('th', true, _('Last check')))->setAttribute('data-sort', 'lastclock'))
-);
-$tbody = (new CTag('tbody', true))->addClass('xas-rows');
+// Error banner placeholder.
+$body->addItem((new CDiv())->addClass('xiq-error-banner')->addStyle('display:none'));
 
-$table = (new CTag('table', true))
-    ->addClass('xas-table')
-    ->addItem($thead)
-    ->addItem($tbody);
+// Truncation banner placeholder.
+$body->addItem((new CDiv())->addClass('xiq-truncated-banner')->addStyle('display:none'));
 
-$body->addItem(
-    (new CDiv())
-        ->addClass('xas-table-wrap')
-        ->addItem($table)
-);
+// ── Toolbar: search input + page-size selector ────────────────────────
+// JS wires these up in _wireSearch() and _wirePageSizeSelect().
+$toolbar = (new CDiv())->addClass('xiq-toolbar');
 
-$body->addItem(
-    (new CDiv())
-        ->addClass('xas-empty')
-        ->setAttribute('hidden', 'hidden')
-        ->addItem((new CDiv())->addClass('xas-empty-msg'))
-);
+// Search wrapper (includes the × clear button)
+$search_wrap = (new CDiv())->addClass('xiq-search-wrap');
+$search_input = (new CTag('input', false))
+	->setAttribute('type', 'search')
+	->setAttribute('placeholder', _('Filter by name, serial, MAC, IP…'))
+	->setAttribute('autocomplete', 'off')
+	->setAttribute('spellcheck', 'false')
+	->addClass('xiq-search');
+$search_clear = (new CTag('button', true, '×'))
+	->setAttribute('type', 'button')
+	->setAttribute('aria-label', _('Clear filter'))
+	->addClass('xiq-search-clear');
+$search_wrap->addItem($search_input);
+$search_wrap->addItem($search_clear);
+
+// Page-size selector
+$page_size_wrap = (new CDiv())->addClass('xiq-page-size-wrap');
+$page_size_label = (new CTag('label', true, _('Rows:')))->addClass('xiq-page-size-label');
+$page_size_sel = (new CTag('select', true, ''))->addClass('xiq-page-size');
+foreach ([10, 25, 50, 100] as $n) {
+	$page_size_sel->addItem(
+		(new CTag('option', true, (string)$n))
+			->setAttribute('value', (string)$n)
+			->setAttribute($n === 25 ? 'selected' : 'x', $n === 25 ? 'selected' : null)
+	);
+}
+$page_size_wrap->addItem($page_size_label);
+$page_size_wrap->addItem($page_size_sel);
+
+$toolbar->addItem($search_wrap);
+$toolbar->addItem($page_size_wrap);
+$body->addItem($toolbar);
+
+// Table shell — JS replaces tbody contents.
+$table = (new CTable())
+	->addClass('xiq-table')
+	->setHeader([
+		(new CColHeader(_('AP')))->setAttribute('data-sort', 'name'),
+		(new CColHeader(_('Status')))->setAttribute('data-sort', 'connected'),
+		(new CColHeader(_('IP')))->setAttribute('data-sort', 'ip'),
+		(new CColHeader(_('Clients')))->setAttribute('data-sort', 'clients'),
+		(new CColHeader(_('Version')))->setAttribute('data-sort', 'version'),
+		(new CColHeader(_('Last seen')))->setAttribute('data-sort', 'last_connect'),
+		(new CColHeader(_('Uptime')))->setAttribute('data-sort', 'uptime'),
+		new CColHeader(''), // kebab column, not sortable
+	]);
+// Empty tbody — JS fills it.
+$table->addItem((new CTag('tbody', true))->addClass('xiq-tbody'));
+$body->addItem($table);
+
+// ── Pagination bar — JS renders content into this container ───────────
+$body->addItem((new CDiv())->addClass('xiq-pagination'));
+
+// Optional debug panel (server-rendered; JS shows/hides as needed).
+if (!empty($payload['show_debug'])) {
+	$body->addItem(
+		(new CDiv())
+			->addClass('xiq-debug')
+			->addItem(new CTag('h4', true, _('Debug')))
+			->addItem((new CTag('pre', true, json_encode(
+				$payload['debug'] ?? [],
+				JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+			)))->addClass('xiq-debug__pre'))
+	);
+}
 
 (new CWidgetView($data))
-    ->addItem($body)
-    ->show();
+	->addItem($body)
+	->show();
