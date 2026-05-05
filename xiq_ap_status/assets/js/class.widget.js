@@ -568,11 +568,23 @@ class WidgetXiqApStatus extends CWidget {
 
 		// Build kebab menu items per enabled action.
 		const items = [];
-		const xiq_href = (urls.xiq_admin_url && r.xiq_id)
-			? `${urls.xiq_admin_url}/devices/${encodeURIComponent(r.xiq_id)}`
-			: '';
+		// "Open in XIQ" target: extremeplatformone.com is a single-page app
+		// without URL routing, so we can't deep-link to the specific device.
+		// We land the operator on the device list and copy the AP's serial
+		// to the clipboard (handled in _handleAction) so they paste-and-search.
+		// The {id} placeholder is still substituted if present, so any user
+		// who DOES have a routable EP1 path (or is still on legacy
+		// extremecloudiq.com which deep-linked) keeps the old behavior.
+		const xiq_path_tpl = urls.xiq_admin_path || '/devices';
+		const xiq_path = (r.xiq_id && xiq_path_tpl.indexOf('{id}') !== -1)
+			? xiq_path_tpl.replace('{id}', encodeURIComponent(r.xiq_id))
+			: xiq_path_tpl;
+		const xiq_href = urls.xiq_admin_url ? `${urls.xiq_admin_url}${xiq_path}` : '';
 		if (xiq_href) {
-			items.push(`<a class="xiq-menu__item" href="${xiq_href}" target="_blank" rel="noopener">Open in XIQ</a>`);
+			const tip = r.serial
+				? `Opens Extreme Platform ONE; serial ${r.serial} copied to clipboard for paste-search`
+				: 'Opens Extreme Platform ONE device list';
+			items.push(`<a class="xiq-menu__item" href="${xiq_href}" target="_blank" rel="noopener" data-act="open" title="${tip}">Open in XIQ</a>`);
 		}
 		if (flags.enable_refresh) {
 			items.push(`<button class="xiq-menu__item" data-act="refresh" type="button">Refresh now</button>`);
@@ -684,6 +696,19 @@ class WidgetXiqApStatus extends CWidget {
 
 	async _handleAction(op, ctx) {
 		const tr = ctx.tr;
+
+		if (op === 'open') {
+			// "Open in XIQ" is rendered as an <a target="_blank">, so the
+			// browser handles navigation. We just copy the serial here so
+			// the operator can paste it into Extreme Platform ONE's search
+			// box — the SPA has no URL routing so we can't deep-link.
+			// Clipboard write is async; we don't await because we don't
+			// want to delay the anchor's natural navigation.
+			if (ctx.serial && navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(ctx.serial).catch(() => { /* ignore */ });
+			}
+			return;
+		}
 
 		if (op === 'reboot') {
 			if (!confirm(`Reboot ${ctx.name}? The AP will drop clients while it restarts.`)) return;

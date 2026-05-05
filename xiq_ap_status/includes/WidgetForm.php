@@ -35,7 +35,22 @@ use Zabbix\Widgets\Fields\{
 class WidgetForm extends CWidgetForm {
 
 	public const DEFAULT_XIQ_URL       = 'https://api.extremecloudiq.com';
-	public const DEFAULT_XIQ_ADMIN_URL = 'https://extremecloudiq.com';
+	public const DEFAULT_XIQ_ADMIN_URL = 'https://extremeplatformone.com';
+	/**
+	 * Path appended to xiq_admin_url to produce the "Open in XIQ" target.
+	 * Extreme Platform ONE is a single-page app that doesn't update the
+	 * URL bar on navigation, so deep-linking to a specific device isn't
+	 * possible — the best we can do is land the operator on the device
+	 * list. To make that less painful, the kebab handler also copies the
+	 * AP's serial number to the clipboard, so the operator can paste it
+	 * straight into EP1's search box.
+	 *
+	 * The {id} placeholder is still supported: if EP1 ever gains true
+	 * URL routing (or for sites still on the legacy extremecloudiq.com
+	 * UI which DID deep-link), put a path like "/devices/{id}" here and
+	 * the JS will substitute the device's XIQ numeric ID.
+	 */
+	public const DEFAULT_XIQ_ADMIN_PATH = '/devices';
 	public const DEFAULT_TOKEN_PATH    = '/etc/zabbix/secrets/xiq_action_token';
 
 	/**
@@ -74,6 +89,10 @@ class WidgetForm extends CWidgetForm {
 			->addField(
 				(new CWidgetFieldTextBox('xiq_admin_url', _('XIQ admin UI URL (for "Open in XIQ")')))
 					->setDefault(self::DEFAULT_XIQ_ADMIN_URL)
+			)
+			->addField(
+				(new CWidgetFieldTextBox('xiq_admin_path', _('XIQ admin UI device path (use {id} for device ID)')))
+					->setDefault(self::DEFAULT_XIQ_ADMIN_PATH)
 			)
 			->addField(
 				(new CWidgetFieldCheckBox('verify_ssl', _('Verify TLS certificate on action calls')))

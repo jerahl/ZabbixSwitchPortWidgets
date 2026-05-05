@@ -27,8 +27,19 @@ allow-listed `show` commands).
    - **XIQ host**: pick the Zabbix host with the XIQ template linked.
    - **Max table rows**: default 1500 — fine for fleets up to that size.
    - **XIQ admin UI URL**: used for the "Open in XIQ" link in the kebab
-     menu. Default `https://extremecloudiq.com`. The widget appends
-     `/devices/{xiq_id}` to this.
+     menu. Default `https://extremeplatformone.com` (Extreme migrated
+     the customer-facing UI from `extremecloudiq.com` to Extreme Platform
+     ONE in late 2025; existing widgets saved before the migration will
+     still have the old host and need to be edited to update it).
+   - **XIQ admin UI device path**: appended to the admin UI URL. Default
+     `/devices`, which lands on EP1's device list. EP1 is a single-page
+     app that doesn't update its URL on navigation, so true deep-linking
+     to a specific device isn't possible — to compensate, "Open in XIQ"
+     also copies the AP's serial number to the clipboard, so the
+     operator can paste-and-search in EP1's filter bar. The `{id}`
+     placeholder is still supported (substituted with the device's XIQ
+     numeric ID at click time) for sites still on the legacy deep-linkable
+     UI or in case EP1 ever gains URL routing.
    - **Action toggles**: all OFF by default. Enable only what you want
      dashboard users to be able to do.
 

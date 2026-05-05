@@ -392,11 +392,24 @@ class WidgetView extends CControllerDashboardWidgetView
         return (int)round($sec / 3600) . 'h';
     }
 
+    /**
+     * Normalize a MAC address to the canonical lowercase colon-separated form
+     * (aa:bb:cc:dd:ee:ff) that PacketFence's API expects.
+     *
+     * Accepts any input that boils down to exactly 12 hex digits — colons,
+     * dashes, dots, bare hex, mixed case all welcome. This matters because
+     * different source widgets hand us MACs in different formats: switchports'
+     * FDB items emit colon-separated, the camera widget passes them through
+     * unchanged, and XIQ's API returns bare 12-digit hex (e.g. 34858460A500).
+     *
+     * Returns '' if the input doesn't reduce to 12 hex digits.
+     */
     private static function normalizeMac(string $raw): string
     {
         if ($raw === '') return '';
-        $candidate = strtolower(str_replace('-', ':', trim($raw)));
-        return preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $candidate) ? $candidate : '';
+        $hex = strtolower((string) preg_replace('/[^0-9a-f]/i', '', trim($raw)));
+        if (strlen($hex) !== 12) return '';
+        return implode(':', str_split($hex, 2));
     }
 
     /**

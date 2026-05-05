@@ -6,6 +6,7 @@ use API;
 use CControllerDashboardWidgetView;
 use CControllerResponseData;
 use CWebUser;
+use Modules\XiqApStatus\Includes\WidgetForm;
 
 /**
  * XIQ AP Status — read-side controller.
@@ -110,6 +111,14 @@ class WidgetView extends CControllerDashboardWidgetView {
 					'xiq_id' => $xiq_id,
 					'name'   => '',          // hostname; pulled from item name suffix
 				];
+			} else {
+				// Backfill from later items if the first one we processed for
+				// this serial happened to lack the ap_mac / ap_id tag. Zabbix's
+				// item-search API doesn't guarantee ordering, so a single
+				// prototype missing a tag would otherwise blank these fields
+				// permanently for the affected AP.
+				if ($grouped[$serial]['mac']    === '' && $mac    !== '') $grouped[$serial]['mac']    = $mac;
+				if ($grouped[$serial]['xiq_id'] === '' && $xiq_id !== '') $grouped[$serial]['xiq_id'] = $xiq_id;
 			}
 			// Item names are shaped "AP <hostname>: <metric>" (per template) — we
 			// capture the first one we see and parse <hostname> out of it.
@@ -205,9 +214,17 @@ class WidgetView extends CControllerDashboardWidgetView {
 	}
 
 	private function urlFields(): array {
+		// Trim only trailing slashes from the host; leave the path template
+		// alone — it's interpolated client-side and may legitimately end
+		// in something other than the device ID placeholder.
+		$path = (string) ($this->fields_values['xiq_admin_path'] ?? '');
+		if ($path === '') {
+			$path = WidgetForm::DEFAULT_XIQ_ADMIN_PATH;
+		}
 		return [
-			'xiq_url'       => rtrim((string) ($this->fields_values['xiq_url']       ?? ''), '/'),
-			'xiq_admin_url' => rtrim((string) ($this->fields_values['xiq_admin_url'] ?? ''), '/'),
+			'xiq_url'        => rtrim((string) ($this->fields_values['xiq_url']       ?? ''), '/'),
+			'xiq_admin_url'  => rtrim((string) ($this->fields_values['xiq_admin_url'] ?? ''), '/'),
+			'xiq_admin_path' => $path,
 		];
 	}
 

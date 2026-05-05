@@ -12,6 +12,7 @@
 	->addField(new CWidgetFieldCheckBoxView($data['fields']['show_disconnected_first']))
 	->addField(new CWidgetFieldTextBoxView($data['fields']['xiq_url']))
 	->addField(new CWidgetFieldTextBoxView($data['fields']['xiq_admin_url']))
+	->addField(new CWidgetFieldTextBoxView($data['fields']['xiq_admin_path']))
 	->addField(new CWidgetFieldCheckBoxView($data['fields']['verify_ssl']))
 	->addField(new CWidgetFieldCheckBoxView($data['fields']['enable_refresh']))
 	->addField(new CWidgetFieldCheckBoxView($data['fields']['enable_reboot']))
