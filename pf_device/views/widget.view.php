@@ -171,10 +171,11 @@ function pfdRenderDevice(array $dev, string $pf_admin_url): string {
         $out .= '<button type="button" class="pf-action pf-action--reeval"'
             . ' data-pf-action="reevaluate_access" data-pf-mac="' . $mac_attr . '"'
             . ' title="Re-apply PacketFence access policy for this MAC">Reevaluate access</button>';
-        $out .= '<button type="button" class="pf-action pf-action--restart"'
-            . ' data-pf-action="restart_switchport" data-pf-mac="' . $mac_attr . '"'
-            . ' title="Bounce the switch port this MAC is connected to">Restart switchport</button>';
-
+        if (!empty($loc['iface_name'])) {
+            $out .= '<button type="button" class="pf-action pf-action--restart"'
+                . ' data-pf-action="restart_switchport" data-pf-mac="' . $mac_attr . '"'
+                . ' title="Bounce the switch port this MAC is connected to">Restart switchport</button>';
+        }
         if (is_array($loc) && !empty($loc['switch_hostid']) && !empty($loc['iface_name'])) {
             $sw_hid    = (int)$loc['switch_hostid'];
             $snmp_idx  = (int)($loc['snmp_index'] ?? 0);
