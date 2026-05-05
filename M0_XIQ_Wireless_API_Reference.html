@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M0 — XIQ API Reference: Wireless &amp; Radio Metrics</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --info:     #0ea5e9;
+  --info2:    #0d1f3a;
+  --info3:    #1a3a6a;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 48px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.brand {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--acc);
+  margin-bottom: 8px;
+}
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-meta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg2);
+}
+.header-meta span { color: var(--fg); font-weight: 600; }
+
+/* ── Content ── */
+.main { padding: 32px 48px 64px; max-width: 980px; }
+
+section { margin-bottom: 40px; }
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h2 .sec-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: .06em;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 20px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+p { color: var(--fg2); font-size: 13.5px; margin-bottom: 10px; }
+p:last-child { margin-bottom: 0; }
+
+/* ── Callout boxes ── */
+.callout {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 14px 0;
+}
+.callout strong { font-weight: 600; }
+.callout.warn  { background: var(--warn2); border-left: 3px solid var(--warn); color: #fcd34d; }
+.callout.ok    { background: var(--ok2);   border-left: 3px solid var(--ok);   color: #86efac; }
+.callout.info  { background: var(--info2); border-left: 3px solid var(--info); color: #7dd3fc; }
+.callout.err   { background: var(--err2);  border-left: 3px solid var(--err);  color: #fca5a5; }
+
+/* ── Endpoint card ── */
+.endpoint {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.ep-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.method {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 4px;
+  letter-spacing: .06em;
+}
+.method.get  { background: #0d2a1a; color: #4ade80; border: 1px solid #1a4a2a; }
+.method.post { background: #0d1f3a; color: #60a5fa; border: 1px solid #1a3a6a; }
+.ep-path {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg);
+  flex: 1;
+}
+.ep-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  border: 1px solid var(--xiq3);
+  color: #34d399;
+  background: var(--xiq2);
+}
+.ep-tag.confirmed { background: var(--ok2); border-color: var(--ok3); color: #86efac; }
+.ep-tag.inferred  { background: var(--warn2); border-color: var(--warn3); color: #fcd34d; }
+.ep-tag.missing   { background: var(--err2); border-color: var(--err3); color: #fca5a5; }
+.ep-body { padding: 14px 16px; }
+.ep-desc { font-size: 13px; color: var(--fg2); margin-bottom: 14px; }
+
+/* ── Field table ── */
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.field-table th {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.field-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line2);
+  vertical-align: top;
+}
+.field-table tr:last-child td { border-bottom: none; }
+.field-table tr:hover td { background: rgba(255,255,255,.015); }
+.field-name {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #7dd3fc;
+  white-space: nowrap;
+}
+.field-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg3);
+  white-space: nowrap;
+}
+.field-unit {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #fcd34d;
+  white-space: nowrap;
+}
+.field-desc { color: var(--fg2); font-size: 12.5px; }
+.field-status {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.fs-confirmed { background: var(--ok2);   border: 1px solid var(--ok3);   color: #86efac; }
+.fs-inferred  { background: var(--warn2); border: 1px solid var(--warn3); color: #fcd34d; }
+.fs-tbd       { background: var(--err2);  border: 1px solid var(--err3);  color: #fca5a5; }
+
+/* ── Code block ── */
+pre {
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #e6edf3;
+  overflow-x: auto;
+  margin: 10px 0;
+  line-height: 1.7;
+}
+pre .cm  { color: var(--fg3); }
+pre .k   { color: #ff7b72; }
+pre .s   { color: #a5d6ff; }
+pre .n   { color: #79c0ff; }
+pre .v   { color: #4ade80; }
+pre .p   { color: var(--fg3); }
+pre .num { color: #f2cc60; }
+
+/* ── Rate limit bar ── */
+.rate-viz {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+.rate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rate-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg2);
+  width: 180px;
+  flex-shrink: 0;
+}
+.rate-bar-wrap {
+  flex: 1;
+  height: 16px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rate-bar {
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+  transition: width .4s ease;
+}
+.rate-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg3);
+  white-space: nowrap;
+}
+
+/* ── Decision table ── */
+.decision-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.decision-table th {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  text-align: left;
+  padding: 8px 14px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.decision-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line2);
+  vertical-align: top;
+}
+.decision-table tr:last-child td { border-bottom: none; }
+.decision-table tr:hover td { background: rgba(255,255,255,.015); }
+.metric { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+.source-zbx  { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: #1c1a3a; border: 1px solid #3a366a; color: #a78bfa; }
+.source-xiq  { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--xiq2); border: 1px solid var(--xiq3); color: #34d399; }
+.source-zbx-fallback { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: #2a1f0d; border: 1px solid #4a3a1a; color: #fcd34d; }
+.history-yes { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.history-no  { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--err2); border: 1px solid var(--err3); color: #fca5a5; }
+.sparkline-yes { color: #86efac; }
+.sparkline-no  { color: #fca5a5; }
+.sparkline-cur { color: #fcd34d; }
+
+code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg3);
+  color: var(--fg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">AP Dashboard · M0 Deliverable</div>
+    <h1>XIQ API Reference — Wireless &amp; Radio Metrics</h1>
+    <div class="subtitle">Endpoint paths · response schemas · rate limits · time-series verdict · Zabbix-only scope</div>
+  </div>
+  <div class="header-meta">
+    <div>XIQ API version <span>25.9.0-36 (Apr 2026)</span></div>
+    <div>Spec source <span>api.extremecloudiq.com/openapi</span></div>
+    <div>Milestone <span>M0 — Foundation</span></div>
+    <div>Status <span style="color:var(--warn)">Pending live AP validation</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ── SECTION 0: Critical path corrections ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--err2);color:#fca5a5;border:1px solid var(--err3)">!</span> Critical Corrections to M0 Assumed Paths</h2>
+
+  <div class="callout err">
+    <strong>The endpoint paths in the project plan are WRONG.</strong> The plan assumed
+    <code>/xapi/v1/monitor/devices/{id}/wifi-data</code> and
+    <code>/xapi/v1/monitor/devices/{id}/clients</code>. The live OpenAPI spec (v25.9.0, April 2026)
+    has no <code>/xapi/</code> prefix and no <code>/monitor/</code> path tier.
+    The correct base URL is <code>https://api.extremecloudiq.com</code> and endpoints use version-less
+    or versioned paths directly. Specific corrections are documented per endpoint below.
+  </div>
+
+  <div class="callout warn">
+    <strong>Client data is NOT a per-device endpoint.</strong> The <code>/clients</code> endpoint is a
+    global query filtered by parameters (device ID, MAC, location, SSID, etc.), not
+    <code>/devices/{id}/clients</code>. Confirm the correct filter parameter against the live AP during
+    M0 validation.
+  </div>
+
+  <div class="callout ok">
+    <strong>"Get device WiFi interface stats" DOES exist.</strong> This is confirmed in the live API
+    reference ToC under the Device section. It is the closest match to the planned
+    <code>wifi-data</code> endpoint. Exact path and response schema require live validation against
+    BHS-56-Hallway (device ID to be looked up via <code>GET /devices</code> search by serial or hostname).
+  </div>
+</section>
+
+<!-- ── SECTION 1: Auth ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">1</span> Authentication</h2>
+
+  <p>Two auth flows are available. Use API Token for the widget — it avoids credential storage and has an independently revocable key.</p>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/login</span>
+      <span class="ep-tag confirmed">Confirmed</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Username + password login. Returns a short-lived JWT bearer token.
+        Token lifetime is approximately 2 hours based on XIQ Controller docs
+        (<code>"expires_in": 7200</code>). <strong>Not recommended for widgets</strong> — use the API Token flow below.</div>
+<pre>
+<span class="cm">// Request</span>
+<span class="p">{</span>
+  <span class="n">"username"</span><span class="p">:</span> <span class="s">"apiuser@tcs.k12.al.us"</span><span class="p">,</span>
+  <span class="n">"password"</span><span class="p">:</span> <span class="s">"…"</span>
+<span class="p">}</span>
+
+<span class="cm">// Response — 200 OK</span>
+<span class="p">{</span>
+  <span class="n">"access_token"</span><span class="p">:</span> <span class="s">"eyJhbGci…"</span><span class="p">,</span>  <span class="cm">// JWT, ~2h lifetime</span>
+  <span class="n">"token_type"</span><span class="p">:</span>   <span class="s">"Bearer"</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/auth/apitoken</span>
+      <span class="ep-tag confirmed">Confirmed</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Creates a long-lived API access token. This is the correct credential type for
+        the widget. Store the generated token in a Zabbix global macro
+        (<code>{$XIQ_API_TOKEN}</code>). Token does not expire on a fixed timer but can be
+        individually revoked in the XIQ Administration → API Access Tokens UI.</div>
+<pre>
+<span class="cm">// Request (requires existing bearer token to authorize creation)</span>
+<span class="cm">// Authorization: Bearer &lt;login_token&gt;</span>
+<span class="p">{</span>
+  <span class="n">"description"</span><span class="p">:</span> <span class="s">"Zabbix AP Dashboard widget"</span>
+<span class="p">}</span>
+
+<span class="cm">// Response — 200 OK</span>
+<span class="p">{</span>
+  <span class="n">"token"</span><span class="p">:</span> <span class="s">"…"</span>  <span class="cm">// store in {$XIQ_API_TOKEN} — shown once</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>Widget auth strategy:</strong> Generate the API Token once via the XIQ web UI or a
+    one-time CLI script. Store it in a Zabbix global macro. In
+    <code>XIQClient.php</code>, send it as <code>Authorization: Bearer {$XIQ_API_TOKEN}</code> on
+    every request — no token refresh loop required. On 401, surface an error (the token has likely
+    been revoked) rather than attempting re-auth with stored credentials.
+  </div>
+</section>
+
+<!-- ── SECTION 2: Device identity ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">2</span> Device Identity + Config Fields</h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}</span>
+      <span class="ep-tag confirmed">Confirmed in live spec</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Full device detail for one device. The XIQ internal device ID is different from the
+        Zabbix host ID — obtain it once by searching <code>GET /devices?hostname=BHS-56-Hallway</code>
+        or filtering by serial number, then store as a Zabbix host inventory field
+        (<code>tag</code> or <code>notes</code>). Subsequent widget loads use the stored XIQ ID.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>Maps to</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="field-name">id</td><td class="field-type">int64</td><td class="field-desc">XIQ device ID — cache in Zabbix host inventory</td><td><span class="field-status fs-confirmed">Confirmed</span></td></tr>
+          <tr><td class="field-name">serial_number</td><td class="field-type">string</td><td class="field-desc">System Info: Serial</td><td><span class="field-status fs-confirmed">Confirmed</span></td></tr>
+          <tr><td class="field-name">product_type</td><td class="field-type">string</td><td class="field-desc">System Info: Model ("AP305C")</td><td><span class="field-status fs-confirmed">Confirmed</span></td></tr>
+          <tr><td class="field-name">software_version</td><td class="field-type">string</td><td class="field-desc">System Info: IQ Engine firmware + build</td><td><span class="field-status fs-inferred">Infer — validate field name</span></td></tr>
+          <tr><td class="field-name">mac_address</td><td class="field-type">string</td><td class="field-desc">Network Info: MAC (Mgt0)</td><td><span class="field-status fs-confirmed">Confirmed</span></td></tr>
+          <tr><td class="field-name">ip_address</td><td class="field-type">string</td><td class="field-desc">Network Info: Management IP</td><td><span class="field-status fs-inferred">Infer — validate field name</span></td></tr>
+          <tr><td class="field-name">network_policy_name</td><td class="field-type">string</td><td class="field-desc">System Info: Network Policy</td><td><span class="field-status fs-inferred">Infer — may be ID only; join to /network-policies/{id}</span></td></tr>
+          <tr><td class="field-name">connected_clients</td><td class="field-type">int32</td><td class="field-desc">Overview: client count summary</td><td><span class="field-status fs-inferred">Infer — validate presence</span></td></tr>
+          <tr><td class="field-name">config_status</td><td class="field-type">string/enum</td><td class="field-desc">System Info: Config type / sync status</td><td><span class="field-status fs-inferred">Infer — validate enum values</span></td></tr>
+          <tr><td class="field-name">last_updated</td><td class="field-type">int64 (unix ms)</td><td class="field-desc">Network Info: Last config push timestamp</td><td><span class="field-status fs-inferred">Infer — validate field name + unit</span></td></tr>
+          <tr><td class="field-name">ntp_server</td><td class="field-type">string</td><td class="field-desc">Network Info: NTP server</td><td><span class="field-status fs-tbd">TBD — may not be in device object</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>NTP server may not be on <code>/devices/{id}</code>.</strong> It might live in the
+        device configuration object or profile. Validate during M0 live test. If absent, it's
+        Zabbix-only from SNMP system config items.
+      </div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/cpu-memory</span>
+      <span class="ep-tag confirmed">Confirmed — listed as "Get device CPU/memory usage"</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-device CPU and memory utilization snapshot. Point-in-time only (no history). These metrics are <strong>also in Zabbix SNMP items with full history</strong> — use Zabbix for health rings and alerting, not this endpoint. Only call this if Zabbix data is temporarily unavailable.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: Wireless metrics (the critical one) ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">3</span> Per-Radio Wireless Metrics — THE Critical Endpoint</h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/wifi-if-stats</span>
+      <span class="ep-tag inferred">Path inferred — VALIDATE against live AP</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Listed in the API reference as <strong>"Get device WiFi interface stats"</strong> under the Device
+        section. This is the confirmed match for per-radio channel utilization, noise floor, TX power,
+        retry rate, channel, and channel width. The exact JSON path is inferred as
+        <code>/devices/{id}/wifi-if-stats</code> based on the API reference anchor
+        <code>#_get_device_wifi_interface_stats</code>. Validate the exact path and all field names
+        against BHS-56-Hallway before M1 implementation.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>Unit</th>
+            <th>Maps to UI</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="field-name">radio_index</td><td class="field-type">int</td><td class="field-unit">—</td><td class="field-desc">Radio card selector (0=2.4GHz, 1=5GHz on AP305C)</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+          <tr><td class="field-name">frequency_band</td><td class="field-type">string/enum</td><td class="field-unit">—</td><td class="field-desc">Radio card label: "2.4GHz" / "5GHz"</td><td><span class="field-status fs-inferred">Infer — may be MHz int</span></td></tr>
+          <tr><td class="field-name">channel</td><td class="field-type">int</td><td class="field-unit">—</td><td class="field-desc">Radio card: Channel number</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+          <tr><td class="field-name">channel_width</td><td class="field-type">int</td><td class="field-unit">MHz</td><td class="field-desc">Radio card: Width (20/40/80)</td><td><span class="field-status fs-inferred">Infer — may be string "80MHz"</span></td></tr>
+          <tr><td class="field-name">tx_power</td><td class="field-type">int</td><td class="field-unit">dBm</td><td class="field-desc">Radio card: TX Power</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+          <tr><td class="field-name">channel_utilization</td><td class="field-type">int/float</td><td class="field-unit">%</td><td class="field-desc">Live Telemetry: channel util (current value — no history)</td><td><span class="field-status fs-inferred">Infer — confirm range 0–100</span></td></tr>
+          <tr><td class="field-name">noise_floor</td><td class="field-type">int</td><td class="field-unit">dBm</td><td class="field-desc">Live Telemetry: noise floor (current value — no history)</td><td><span class="field-status fs-inferred">Infer — expect negative int e.g. -95</span></td></tr>
+          <tr><td class="field-name">tx_retry_rate</td><td class="field-type">int/float</td><td class="field-unit">%</td><td class="field-desc">Radio card: Retry rate</td><td><span class="field-status fs-tbd">TBD — name may differ</span></td></tr>
+          <tr><td class="field-name">associated_clients</td><td class="field-type">int</td><td class="field-unit">count</td><td class="field-desc">Radio card: Client count per band</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:14px">Response is likely an <strong>array of radio objects</strong> (one per radio), not a nested map. The AP305C has two radios (index 0 and 1). Validate the array structure on BHS-56-Hallway.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 4: TIME-SERIES VERDICT ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--err2);color:#fca5a5;border:1px solid var(--err3)">4</span> Answer: Does XIQ Expose Historical Time-Series? <span style="color:var(--err);font-size:13px;font-weight:400">— VERDICT: NO</span></h2>
+
+  <div class="callout err">
+    <strong>XIQ is point-in-time only for all wireless monitoring metrics.</strong>
+    The API exposes current snapshots, not time-series history. There are no
+    <code>start_time</code> / <code>end_time</code> parameters on the wifi-stats or client endpoints.
+    XIQ is a cloud management and configuration platform — it does not function as a TSDB.
+    Historical wireless telemetry for sparklines must come from Zabbix calculated items only.
+  </div>
+
+  <div class="decision-table" style="border-radius:6px;overflow:hidden;border:1px solid var(--line);margin-top:16px">
+    <table class="decision-table" style="border:none;margin:0">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Source</th>
+          <th>History?</th>
+          <th>Sparkline on Live Telemetry</th>
+          <th>Implementation note</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="metric">Uplink In/Out (bps)</td>
+          <td><span class="source-zbx">ZBX</span></td>
+          <td><span class="history-yes">YES</span></td>
+          <td class="sparkline-yes">✓ Full sparkline</td>
+          <td class="field-desc"><code>net.if.in/out[ifHighSpeed.N]</code> — Zabbix history.get</td>
+        </tr>
+        <tr>
+          <td class="metric">ICMP Latency</td>
+          <td><span class="source-zbx">ZBX</span></td>
+          <td><span class="history-yes">YES</span></td>
+          <td class="sparkline-yes">✓ Full sparkline</td>
+          <td class="field-desc">ICMP ping item — Zabbix history.get</td>
+        </tr>
+        <tr>
+          <td class="metric">Packet Loss</td>
+          <td><span class="source-zbx">ZBX</span></td>
+          <td><span class="history-yes">YES</span></td>
+          <td class="sparkline-yes">✓ Full sparkline</td>
+          <td class="field-desc">ICMP ping item — Zabbix history.get</td>
+        </tr>
+        <tr>
+          <td class="metric">Channel Utilization 2.4 GHz</td>
+          <td><span class="source-xiq">XIQ</span></td>
+          <td><span class="history-no">NO — snapshot only</span></td>
+          <td class="sparkline-cur">Current value badge, no curve</td>
+          <td class="field-desc">Show as numeric badge with % unit. Add tooltip: "XIQ provides current value only — historical trend unavailable."</td>
+        </tr>
+        <tr>
+          <td class="metric">Channel Utilization 5 GHz</td>
+          <td><span class="source-xiq">XIQ</span></td>
+          <td><span class="history-no">NO — snapshot only</span></td>
+          <td class="sparkline-cur">Current value badge, no curve</td>
+          <td class="field-desc">Same treatment as 2.4 GHz util</td>
+        </tr>
+        <tr>
+          <td class="metric">Noise Floor 2.4 GHz</td>
+          <td><span class="source-xiq">XIQ</span></td>
+          <td><span class="history-no">NO — snapshot only</span></td>
+          <td class="sparkline-cur">Current value badge, dBm unit</td>
+          <td class="field-desc">Show as signed integer e.g. −95 dBm</td>
+        </tr>
+        <tr>
+          <td class="metric">Noise Floor 5 GHz</td>
+          <td><span class="source-xiq">XIQ</span></td>
+          <td><span class="history-no">NO — snapshot only</span></td>
+          <td class="sparkline-cur">Current value badge, dBm unit</td>
+          <td class="field-desc">Same treatment as 2.4 GHz noise</td>
+        </tr>
+        <tr>
+          <td class="metric">TX Retry Rate</td>
+          <td><span class="source-xiq">XIQ</span></td>
+          <td><span class="history-no">NO — snapshot only</span></td>
+          <td class="sparkline-cur">Current value badge, % unit</td>
+          <td class="field-desc">Radio card panel only — not in Live Telemetry strip</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout info" style="margin-top:16px">
+    <strong>Alternative to consider:</strong> If channel utilization history is operationally important,
+    add a Zabbix SNMP item via the Extreme AP SNMP MIB (e.g.
+    <code>extremeWireless radioChannelUtilization</code> OID from the Extreme WIRELESS-MIB). This would
+    give Zabbix-stored history for a full sparkline. Confirm MIB availability on AP305C firmware 10.7rx
+    before adding to the template — only add if XIQ truly cannot provide history. Decision needed by end
+    of M0.
+  </div>
+</section>
+
+<!-- ── SECTION 5: Client endpoint ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">5</span> Connected Client List</h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/clients</span>
+      <span class="ep-tag inferred">Path confirmed in spec — filter param TBD</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Global client list endpoint. Filter to a specific AP using a query parameter — the project plan
+        assumed a per-device path (<code>/devices/{id}/clients</code>) but the live spec places clients
+        in a separate <code>Client</code> API group with a flat list + filter approach.
+        <strong>During M0 live validation, confirm:</strong> (a) whether <code>?device_id={id}</code>
+        or <code>?ap_mac={mac}</code> or another parameter filters to a single AP, and (b) what
+        pagination model applies (page/size, cursor, or offset).
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>Unit</th>
+            <th>Maps to Clients tab</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="field-name">mac_address</td><td class="field-type">string</td><td class="field-unit">—</td><td class="field-desc">JOIN key with PF node record</td><td><span class="field-status fs-confirmed">Confirmed — Client API has MAC</span></td></tr>
+          <tr><td class="field-name">hostname</td><td class="field-type">string</td><td class="field-unit">—</td><td class="field-desc">Client row: Device name</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+          <tr><td class="field-name">ssid</td><td class="field-type">string</td><td class="field-unit">—</td><td class="field-desc">Client row: SSID — validate vs. PF SSID field</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+          <tr><td class="field-name">rssi</td><td class="field-type">int</td><td class="field-unit">dBm</td><td class="field-desc">Client row: RSSI bar (4-bar renderer)</td><td><span class="field-status fs-inferred">Infer — expect negative int</span></td></tr>
+          <tr><td class="field-name">rx_data_rate</td><td class="field-type">int/float</td><td class="field-unit">Mbps</td><td class="field-desc">Client row: Data rate</td><td><span class="field-status fs-tbd">TBD — may be tx_rate / rx_rate separately</span></td></tr>
+          <tr><td class="field-name">radio_index</td><td class="field-type">int</td><td class="field-unit">—</td><td class="field-desc">Band label (0→2.4GHz, 1→5GHz)</td><td><span class="field-status fs-inferred">Infer — may be string "2.4GHz"</span></td></tr>
+          <tr><td class="field-name">connected_time</td><td class="field-type">int64</td><td class="field-unit">seconds or unix ms</td><td class="field-desc">Client row: Connected duration</td><td><span class="field-status fs-tbd">TBD — confirm unit</span></td></tr>
+          <tr><td class="field-name">device_id</td><td class="field-type">int64</td><td class="field-unit">—</td><td class="field-desc">Used to confirm client is on this AP — filter param</td><td><span class="field-status fs-inferred">Infer</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info" style="margin-top:14px">
+        <strong>Pagination:</strong> The XIQ API docs note multiple resource responses can include
+        pagination info. Expect a <code>{"data": [...], "total_count": N, "page": P, "page_size": S}</code>
+        envelope. For per-AP client counts (BHS school context: max ~50–100 clients per AP), a single
+        page with <code>page_size=200</code> should suffice. Validate on a busy AP during the school day.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 6: Interface stats ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">6</span> Wired Interface Stats</h2>
+
+  <div class="callout warn">
+    <strong>No confirmed dedicated wired interface stats endpoint exists at <code>/devices/{id}/interface-stats</code>.</strong>
+    The API reference does not list a wired-specific interface stats endpoint under Device. The confirmed
+    endpoint is <code>/devices/{id}/wifi-if-stats</code> (wireless only). For wired uplink
+    (eth0/eth1) in/out and error counters, use <strong>Zabbix IF-MIB SNMP items as the primary source</strong>.
+    Validate whether <code>/devices/{id}/wifi-if-stats</code> returns wired interface objects as additional
+    records or only wireless radios.
+  </div>
+
+  <table class="decision-table" style="margin-top:10px">
+    <thead>
+      <tr><th>Interface metric</th><th>Planned source</th><th>Current assessment</th><th>Implementation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="metric">eth0/eth1 In/Out (bps)</td>
+        <td><span class="source-zbx-fallback">ZBX fallback</span></td>
+        <td class="field-desc">XIQ may not expose wired stats — TBD</td>
+        <td class="field-desc"><code>net.if.in/out[ifHighSpeed.{eth_index}]</code> from Zabbix IF-MIB</td>
+      </tr>
+      <tr>
+        <td class="metric">eth0/eth1 Errors</td>
+        <td><span class="source-zbx-fallback">ZBX fallback</span></td>
+        <td class="field-desc">XIQ not confirmed</td>
+        <td class="field-desc">Zabbix <code>net.if.in[ifInErrors.N]</code></td>
+      </tr>
+      <tr>
+        <td class="metric">Interface link state</td>
+        <td><span class="source-zbx">ZBX</span></td>
+        <td class="field-desc">Confirmed Zabbix-only</td>
+        <td class="field-desc"><code>net.if.status[ifOperStatus.N]</code></td>
+      </tr>
+      <tr>
+        <td class="metric">Interface speed</td>
+        <td><span class="source-zbx">ZBX</span></td>
+        <td class="field-desc">Confirmed Zabbix-only</td>
+        <td class="field-desc"><code>net.if.speed[ifHighSpeed.N]</code></td>
+      </tr>
+      <tr>
+        <td class="metric">LLDP neighbor</td>
+        <td><span class="source-zbx">ZBX</span></td>
+        <td class="field-desc">Confirmed Zabbix-only</td>
+        <td class="field-desc">Zabbix SNMP LLDP-MIB item</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 7: Rate limits ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">7</span> Rate Limits &amp; Polling Budget</h2>
+
+  <div class="callout ok">
+    <strong>Confirmed from developer.extremecloudiq.com:</strong>
+    7,500 API requests per hour per customer (VIQ), sliding window algorithm.
+    Quota is shared across ALL users and integrations in the same XIQ account.
+    Response headers: <code>RateLimit-Limit: 7500;w=3600</code> ·
+    <code>RateLimit-Remaining: N</code> · <code>RateLimit-Reset: S</code>.
+    HTTP 429 when exceeded. Contact Extreme support to increase quota.
+  </div>
+
+  <h3 style="margin-top:18px">Per-dashboard-load API call count — BHS pilot estimate</h3>
+  <div class="rate-viz">
+    <div class="rate-row">
+      <span class="rate-label">GET /devices/{id}</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:2%;background:var(--xiq)">1</div></div>
+      <span class="rate-note">1 call · cached 60s</span>
+    </div>
+    <div class="rate-row">
+      <span class="rate-label">GET /devices/{id}/wifi-if-stats</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:2%;background:var(--xiq)">1</div></div>
+      <span class="rate-note">1 call · not cached (live data)</span>
+    </div>
+    <div class="rate-row">
+      <span class="rate-label">GET /clients (filtered)</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:2%;background:var(--xiq)">1</div></div>
+      <span class="rate-note">1 call · not cached (live sessions)</span>
+    </div>
+    <div class="rate-row">
+      <span class="rate-label">GET /network-policies/{id}</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:2%;background:#4d7cc7">1</div></div>
+      <span class="rate-note">1 call · cached 5 min (config is slow-changing)</span>
+    </div>
+    <div class="rate-row">
+      <span class="rate-label">GET /ssids/{id} × N SSIDs</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:6%;background:#4d7cc7">3</div></div>
+      <span class="rate-note">~3 calls (3 SSIDs typical) · cached 5 min</span>
+    </div>
+    <div class="rate-row">
+      <span class="rate-label">GET /devices/{id}/location</span>
+      <div class="rate-bar-wrap"><div class="rate-bar" style="width:2%;background:#9b59b6">1</div></div>
+      <span class="rate-note">1 call · cached 10 min</span>
+    </div>
+  </div>
+
+  <p style="margin-top:8px"><strong>~8 XIQ calls per dashboard refresh.</strong> At a 60-second auto-refresh with 10 operator sessions open simultaneously: 10 × 8 = <strong>80 requests/min = 4,800/hour</strong>. Well within the 7,500/hour quota but leaves limited headroom. <strong>Session-level APCu caching is required</strong> — each Zabbix web worker must share a token and config cache, not issue fresh calls per PHP worker process.</p>
+
+  <div class="callout warn">
+    <strong>XIQ quota is shared with all other XIQ API consumers in the TCS VIQ account.</strong>
+    If TCS uses other XIQ integrations (SolarWinds NPM is confirmed to consume XIQ API), budget accordingly.
+    Monitor <code>RateLimit-Remaining</code> headers in production and surface a widget-level warning if
+    remaining quota drops below 500. Contact Extreme support to increase the default quota before deploying
+    to multiple schools beyond BHS pilot.
+  </div>
+
+  <h3>Response headers to read on every XIQ call</h3>
+<pre>
+<span class="cm">// XIQClient.php — parse these after every curl exec</span>
+<span class="v">$limit</span>     = <span class="n">curl_getinfo</span>(<span class="v">$ch</span>, CURLINFO_RATELIMIT_LIMIT);     <span class="cm">// not a real curl constant</span>
+<span class="cm">// Use header callback instead:</span>
+<span class="n">RateLimit-Limit</span><span class="p">:</span>     <span class="num">7500</span><span class="p">;</span>w=<span class="num">3600</span>    <span class="cm">// quota window = 1 hour</span>
+<span class="n">RateLimit-Remaining</span><span class="p">:</span> <span class="num">7493</span>           <span class="cm">// calls left in current window</span>
+<span class="n">RateLimit-Reset</span><span class="p">:</span>     <span class="num">47</span>             <span class="cm">// seconds until window resets</span>
+</pre>
+</section>
+
+<!-- ── SECTION 8: Zabbix-only scope ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">8</span> Confirmed Zabbix-Only Items — No SNMP Extensions Needed</h2>
+
+  <p>These metrics are NOT available from XIQ. The existing Extreme AP Zabbix template must cover them, but <strong>no new SNMP items should be added for anything XIQ provides</strong>.</p>
+
+  <table class="decision-table">
+    <thead>
+      <tr><th>Metric</th><th>SNMP item key pattern</th><th>Justification for Zabbix-only</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="metric">ICMP Latency</td>
+        <td class="field-name">icmppingsec[…]</td>
+        <td class="field-desc">XIQ does not expose ping RTT. Required for alerting.</td>
+      </tr>
+      <tr>
+        <td class="metric">ICMP Packet Loss</td>
+        <td class="field-name">icmppingloss[…]</td>
+        <td class="field-desc">As above. Required for connectivity alerting trigger.</td>
+      </tr>
+      <tr>
+        <td class="metric">LLDP Neighbor</td>
+        <td class="field-name">snmp LLDP-MIB walk</td>
+        <td class="field-desc">XIQ does not expose LLDP data via API. Required for switch uplink identification.</td>
+      </tr>
+      <tr>
+        <td class="metric">PoE Draw (current W)</td>
+        <td class="field-name">snmp.interfaces.poe.dstatus[{#SNMPINDEX}]</td>
+        <td class="field-desc">XIQ does not expose PoE draw. Already in local template addition.</td>
+      </tr>
+      <tr>
+        <td class="metric">Uplink Interface State</td>
+        <td class="field-name">net.if.status[ifOperStatus.N]</td>
+        <td class="field-desc">XIQ not confirmed to expose wired link state with polling history.</td>
+      </tr>
+      <tr>
+        <td class="metric">System Uptime</td>
+        <td class="field-name">system.uptime</td>
+        <td class="field-desc">XIQ does not expose device uptime via monitoring API.</td>
+      </tr>
+      <tr>
+        <td class="metric">CPU Utilization (with history)</td>
+        <td class="field-name">system.cpu.util[*]</td>
+        <td class="field-desc">XIQ provides current snapshot only — Zabbix needed for trend alerting and health ring history.</td>
+      </tr>
+      <tr>
+        <td class="metric">Memory Utilization (with history)</td>
+        <td class="field-name">vm.memory.util[*]</td>
+        <td class="field-desc">Same as CPU — use Zabbix for alerting and sparklines.</td>
+      </tr>
+      <tr>
+        <td class="metric">Temperature</td>
+        <td class="field-name">sensor.temp.value[*]</td>
+        <td class="field-desc">Not exposed by XIQ API.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 9: M0 validation checklist ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--warn2);color:#fcd34d;border:1px solid var(--warn3)">9</span> M0 Live Validation Checklist — BHS-56-Hallway</h2>
+
+  <p>All items marked <span class="field-status fs-inferred" style="display:inline">Infer</span> or <span class="field-status fs-tbd" style="display:inline">TBD</span> above must be validated by running the following curl commands against the live AP before M1 begins.</p>
+
+<pre>
+<span class="cm"># Step 1 — Get XIQ API token (run once, save to {$XIQ_API_TOKEN} macro)</span>
+<span class="k">curl</span> -X POST https://api.extremecloudiq.com/login \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"username":"…","password":"…"}'</span>
+
+<span class="cm"># Step 2 — Find XIQ device ID for BHS-56-Hallway (hostname or serial search)</span>
+<span class="k">curl</span> https://api.extremecloudiq.com/devices?hostname=BHS-56-Hallway \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># → note: id, mac_address, serial_number field names</span>
+
+<span class="cm"># Step 3 — WiFi interface stats (validate exact path + all field names)</span>
+<span class="k">curl</span> https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span>/wifi-if-stats \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># VALIDATE: path, array structure, all field names, units for channel_utilization</span>
+<span class="cm"># noise_floor, tx_power, channel, channel_width, tx_retry_rate, associated_clients</span>
+
+<span class="cm"># Step 4 — Client list (find per-AP filter parameter)</span>
+<span class="k">curl</span> <span class="s">"https://api.extremecloudiq.com/clients?device_id=$DEVICE_ID&page_size=200"</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># If device_id doesn't work, try: ?ap_mac=&lt;MAC&gt; or ?associated_to_device=&lt;ID&gt;</span>
+<span class="cm"># VALIDATE: filter param name, pagination envelope, rssi/rate/band field names</span>
+
+<span class="cm"># Step 5 — Device detail (validate all field names used in System/Network Info)</span>
+<span class="k">curl</span> https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># VALIDATE: software_version, ip_address, ntp_server presence,</span>
+<span class="cm"># network_policy_id vs network_policy_name, last_updated unit (ms vs s)</span>
+
+<span class="cm"># Step 6 — Device location</span>
+<span class="k">curl</span> https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span>/location \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># VALIDATE: building name, floor name field names</span>
+<span class="cm"># Check for floor-plan URL or image attachment</span>
+
+<span class="cm"># Step 7 — Network policy + SSIDs</span>
+<span class="k">curl</span> https://api.extremecloudiq.com/network-policies/<span class="v">$POLICY_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+
+<span class="cm"># Step 8 — Check RateLimit headers on any response</span>
+<span class="k">curl</span> -I https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="cm"># Confirm: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset</span>
+</pre>
+
+  <div class="callout warn" style="margin-top:12px">
+    <strong>Before running:</strong> Ensure the API token has the minimum required scopes:
+    <code>device:r</code>, <code>device:list</code>, <code>device:view</code>,
+    <code>client:r</code>, <code>d360:relaxed_read</code>.
+    Create a dedicated read-only XIQ user for the widget — never use an admin account.
+  </div>
+</section>
+
+<!-- ── SECTION 10: Open questions ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--err2);color:#fca5a5;border:1px solid var(--err3)">10</span> Open Questions — Must Resolve Before M1 Starts</h2>
+
+  <table class="decision-table">
+    <thead>
+      <tr><th>#</th><th>Question</th><th>Impact if wrong</th><th>How to resolve</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q1</td>
+        <td class="field-desc">Exact path of the WiFi interface stats endpoint</td>
+        <td class="field-desc">M1 radio card implementation blocked</td>
+        <td class="field-desc">Step 3 curl above</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q2</td>
+        <td class="field-desc">Filter parameter for <code>/clients</code> to scope to one AP</td>
+        <td class="field-desc">M4 Connected Clients table blocked — may need different join strategy</td>
+        <td class="field-desc">Step 4 curl — try multiple params</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q3</td>
+        <td class="field-desc">Is <code>noise_floor</code> available in wifi-if-stats or requires a separate endpoint?</td>
+        <td class="field-desc">Noise floor removed from Live Telemetry if missing</td>
+        <td class="field-desc">Step 3 curl — inspect full response body</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q4</td>
+        <td class="field-desc">Does <code>/devices/{id}</code> include <code>ntp_server</code> or is it in config profile?</td>
+        <td class="field-desc">NTP Server row in Network Info shows "N/A" or is removed</td>
+        <td class="field-desc">Step 5 curl — grep for "ntp"</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q5</td>
+        <td class="field-desc">Does XIQ expose wired eth0/eth1 stats anywhere in the API?</td>
+        <td class="field-desc">Wired tab uses Zabbix IF-MIB only (acceptable fallback, already planned)</td>
+        <td class="field-desc">Inspect full wifi-if-stats response; search for "eth" or "interface_type"</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--fg3)">Q6</td>
+        <td class="field-desc">Should we add Extreme WIRELESS-MIB SNMP items to get channel util history for sparklines?</td>
+        <td class="field-desc">If yes: Zabbix template needs additions before M1. If no: sparklines show current-value badges.</td>
+        <td class="field-desc">Check AP305C MIB support + operator preference — decision by M0 sign-off</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div><!-- /main -->
+</body>
+</html>

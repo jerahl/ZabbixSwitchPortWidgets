@@ -1,0 +1,276 @@
+/**
+ * AP Detail — widget stylesheet.
+ *
+ * All colors use CSS custom properties so the widget inherits the Zabbix
+ * dark/light theme automatically.  Properties not supplied by Zabbix core
+ * are defined in :root here and can be overridden per-theme via
+ * Zabbix's theming mechanism.
+ *
+ * Naming convention: BEM-ish, prefixed with 'ap-' to avoid global collisions.
+ * Mirrors the class naming conventions in switchports/assets/css/widget.css.
+ */
+
+/* ── Custom property extensions ─────────────────────────────────────────── */
+:root {
+    --ap-bg:          var(--color-bg-dark, #161b22);
+    --ap-bg-2:        var(--color-bg-darker, #0d1117);
+    --ap-border:      var(--color-border, #30363d);
+    --ap-border-2:    var(--color-border-light, #21262d);
+    --ap-text:        var(--color-text, #e6edf3);
+    --ap-text-muted:  var(--color-text-secondary, #8b949e);
+    --ap-text-dim:    var(--color-text-tertiary, #484f58);
+    --ap-accent:      #1a9e6e;   /* XIQ teal — matches xiq CSS var in project plan */
+    --ap-accent-2:    #4d7cc7;   /* Zabbix blue */
+    --ap-ring-track:  rgba(255,255,255,.07);
+    --ap-mono:        'JetBrains Mono', 'Fira Mono', monospace;
+}
+
+/* ── Error state ────────────────────────────────────────────────────────── */
+.ap-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: var(--ap-text-muted);
+    font-size: 13px;
+}
+.ap-error__icon { font-size: 18px; }
+
+/* ── Widget root ────────────────────────────────────────────────────────── */
+.ap-detail {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--ap-text);
+}
+
+/* ── Tab bar ────────────────────────────────────────────────────────────── */
+.ap-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--ap-border);
+    padding: 0 4px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.ap-tabs::-webkit-scrollbar { display: none; }
+
+.ap-tab {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ap-text-muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s, border-color .15s;
+    margin-bottom: -1px;
+}
+.ap-tab:hover { color: var(--ap-text); }
+.ap-tab--active {
+    color: var(--ap-text);
+    border-bottom-color: var(--ap-accent);
+}
+
+/* ── Tab panels ─────────────────────────────────────────────────────────── */
+.ap-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: none;
+}
+.ap-panel--active { display: block; }
+.ap-panel__pending {
+    color: var(--ap-text-dim);
+    font-style: italic;
+    font-size: 12px;
+    padding: 8px 0;
+}
+
+/* ── Health rings ────────────────────────────────────────────────────────── */
+.ap-health-rings {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.ap-ring {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 72px;
+}
+
+.ap-ring__svg {
+    width: 64px;
+    height: 64px;
+    transform: rotate(-90deg);   /* start arc at top */
+}
+
+.ap-ring__track {
+    fill: none;
+    stroke: var(--ap-ring-track);
+    stroke-width: 8;
+}
+
+.ap-ring__fill {
+    fill: none;
+    stroke: var(--ap-accent);
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 0 163.4;   /* animated via JS */
+    transition: stroke-dasharray .4s ease;
+}
+
+/* Per-metric ring colors — override stroke on the fill element */
+.ap-ring[data-metric="cpu"]  .ap-ring__fill { stroke: #4d7cc7; }
+.ap-ring[data-metric="mem"]  .ap-ring__fill { stroke: #1a9e6e; }
+.ap-ring[data-metric="temp"] .ap-ring__fill { stroke: #f59e0b; }
+.ap-ring[data-metric="poe"]  .ap-ring__fill { stroke: #9b59b6; }
+
+.ap-ring__label {
+    font-size: 10px;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ap-text-dim);
+}
+
+.ap-ring__value {
+    font-size: 12px;
+    font-family: var(--ap-mono);
+    font-weight: 600;
+    color: var(--ap-text);
+}
+
+/* ── Live Telemetry strip ────────────────────────────────────────────────── */
+.ap-telemetry {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 10px;
+    background: var(--ap-bg);
+    border: 1px solid var(--ap-border);
+    border-radius: 6px;
+}
+.ap-telemetry__loading {
+    grid-column: 1 / -1;
+    color: var(--ap-text-dim);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px 0;
+}
+
+/* ── KV tables ──────────────────────────────────────────────────────────── */
+.ap-kv-section {
+    margin-bottom: 16px;
+}
+.ap-kv-section__title {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--ap-text-dim);
+    margin-bottom: 6px;
+}
+
+.ap-kv {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.ap-kv tr { border-bottom: 1px solid var(--ap-border-2); }
+.ap-kv tr:last-child { border-bottom: none; }
+.ap-kv th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--ap-text-muted);
+    padding: 5px 8px 5px 0;
+    width: 38%;
+    vertical-align: top;
+}
+.ap-kv td {
+    padding: 5px 8px 5px 0;
+    color: var(--ap-text);
+    vertical-align: top;
+}
+.ap-kv td:last-child {
+    width: 36px;
+    text-align: right;
+}
+.ap-kv__pending {
+    color: var(--ap-text-dim);
+    font-style: italic;
+    font-size: 11px;
+}
+
+/* ── Source badges ───────────────────────────────────────────────────────── */
+.ap-source {
+    display: inline-block;
+    font-family: var(--ap-mono);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: .05em;
+    vertical-align: middle;
+}
+.ap-source--zbx {
+    background: #0d1f3a;
+    color: #60a5fa;
+    border: 1px solid #1a3a6a;
+}
+.ap-source--xiq {
+    background: #0d2a1a;
+    color: #4ade80;
+    border: 1px solid #1a4a2a;
+}
+.ap-source--pf {
+    background: #2a1f0d;
+    color: #fbbf24;
+    border: 1px solid #4a3a1a;
+}
+
+/* ── Connectivity Issues ─────────────────────────────────────────────────── */
+.ap-conn-issues,
+.ap-events-feed {
+    padding: 10px;
+    background: var(--ap-bg);
+    border: 1px solid var(--ap-border);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    min-height: 48px;
+}
+.ap-conn-issues__loading,
+.ap-events-feed__loading {
+    color: var(--ap-text-dim);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px 0;
+}
+
+/* ── Debug dump ─────────────────────────────────────────────────────────── */
+.ap-debug {
+    margin: 8px 16px;
+    font-size: 11px;
+    color: var(--ap-text-dim);
+}
+.ap-debug pre {
+    overflow-x: auto;
+    padding: 8px;
+    background: var(--ap-bg);
+    border: 1px solid var(--ap-border);
+    border-radius: 4px;
+    font-family: var(--ap-mono);
+    font-size: 10px;
+    line-height: 1.5;
+}

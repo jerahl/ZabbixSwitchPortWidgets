@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M0 Addendum — PacketFence Historical Data APIs</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --pf:       #9b59b6;
+  --pf2:      #1f0d2a;
+  --pf3:      #3a1a4a;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --zbx:      #4d7cc7;
+  --zbx2:     #0d1f3a;
+  --zbx3:     #1a3a6a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 48px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.brand { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); margin-bottom: 8px; }
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--fg2); }
+.header-meta span { color: var(--fg); font-weight: 600; }
+
+.main { padding: 32px 48px 64px; max-width: 980px; }
+section { margin-bottom: 40px; }
+
+h2 {
+  font-size: 15px; font-weight: 600; color: var(--fg);
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+  margin-bottom: 18px; display: flex; align-items: center; gap: 10px;
+}
+.sec-num {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px; letter-spacing: .06em;
+}
+h3 { font-size: 13px; font-weight: 600; color: var(--fg); margin: 20px 0 10px; }
+p { color: var(--fg2); font-size: 13.5px; margin-bottom: 10px; }
+p:last-child { margin-bottom: 0; }
+
+.callout { padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6; margin: 14px 0; }
+.callout strong { font-weight: 600; }
+.callout.ok   { background: var(--ok2);   border-left: 3px solid var(--ok);   color: #86efac; }
+.callout.warn { background: var(--warn2); border-left: 3px solid var(--warn); color: #fcd34d; }
+.callout.info { background: var(--zbx2);  border-left: 3px solid var(--zbx);  color: #7dd3fc; }
+.callout.pf   { background: var(--pf2);   border-left: 3px solid var(--pf);   color: #d8b4fe; }
+
+.endpoint { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+.ep-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.method { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px; letter-spacing: .06em; }
+.method.get  { background: var(--ok2);  color: #4ade80; border: 1px solid var(--ok3); }
+.method.post { background: var(--zbx2); color: #60a5fa; border: 1px solid var(--zbx3); }
+.ep-path { font-family: var(--mono); font-size: 12px; color: var(--fg); flex: 1; }
+.ep-tag { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 3px; letter-spacing: .07em; text-transform: uppercase; }
+.ep-tag.history  { background: var(--pf2); border: 1px solid var(--pf3); color: #d8b4fe; }
+.ep-tag.current  { background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.ep-tag.compound { background: var(--warn2); border: 1px solid var(--warn3); color: #fcd34d; }
+.ep-body { padding: 14px 16px; }
+.ep-desc { font-size: 13px; color: var(--fg2); margin-bottom: 14px; }
+
+.field-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
+.field-table th { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.field-table td { padding: 7px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.field-table tr:last-child td { border-bottom: none; }
+.field-table tr:hover td { background: rgba(255,255,255,.015); }
+.field-name { font-family: var(--mono); font-size: 11.5px; color: #c084fc; white-space: nowrap; }
+.field-type { font-family: var(--mono); font-size: 10px; color: var(--fg3); white-space: nowrap; }
+.field-desc { color: var(--fg2); font-size: 12.5px; }
+
+.badge { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px; white-space: nowrap; display: inline-block; }
+.b-filter  { background: var(--pf2);  border: 1px solid var(--pf3);  color: #d8b4fe; }
+.b-history { background: var(--ok2);  border: 1px solid var(--ok3);  color: #86efac; }
+.b-open    { background: var(--warn2);border: 1px solid var(--warn3);color: #fcd34d; }
+.b-join    { background: var(--zbx2); border: 1px solid var(--zbx3); color: #7dd3fc; }
+.b-new     { background: var(--err2); border: 1px solid var(--err3); color: #fca5a5; }
+
+pre {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px; font-family: var(--mono); font-size: 11.5px; color: #e6edf3;
+  overflow-x: auto; margin: 10px 0; line-height: 1.7;
+}
+pre .cm  { color: var(--fg3); }
+pre .k   { color: #ff7b72; }
+pre .s   { color: #a5d6ff; }
+pre .n   { color: #79c0ff; }
+pre .v   { color: #c084fc; }
+pre .ok  { color: #4ade80; }
+pre .num { color: #f2cc60; }
+pre .p   { color: var(--fg3); }
+pre .key { color: #7dd3fc; }
+
+code { font-family: var(--mono); font-size: 11px; background: var(--bg3); color: var(--fg); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); }
+
+/* ── Sparkline impact table ── */
+.impact-table { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 12px; }
+.impact-table th { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); text-align: left; padding: 8px 14px; background: var(--bg2); border-bottom: 1px solid var(--line); }
+.impact-table td { padding: 9px 14px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.impact-table tr:last-child td { border-bottom: none; }
+.impact-table tr:hover td { background: rgba(255,255,255,.015); }
+
+/* ── Flow diagram ── */
+.flow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.flow-step {
+  flex: 1;
+  padding: 14px 16px;
+  background: var(--bg2);
+  border-right: 1px solid var(--line);
+  position: relative;
+}
+.flow-step:last-child { border-right: none; }
+.flow-step::after {
+  content: '→';
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--fg3);
+  z-index: 1;
+}
+.flow-step:last-child::after { display: none; }
+.flow-label { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); margin-bottom: 6px; }
+.flow-name { font-size: 12.5px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+.flow-detail { font-size: 11.5px; color: var(--fg2); }
+
+/* ── Source comparison bar ── */
+.source-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+.source-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.source-card-head {
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+.source-card-body { padding: 10px 12px; font-size: 12px; color: var(--fg2); line-height: 1.6; }
+.sc-pf   .source-card-head { background: var(--pf2); color: #d8b4fe; }
+.sc-xiq  .source-card-head { background: var(--xiq2); color: #34d399; }
+.sc-zbx  .source-card-head { background: var(--zbx2); color: #7dd3fc; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">AP Dashboard · M0 Addendum</div>
+    <h1>PacketFence Historical Data APIs</h1>
+    <div class="subtitle">locationlog · radius_audit_log · ip4log — and how they fill the XIQ time-series gap</div>
+  </div>
+  <div class="header-meta">
+    <div>PF version <span>15 (TCS production)</span></div>
+    <div>API port <span>HTTPS :9999</span></div>
+    <div>Extends <span>M0 XIQ API Reference</span></div>
+    <div>Answers open question <span>Q6 — sparklines</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ── SECTION 0: The gap this fills ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">→</span> Why This Document Exists</h2>
+
+  <p>The M0 XIQ API Reference concluded that ExtremeCloud IQ is <strong>point-in-time only</strong> — it cannot provide history curves for channel utilization, noise floor, or client count. PacketFence's <code>locationlog</code> table is a timestamped record of every RADIUS association event, stored permanently (subject to the configured cleanup window). Queried with the right filters, it yields a genuine historical time series for client population on a specific AP — the one sparkline the Live Telemetry strip couldn't otherwise get.</p>
+
+  <div class="source-grid">
+    <div class="source-card sc-zbx">
+      <div class="source-card-head">Zabbix</div>
+      <div class="source-card-body">Full TSDB history for uplink traffic, latency, packet loss, CPU, memory, temp, PoE. Drives sparklines directly via <code>history.get</code>.</div>
+    </div>
+    <div class="source-card sc-xiq">
+      <div class="source-card-head">XIQ</div>
+      <div class="source-card-body">Point-in-time snapshots only. Channel utilization, noise floor, TX power. No time-series history available — show as current-value badge.</div>
+    </div>
+    <div class="source-card sc-pf">
+      <div class="source-card-head">PacketFence</div>
+      <div class="source-card-body"><strong>Historical association records.</strong> Every connect/disconnect event timestamped. Derive: clients-connected timeline, auth failure history, SSID utilization trend.</div>
+    </div>
+  </div>
+
+  <div class="callout ok">
+    <strong>Net result:</strong> The Live Telemetry sparkline strip gains one historically-backed metric from PF:
+    <strong>Clients Connected (count over time)</strong>. All other wireless RF metrics (channel util, noise) remain current-value-only badges. This is better than the fallback of adding new SNMP items to the Zabbix template.
+  </div>
+</section>
+
+<!-- ── SECTION 1: locationlog table schema ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">1</span> <code>locationlog</code> Table — Full Schema</h2>
+
+  <p>The <code>locationlog</code> table is PF's core association log. Every RADIUS Access-Accept or accounting event for a wireless client creates or updates a row. The schema is confirmed from the PF source and GitHub issue #5029 (INSERT statement, all columns enumerated).</p>
+
+  <div class="callout warn">
+    <strong>Open/active session sentinel:</strong> PF writes <code>end_time = '0000-00-00 00:00:00'</code> (not NULL) for sessions that have not yet ended. All PHP queries filtering for currently-active sessions must use <code>end_time = '0000-00-00 00:00:00'</code>, and all historical queries must account for this value meaning "still open."
+  </div>
+
+  <table class="field-table" style="border:1px solid var(--line);border-radius:6px;overflow:hidden">
+    <thead>
+      <tr>
+        <th>Column</th>
+        <th>Type</th>
+        <th>Description + Dashboard use</th>
+        <th>Role</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="field-name">mac</td><td class="field-type">varchar(17)</td><td class="field-desc">Client MAC address. Primary key component. JOIN key with XIQ client record and PF node record.</td><td><span class="badge b-join">Join key</span></td></tr>
+      <tr><td class="field-name">switch_ip</td><td class="field-type">varchar(45)</td><td class="field-desc"><strong>AP management IP.</strong> For BHS-56-Hallway: <code>172.16.97.59</code>. The primary filter to scope all locationlog queries to a single AP. Same IP used in existing PF nodes/search widget.</td><td><span class="badge b-filter">Primary filter</span></td></tr>
+      <tr><td class="field-name">switch_mac</td><td class="field-type">varchar(17)</td><td class="field-desc">AP BSSID (radio MAC). Varies per radio/SSID on the same AP. Not reliable as the sole AP identifier — always filter on <code>switch_ip</code> first.</td><td><span class="badge b-filter">Secondary filter</span></td></tr>
+      <tr><td class="field-name">switch</td><td class="field-type">varchar(255)</td><td class="field-desc">AP hostname as reported in RADIUS (<code>Called-Station-Id</code> NAS identifier). May differ from Zabbix hostname — validate on BHS-56-Hallway.</td><td><span class="badge b-join">Identity</span></td></tr>
+      <tr><td class="field-name">start_time</td><td class="field-type">datetime</td><td class="field-desc"><strong>Session start timestamp.</strong> Written as <code>NOW()</code> on INSERT. Primary time axis for historical queries. Format: <code>YYYY-MM-DD HH:MM:SS</code>.</td><td><span class="badge b-history">Sparkline axis</span></td></tr>
+      <tr><td class="field-name">end_time</td><td class="field-type">datetime</td><td class="field-desc"><strong>Session end timestamp.</strong> <code>0000-00-00 00:00:00</code> = session still open (not NULL!). Written on RADIUS Accounting-Stop or session close. Use this to determine if a session was active at any given historical time T.</td><td><span class="badge b-history">Sparkline axis</span> <span class="badge b-open">Open sentinel</span></td></tr>
+      <tr><td class="field-name">ssid</td><td class="field-type">varchar(255)</td><td class="field-desc">SSID name the client connected to. Feeds SSID Broadcast table client counts and SSID distribution trend. Empty string (not NULL) for non-wireless or MAC-auth without SSID context.</td><td><span class="badge b-history">SSID trend</span></td></tr>
+      <tr><td class="field-name">vlan</td><td class="field-type">varchar(50)</td><td class="field-desc">VLAN assigned at auth time. Cross-reference with SSID table in Wireless tab.</td><td><span class="badge b-join">SSID join</span></td></tr>
+      <tr><td class="field-name">role</td><td class="field-type">varchar(255)</td><td class="field-desc">NAC role assigned. Used for filter pills (Students / Faculty / Guests / Issues) in the Clients tab — join to current node record to get current role, but locationlog records what role was assigned at session start.</td><td><span class="badge b-history">Role history</span></td></tr>
+      <tr><td class="field-name">connection_type</td><td class="field-type">varchar(50)</td><td class="field-desc">E.g. <code>Wireless-802.11-EAP</code>, <code>Wireless-802.11-NoEAP</code>. Identifies authenticated (EAP = 802.1X) vs. MAC-auth sessions. Feeds connection type badge in client row.</td><td><span class="badge b-history">Auth type</span></td></tr>
+      <tr><td class="field-name">connection_sub_type</td><td class="field-type">varchar(50)</td><td class="field-desc">RADIUS sub-type. Usually NULL for wireless. May carry EAP method (PEAP, EAP-TLS) when populated.</td><td><span class="badge b-history">Auth detail</span></td></tr>
+      <tr><td class="field-name">dot1x_username</td><td class="field-type">varchar(255)</td><td class="field-desc">802.1X username used for EAP auth. Same as MAC address for MAB sessions. Maps to Clients tab "User" column — prefer <code>stripped_user_name</code> for display.</td><td><span class="badge b-history">User identity</span></td></tr>
+      <tr><td class="field-name">stripped_user_name</td><td class="field-type">varchar(255)</td><td class="field-desc">Username with realm stripped (e.g. <code>jsmith</code> instead of <code>jsmith@tcs.k12.al.us</code>). Use this for display in the Clients tab User column.</td><td><span class="badge b-history">Display name</span></td></tr>
+      <tr><td class="field-name">realm</td><td class="field-type">varchar(255)</td><td class="field-desc">RADIUS realm. TCS context: <code>tcs.k12.al.us</code> for domain users, empty for guest/PSK.</td><td><span class="badge b-history">Identity</span></td></tr>
+      <tr><td class="field-name">session_id</td><td class="field-type">varchar(255)</td><td class="field-desc">RADIUS Acct-Session-Id. Correlates with RADIUS audit log entries — use as JOIN key between locationlog and radius_audit_log for session-level correlation.</td><td><span class="badge b-join">Audit join</span></td></tr>
+      <tr><td class="field-name">port</td><td class="field-type">varchar(50)</td><td class="field-desc">Switch port / radio ifIndex as reported by the AP in RADIUS. For wireless APs this is typically a virtual port index per radio. Not directly useful for the dashboard.</td><td><span class="badge b-join">Identity</span></td></tr>
+      <tr><td class="field-name">ifDesc</td><td class="field-type">varchar(255)</td><td class="field-desc">Interface description from RADIUS. Usually NULL for wireless sessions.</td><td><span class="badge b-join">Identity</span></td></tr>
+      <tr><td class="field-name">tenant_id</td><td class="field-type">int</td><td class="field-desc">Multi-tenant ID. TCS is single-tenant — always filter <code>tenant_id = 1</code> or omit (defaults to current tenant).</td><td><span class="badge b-filter">Scope</span></td></tr>
+      <tr><td class="field-name">voip</td><td class="field-type">enum('yes','no')</td><td class="field-desc">VoIP device flag. All school-issued devices: <code>no</code>. Ignore for AP dashboard context.</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 2: Endpoints ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">2</span> Locationlog API Endpoints</h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/locationlogs/search</span>
+      <span class="ep-tag history">Historical — time-range aware</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        The primary endpoint for dashboard use. Accepts a structured JSON query with field filters, sort order, field selection, and a pagination limit (max 1000). Returns all association events for a given AP within a time window — the raw data for client-count sparklines and SSID distribution history.
+      </div>
+
+      <h3>Request body — client count sparkline (dashboard time window)</h3>
+<pre>
+<span class="cm">// PHP — build from $host_ip and $timeperiod broadcast values</span>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip"</span><span class="p">,</span>  <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span>               <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"greater_than_or_equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"2026-05-05 00:00:00"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="key">"fields"</span><span class="p">: [</span>
+    <span class="s">"mac"</span><span class="p">,</span> <span class="s">"ssid"</span><span class="p">,</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="s">"end_time"</span><span class="p">,</span>
+    <span class="s">"role"</span><span class="p">,</span> <span class="s">"vlan"</span><span class="p">,</span> <span class="s">"connection_type"</span>
+  <span class="p">],</span>
+  <span class="key">"sort"</span><span class="p">: [</span> <span class="s">"start_time ASC"</span> <span class="p">],</span>
+  <span class="key">"limit"</span><span class="p">:</span> <span class="num">1000</span>
+<span class="p">}</span>
+</pre>
+
+      <h3>Response envelope</h3>
+<pre>
+<span class="p">{</span>
+  <span class="key">"items"</span><span class="p">: [</span>
+    <span class="p">{</span>
+      <span class="key">"mac"</span><span class="p">:</span>             <span class="s">"a4:c3:f0:12:34:56"</span><span class="p">,</span>
+      <span class="key">"ssid"</span><span class="p">:</span>            <span class="s">"TCS-Students"</span><span class="p">,</span>
+      <span class="key">"start_time"</span><span class="p">:</span>     <span class="s">"2026-05-05 07:43:11"</span><span class="p">,</span>
+      <span class="key">"end_time"</span><span class="p">:</span>       <span class="s">"0000-00-00 00:00:00"</span><span class="p">,</span>   <span class="cm">// ← still open</span>
+      <span class="key">"role"</span><span class="p">:</span>           <span class="s">"student"</span><span class="p">,</span>
+      <span class="key">"vlan"</span><span class="p">:</span>           <span class="s">"20"</span><span class="p">,</span>
+      <span class="key">"connection_type"</span><span class="p">:</span> <span class="s">"Wireless-802.11-EAP"</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+      <span class="key">"mac"</span><span class="p">:</span>             <span class="s">"b8:27:eb:aa:bb:cc"</span><span class="p">,</span>
+      <span class="key">"ssid"</span><span class="p">:</span>            <span class="s">"TCS-Students"</span><span class="p">,</span>
+      <span class="key">"start_time"</span><span class="p">:</span>     <span class="s">"2026-05-05 07:51:44"</span><span class="p">,</span>
+      <span class="key">"end_time"</span><span class="p">:</span>       <span class="s">"2026-05-05 11:22:03"</span><span class="p">,</span>   <span class="cm">// ← session ended</span>
+      <span class="key">"role"</span><span class="p">:</span>           <span class="s">"student"</span><span class="p">,</span>
+      <span class="key">"vlan"</span><span class="p">:</span>           <span class="s">"20"</span><span class="p">,</span>
+      <span class="key">"connection_type"</span><span class="p">:</span> <span class="s">"Wireless-802.11-EAP"</span>
+    <span class="p">}</span>
+    <span class="cm">// … up to 1000 records</span>
+  <span class="p">],</span>
+  <span class="key">"nextCursor"</span><span class="p">:</span> <span class="s">"1000"</span><span class="p">,</span>    <span class="cm">// present if more records exist</span>
+  <span class="key">"prevCursor"</span><span class="p">:</span> <span class="num">null</span><span class="p">,</span>
+  <span class="key">"status"</span><span class="p">:</span> <span class="num">200</span>
+<span class="p">}</span>
+</pre>
+
+      <div class="callout warn">
+        <strong>Pagination:</strong> The API uses a cursor model (<code>nextCursor</code> / <code>prevCursor</code>). Maximum 1000 records per call. For a busy school AP during a full day, a 1000-record cap at a 60-minute time window should be sufficient — a typical school AP handles 20–80 concurrent clients. Validate on BHS-56-Hallway during peak hours before committing to a limit. If a full school day (8h) with 80 clients each connecting once = 80 records — well within limit.
+      </div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/api/v1/node/{mac}/locationlogs</span>
+      <span class="ep-tag history">Per-device history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Returns the full association history for a single MAC address across all APs — all <code>switch_ip</code> values, all SSIDs, all sessions. Use this on the Clients tab when an operator clicks a client row to see where that device has been. Supports <code>limit</code> and <code>cursor</code> query params. Not used for AP-scoped sparklines (use <code>/locationlogs/search</code> instead).</div>
+<pre>
+<span class="cm"># Per-client history for the Clients tab detail view</span>
+<span class="k">GET</span> /api/v1/node/<span class="v">a4:c3:f0:12:34:56</span>/locationlogs?limit=<span class="num">25</span>&sort=<span class="s">start_time DESC</span>
+<span class="cm"># Returns sessions across ALL APs — shows roaming history for this device</span>
+</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/api/v1/locationlogs/ssids</span>
+      <span class="ep-tag current">Current metadata</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Returns the list of unique SSID names seen in the locationlog table. Useful as a sanity check — confirm TCS SSID names match what's expected before filtering locationlog queries by SSID. Not needed for the main dashboard logic but useful during M0 validation.</div>
+<pre>
+<span class="cm">// Response</span>
+<span class="p">{</span>
+  <span class="key">"items"</span><span class="p">: [</span>
+    <span class="p">{</span> <span class="key">"ssid"</span><span class="p">:</span> <span class="s">"TCS-Students"</span>  <span class="p">},</span>
+    <span class="p">{</span> <span class="key">"ssid"</span><span class="p">:</span> <span class="s">"TCS-Staff"</span>     <span class="p">},</span>
+    <span class="p">{</span> <span class="key">"ssid"</span><span class="p">:</span> <span class="s">"TCS-Guest"</span>     <span class="p">},</span>
+    <span class="p">{</span> <span class="key">"ssid"</span><span class="p">:</span> <span class="s">"TCS-IOT"</span>       <span class="p">}</span>
+  <span class="p">],</span>
+  <span class="key">"status"</span><span class="p">:</span> <span class="num">200</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/api/v1/radius_audit_log</span>
+      <span class="ep-tag history">Auth failure history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Already in the project plan (M1 validation task). Included here for completeness. The <code>radius_audit_log</code> complements locationlog: where locationlog records successful associations (Access-Accept), the RADIUS audit log captures all RADIUS events including <strong>Access-Reject</strong> (auth failures). Filter by <code>called_station_id</code> = AP BSSID (radio MAC, format: <code>74:26:AC:2C:A4:90:TCS-Students</code> — note SSID is appended in Called-Station-Id for wireless). The Auth Failures table on the Clients tab is driven by this endpoint.</div>
+
+      <div class="callout warn">
+        <strong>called_station_id format for wireless:</strong> In RADIUS for 802.11 APs, <code>Called-Station-Id</code> is formatted as <code>BSSID:SSID</code> (e.g. <code>74:26:AC:2C:A4:90:TCS-Students</code>). The filter must use <code>starts_with</code> on the AP MAC prefix, not an exact equals on the switch_mac, to catch all SSIDs. Validate the exact format on BHS-56-Hallway during M1.
+      </div>
+<pre>
+<span class="cm">// Auth failure query for Auth Failures tab</span>
+<span class="k">GET</span> /api/v1/radius_audit_log
+  ?filter=called_station_id:<span class="v">74:26:AC:2C:A4:90</span>   <span class="cm">// AP BSSID prefix</span>
+  &filter=auth_status:<span class="s">Reject</span>
+  &sort=<span class="s">created_at DESC</span>
+  &limit=<span class="num">100</span>
+
+<span class="cm">// Fields to request: mac, called_station_id, user_name, auth_status,</span>
+<span class="cm">//   radius_request (contains SSID from Called-Station-Id), created_at</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: Client count sparkline algorithm ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">3</span> Deriving the Client Count Sparkline</h2>
+
+  <p>The key insight: each locationlog row has a <code>start_time</code> and an <code>end_time</code>. At any given moment T, a session was active if <code>start_time ≤ T</code> AND (<code>end_time = '0000-00-00 00:00:00'</code> OR <code>end_time ≥ T</code>). By iterating over time buckets within the dashboard time window, you get a client count series — a proper sparkline with real historical shape.</p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-label">Step 1</div>
+      <div class="flow-name">Fetch locationlogs</div>
+      <div class="flow-detail"><code>POST /locationlogs/search</code><br>Filter: <code>switch_ip = AP_IP</code> and <code>start_time ≥ window_start</code>.<br>Max 1000 records.</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-label">Step 2</div>
+      <div class="flow-name">Bucket in PHP</div>
+      <div class="flow-detail">Divide time window into N buckets (e.g. 12 × 5-min for 1h, 24 × 30-min for 12h). For each bucket midpoint T, count sessions where <code>start ≤ T ≤ end</code>.</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-label">Step 3</div>
+      <div class="flow-name">Emit sparkline data</div>
+      <div class="flow-detail">Return <code>[{ts, count}]</code> array. JS renderer (adapted from portdetail sparkline) draws the curve. Label: "Clients connected (PF)".</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-label">Step 4</div>
+      <div class="flow-name">Time-period sync</div>
+      <div class="flow-detail">Re-fetch when <code>_timeperiod</code> broadcast changes. Same pattern as existing portdetail Zabbix sparklines — same event handler.</div>
+    </div>
+  </div>
+
+  <h3>PHP bucketing implementation sketch</h3>
+<pre>
+<span class="cm">/**
+ * Build a client-count time series from locationlog records.
+ *
+ * @param array  $sessions  Array of locationlog rows: [mac, start_time, end_time]
+ * @param int    $from      Unix timestamp — window start
+ * @param int    $to        Unix timestamp — window end
+ * @param int    $buckets   Number of data points to emit (e.g. 24)
+ * @return array            [{ts: int, count: int}]
+ */</span>
+<span class="k">function</span> <span class="n">buildClientSpark</span>(array <span class="v">$sessions</span>, int <span class="v">$from</span>, int <span class="v">$to</span>, int <span class="v">$buckets</span> = <span class="num">24</span>): array {
+    <span class="v">$step</span>   = (int)((<span class="v">$to</span> - <span class="v">$from</span>) / <span class="v">$buckets</span>);
+    <span class="v">$series</span> = [];
+
+    <span class="k">for</span> (<span class="v">$i</span> = <span class="num">0</span>; <span class="v">$i</span> < <span class="v">$buckets</span>; <span class="v">$i</span>++) {
+        <span class="v">$t</span>     = <span class="v">$from</span> + (<span class="v">$i</span> * <span class="v">$step</span>) + (<span class="v">$step</span> / <span class="num">2</span>);   <span class="cm">// bucket midpoint</span>
+        <span class="v">$count</span> = <span class="num">0</span>;
+
+        <span class="k">foreach</span> (<span class="v">$sessions</span> <span class="k">as</span> <span class="v">$s</span>) {
+            <span class="v">$start</span> = strtotime(<span class="v">$s</span>[<span class="s">'start_time'</span>]);
+            <span class="v">$end</span>   = <span class="v">$s</span>[<span class="s">'end_time'</span>] === <span class="s">'0000-00-00 00:00:00'</span>
+                ? PHP_INT_MAX            <span class="cm">// still open → active until now</span>
+                : strtotime(<span class="v">$s</span>[<span class="s">'end_time'</span>]);
+
+            <span class="k">if</span> (<span class="v">$start</span> <= <span class="v">$t</span> && <span class="v">$end</span> >= <span class="v">$t</span>) {
+                <span class="v">$count</span>++;
+            }
+        }
+
+        <span class="v">$series</span>[] = [<span class="s">'ts'</span> => (int)<span class="v">$t</span>, <span class="s">'count'</span> => <span class="v">$count</span>];
+    }
+
+    <span class="k">return</span> <span class="v">$series</span>;
+}
+</pre>
+
+  <div class="callout pf">
+    <strong>Performance note:</strong> This is an O(N × B) loop in PHP where N = locationlog records and B = buckets. At N=500 and B=24, that's 12,000 comparisons — negligible. If the AP is pathologically busy and returns 1000 records, the loop is still only 24,000 iterations, well within a single widget render budget.
+  </div>
+</section>
+
+<!-- ── SECTION 4: What PF history unlocks per tab ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">4</span> Impact on Each Dashboard Tab</h2>
+
+  <table class="impact-table">
+    <thead>
+      <tr>
+        <th>Tab / Panel</th>
+        <th>What PF locationlog adds</th>
+        <th>Endpoint</th>
+        <th>Implementation milestone</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Overview → Live Telemetry</td>
+        <td class="field-desc"><strong>Clients Connected sparkline</strong> — the only metric with historical shape from PF. Shows peak/valley pattern across the selected time window.</td>
+        <td><code style="font-size:10px">/locationlogs/search</code></td>
+        <td><span class="badge b-history">M2</span></td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Overview → Connectivity Issues</td>
+        <td class="field-desc">Auth failure count comes from <code>radius_audit_log</code> (already planned). Locationlog adds total unique MACs seen in time window = "devices attempted" denominator for failure rate.</td>
+        <td><code style="font-size:10px">/locationlogs/search</code> + <code>/radius_audit_log</code></td>
+        <td><span class="badge b-history">M2</span></td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Wireless → SSID Broadcast table</td>
+        <td class="field-desc">Client count per SSID: query locationlogs filtered by <code>switch_ip</code> and <code>end_time = '0000-00-00'</code> (active now), group by <code>ssid</code>. More reliable than XIQ client count since PF owns session state.</td>
+        <td><code style="font-size:10px">/locationlogs/search</code></td>
+        <td><span class="badge b-history">M3</span></td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Clients → Connected Clients table</td>
+        <td class="field-desc">Add "Session Duration" column from <code>start_time</code> to now for open sessions. Also: "Last Seen" timestamp for recently disconnected clients within the time window.</td>
+        <td><code style="font-size:10px">/locationlogs/search</code></td>
+        <td><span class="badge b-history">M4</span></td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Clients → Client detail drilldown</td>
+        <td class="field-desc">When operator clicks a client row, show their association history for this AP: all sessions today sorted by start_time, with duration and SSID. Also shows if they roamed from another AP.</td>
+        <td><code style="font-size:10px">/node/{mac}/locationlogs</code></td>
+        <td><span class="badge b-new">M4 — new</span></td>
+      </tr>
+      <tr>
+        <td style="font-weight:600;color:var(--fg)">Events → Unified event feed</td>
+        <td class="field-desc">Association events (connect/disconnect) appear as PF-sourced events with timestamps and MAC context. Merged with Zabbix events. Already planned in M5 via <code>/api/v1/audit_log</code> — locationlog adds the wireless session event dimension.</td>
+        <td><code style="font-size:10px">/locationlogs/search</code> + <code>/audit_log</code></td>
+        <td><span class="badge b-history">M5</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 5: Caching + retention ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">5</span> Caching Strategy + Retention Warning</h2>
+
+  <h3>Cache TTL for locationlog queries</h3>
+  <p>Unlike XIQ config data (SSIDs, policy names — cache 5 min), locationlog queries represent session state that changes frequently. Do not cache aggressively:</p>
+
+  <table class="field-table" style="border:1px solid var(--line);border-radius:6px;overflow:hidden">
+    <thead><tr><th>Query type</th><th>Cache TTL</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td class="field-name">Client count sparkline (historical window)</td><td class="field-type">60 s</td><td class="field-desc">Historical data doesn't change — safe to cache. Matches widget refresh interval.</td></tr>
+      <tr><td class="field-name">Currently active sessions (end_time = 0)</td><td class="field-type">30 s</td><td class="field-desc">Same PF node search already cached at 30 s in existing widget — match that.</td></tr>
+      <tr><td class="field-name">SSID client counts (active sessions grouped)</td><td class="field-type">30 s</td><td class="field-desc">Clients connect/disconnect frequently during class transitions.</td></tr>
+      <tr><td class="field-name">Per-MAC session history (<code>/node/{mac}/locationlogs</code>)</td><td class="field-type">No cache</td><td class="field-desc">Only called on operator click — live response expected.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin-top:20px">Retention window — validate before M2</h3>
+  <div class="callout warn">
+    <strong>The locationlog has a configurable cleanup window</strong> (<code>maintenance.locationlog_cleanup_window</code> in PF config). The default is often 30 days, but it can be shorter. If TCS has set a shorter window, historical data beyond that point is gone. Check the current retention setting on the TCS PF 15 instance before building sparklines that depend on multi-day history:
+<pre style="margin-top:8px">
+<span class="cm"># On PF server</span>
+<span class="k">grep</span> locationlog_cleanup /usr/local/pf/conf/pf.conf
+<span class="cm"># or via API:</span>
+<span class="k">GET</span> /api/v1/config/maintenance/locationlog_cleanup
+</pre>
+    If the retention window is less than 24 hours, the sparkline can only cover the school day's own data. That may still be sufficient for the dashboard's use case (show today's pattern) but cap the <code>_timeperiod</code> selector at the configured retention window.
+  </div>
+
+  <h3 style="margin-top:20px">Auth endpoint + session management</h3>
+  <div class="callout info">
+    <strong>Reuse the existing PF widget auth pattern exactly.</strong> The existing <code>packetfence/</code> widget already manages PF session auth (<code>POST /api/v1/login</code> → token → session cookie or Bearer header). All locationlog calls go through the same <code>PFClient.php</code> (or equivalent) HTTP client. No new auth logic — just new endpoint calls on the existing authenticated session.
+  </div>
+</section>
+
+<!-- ── SECTION 6: Updated time-series verdict table ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">6</span> Updated Time-Series Verdict — Complete Picture</h2>
+
+  <p>This supersedes the table in the M0 XIQ Reference doc (Section 4). Add PF locationlog as a third time-series source alongside Zabbix and XIQ.</p>
+
+  <table class="impact-table">
+    <thead>
+      <tr>
+        <th>Live Telemetry metric</th>
+        <th>Source</th>
+        <th>Has history?</th>
+        <th>Sparkline treatment</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Uplink In / Out</td>
+        <td><span class="badge" style="background:var(--zbx2);border:1px solid var(--zbx3);color:#7dd3fc">ZBX</span></td>
+        <td><span class="badge b-history">YES</span></td>
+        <td class="field-desc">Full curve · <code>history.get</code></td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Latency / Packet Loss</td>
+        <td><span class="badge" style="background:var(--zbx2);border:1px solid var(--zbx3);color:#7dd3fc">ZBX</span></td>
+        <td><span class="badge b-history">YES</span></td>
+        <td class="field-desc">Full curve · <code>history.get</code></td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Clients Connected</td>
+        <td><span class="badge" style="background:var(--pf2);border:1px solid var(--pf3);color:#d8b4fe">PF</span></td>
+        <td><span class="badge b-history">YES ← NEW</span></td>
+        <td class="field-desc">Full curve · derived from locationlog session buckets · label "Clients (PF locationlog)"</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Channel Util 2.4 GHz</td>
+        <td><span class="badge" style="background:var(--xiq2);border:1px solid var(--xiq3);color:#34d399">XIQ</span></td>
+        <td><span class="badge" style="background:var(--err2);border:1px solid var(--err3);color:#fca5a5">NO</span></td>
+        <td class="field-desc">Current-value badge · % unit</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Channel Util 5 GHz</td>
+        <td><span class="badge" style="background:var(--xiq2);border:1px solid var(--xiq3);color:#34d399">XIQ</span></td>
+        <td><span class="badge" style="background:var(--err2);border:1px solid var(--err3);color:#fca5a5">NO</span></td>
+        <td class="field-desc">Current-value badge · % unit</td>
+      </tr>
+      <tr>
+        <td style="font-family:var(--mono);font-size:11.5px">Noise Floor 2.4 / 5 GHz</td>
+        <td><span class="badge" style="background:var(--xiq2);border:1px solid var(--xiq3);color:#34d399">XIQ</span></td>
+        <td><span class="badge" style="background:var(--err2);border:1px solid var(--err3);color:#fca5a5">NO</span></td>
+        <td class="field-desc">Current-value badge · dBm unit</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok" style="margin-top:16px">
+    <strong>Open question Q6 from M0 XIQ Reference is now resolved:</strong> Do NOT add Extreme WIRELESS-MIB SNMP items to the Zabbix template for channel utilization history. The client count sparkline from PF locationlog is the more operationally valuable historical metric for school network operators ("how busy was this AP at 9am?"). RF utilization history would be useful for RF planning but that's out of scope for the operator dashboard. Close Q6 — no new SNMP items needed.
+  </div>
+</section>
+
+<!-- ── SECTION 7: Validation curl ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">7</span> M0 Validation — PF Locationlog</h2>
+
+<pre>
+<span class="cm"># Step 1 — Authenticate (reuse existing PF widget credentials)</span>
+<span class="k">TOKEN</span>=$(curl -sk -X POST https://<span class="v">PF_IP</span>:<span class="num">9999</span>/api/v1/login \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"username":"webservices","password":"…"}'</span> \
+  | python3 -c <span class="s">"import sys,json; print(json.load(sys.stdin)['token'])"</span>)
+
+<span class="cm"># Step 2 — List unique SSIDs (sanity check TCS SSID names)</span>
+<span class="k">curl</span> -sk https://<span class="v">PF_IP</span>:<span class="num">9999</span>/api/v1/locationlogs/ssids \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+<span class="cm"># Step 3 — Fetch recent locationlogs for BHS-56-Hallway</span>
+<span class="cm"># (replace start_time with today's date in YYYY-MM-DD format)</span>
+<span class="k">curl</span> -sk -X POST https://<span class="v">PF_IP</span>:<span class="num">9999</span>/api/v1/locationlogs/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{
+    "query": {
+      "op": "and",
+      "values": [
+        {"field": "switch_ip",  "op": "equals",                  "value": "172.16.97.59"},
+        {"field": "start_time", "op": "greater_than_or_equals",  "value": "2026-05-05 00:00:00"}
+      ]
+    },
+    "fields": ["mac","ssid","start_time","end_time","role","vlan","connection_type","switch","switch_mac"],
+    "sort": ["start_time DESC"],
+    "limit": 25
+  }'</span> | python3 -m json.tool
+<span class="cm"># VALIDATE: switch_ip matches, end_time sentinel value, ssid names, role values</span>
+
+<span class="cm"># Step 4 — Count active sessions right now (end_time open sentinel)</span>
+<span class="k">curl</span> -sk -X POST https://<span class="v">PF_IP</span>:<span class="num">9999</span>/api/v1/locationlogs/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{
+    "query": {
+      "op": "and",
+      "values": [
+        {"field": "switch_ip", "op": "equals", "value": "172.16.97.59"},
+        {"field": "end_time",  "op": "equals", "value": "0000-00-00 00:00:00"}
+      ]
+    },
+    "fields": ["mac","ssid","start_time","role"],
+    "sort": ["start_time DESC"],
+    "limit": 200
+  }'</span> | python3 -m json.tool
+<span class="cm"># Cross-check this count against: XIQ client count + PF nodes/search count</span>
+<span class="cm"># All three should agree (±1-2 due to timing). Discrepancy = investigate.</span>
+
+<span class="cm"># Step 5 — Check locationlog retention setting</span>
+<span class="k">curl</span> -sk https://<span class="v">PF_IP</span>:<span class="num">9999</span>/api/v1/config/maintenance/locationlog_cleanup \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+<span class="cm"># Note the 'window' value — this caps how far back sparklines can reach</span>
+</pre>
+</section>
+
+</div>
+</body>
+</html>

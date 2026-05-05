@@ -1,0 +1,410 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: c070a4dcf1854fc989bb24876665172a
+      name: 'Templates/Network devices'
+  templates:
+    - uuid: 78f16bde0e8442389c8e4fbec0f94bd0
+      template: 'Extreme XIQ APs by API'
+      name: 'Extreme XIQ APs by API'
+      description: |
+        Discovers and monitors ExtremeCloud IQ access points via the XIQ REST API.
+        
+        Single host pattern: one master Script item paginates GET /devices and feeds
+        an LLD rule that creates per-AP dependent items.
+        
+        Required macros:
+          {$XIQ_TOKEN}     - Permanent API token (Global Settings -> API Token Management). Set as Secret.
+          {$XIQ_URL}       - API base URL (default: https://api.extremecloudiq.com)
+          {$XIQ_PAGE_SIZE} - Page size for /devices (default: 100)
+          {$XIQ_FUNCTION}  - LLD filter regex for device_function (default: AP)
+        
+        Tested against XIQ API as of 2026; verify field names with:
+          curl -s "$XIQ_URL/devices?views=FULL&limit=2" -H "Authorization: Bearer $TOKEN" | jq '.data[0] | keys'
+      groups:
+        - name: 'Templates/Network devices'
+      items:
+        - uuid: da453e8a881b49f3be91d81932e4cbe3
+          name: 'XIQ: Total connected clients'
+          type: DEPENDENT
+          key: xiq.clients.total
+          history: 90d
+          description: 'Sum of active_clients across all APs.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var arr = JSON.parse(value);
+                  var t = 0;
+                  for (var i = 0; i < arr.length; i++) t += (arr[i].clients || 0);
+                  return t;
+          master_item:
+            key: xiq.devices.raw
+        - uuid: c0765c71a8b84f6dbc184f6390deb75c
+          name: 'XIQ: Total APs discovered'
+          type: DEPENDENT
+          key: xiq.devices.count
+          history: 90d
+          description: 'Total number of devices returned by the master item.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.length()
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: xiq.devices.raw
+        - uuid: 1877d62dd3b64ce8b0125108b163f10e
+          name: 'XIQ: Device list (raw)'
+          type: SCRIPT
+          key: xiq.devices.raw
+          delay: 5m
+          history: 1d
+          value_type: TEXT
+          params: |
+            var input = JSON.parse(value);
+            var token = input.token;
+            var baseUrl = input.baseUrl;
+            var pageSize = parseInt(input.pageSize, 10);
+            if (!pageSize) { pageSize = 100; }
+            if (!token) { throw "XIQ token is missing"; }
+            var devices = [];
+            var page = 1;
+            var totalPages = 1;
+            var maxPages = 100;
+            while (page <= totalPages && page <= maxPages) {
+                var req = new HttpRequest();
+                req.addHeader("Authorization: Bearer " + token);
+                req.addHeader("Accept: application/json");
+                var url = baseUrl + "/devices?views=FULL&limit=" + pageSize + "&page=" + page;
+                var resp = req.get(url);
+                var sc = req.getStatus();
+                if (sc !== 200) { throw "XIQ HTTP " + sc + " on page " + page; }
+                var body = JSON.parse(resp);
+                var rows = body.data;
+                if (!rows) { rows = []; }
+                for (var i = 0; i < rows.length; i++) {
+                    var ap = rows[i];
+                    var locStr = "";
+                    if (ap.locations && ap.locations.length > 0) {
+                        var leaf = ap.locations[ap.locations.length - 1];
+                        if (leaf && leaf.name) { locStr = leaf.name; }
+                    }
+                    devices.push({
+                        id: ap.id || 0,
+                        serial: ap.serial_number || "",
+                        hostname: ap.hostname || "",
+                        mac: ap.mac_address || "",
+                        ip: ap.ip_address || "",
+                        model: ap.product_type || "",
+                        version: ap.software_version || "",
+                        func: ap.device_function || "",
+                        connected: ap.connected === true ? 1 : 0,
+                        last_connect: ap.last_connect_time || 0,
+                        clients: ap.active_clients || 0,
+                        uptime: ap.system_up_time || 0,
+                        policy: ap.network_policy_name || "",
+                        config_mismatch: ap.config_mismatch === true ? 1 : 0,
+                        admin_state: ap.device_admin_state || "",
+                        location: locStr,
+                        location_id: ap.location_id || 0
+                    });
+                }
+                totalPages = body.total_pages || 1;
+                page++;
+            }
+            return JSON.stringify(devices);
+          description: 'Master item. Paginates GET /devices and returns a flat JSON array of APs.'
+          timeout: 60s
+          parameters:
+            - name: baseUrl
+              value: '{$XIQ_URL}'
+            - name: pageSize
+              value: '{$XIQ_PAGE_SIZE}'
+            - name: token
+              value: '{$XIQ_TOKEN}'
+      discovery_rules:
+        - uuid: f9ad7635e8f34e7084583b9c555f165f
+          name: 'XIQ AP discovery'
+          type: DEPENDENT
+          key: xiq.ap.discovery
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#FUNCTION}'
+                value: '{$XIQ_FUNCTION}'
+              - macro: '{#SERIAL}'
+                value: ^.+$
+          description: 'Discovers APs from the master item. Filtered to device_function matching {$XIQ_FUNCTION}.'
+          item_prototypes:
+            - uuid: a2f88daa52664f159861f96f49fa176c
+              name: 'AP {#HOSTNAME}: Active clients'
+              type: DEPENDENT
+              key: 'xiq.ap.clients[{#SERIAL}]'
+              history: 30d
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].clients.first()'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: clients
+                - tag: location
+                  value: '{#LOCATION}'
+            - uuid: 4e7c740c0c174a4c94a8de3c2227d6db
+              name: 'AP {#HOSTNAME}: Config mismatch'
+              type: DEPENDENT
+              key: 'xiq.ap.configmismatch[{#SERIAL}]'
+              history: 30d
+              valuemap:
+                name: 'XIQ config mismatch'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].config_mismatch.first()'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: config
+              trigger_prototypes:
+                - uuid: 22ccc0eca822498d90637a7fd3c04c87
+                  expression: 'last(/Extreme XIQ APs by API/xiq.ap.configmismatch[{#SERIAL}])=1'
+                  name: 'AP {#HOSTNAME} ({#SERIAL}) has config mismatch'
+                  priority: INFO
+                  tags:
+                    - tag: ap_serial
+                      value: '{#SERIAL}'
+                    - tag: scope
+                      value: config
+            - uuid: 14cc6b82dd3d4e0aa8377d022ea70282
+              name: 'AP {#HOSTNAME}: Connected'
+              type: DEPENDENT
+              key: 'xiq.ap.connected[{#SERIAL}]'
+              history: 30d
+              trends: 90d
+              valuemap:
+                name: 'XIQ connected state'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].connected.first()'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_model
+                  value: '{#MODEL}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: status
+                - tag: location
+                  value: '{#LOCATION}'
+              trigger_prototypes:
+                - uuid: 0f13af259c854a60b6c0839163b71082
+                  expression: 'max(/Extreme XIQ APs by API/xiq.ap.connected[{#SERIAL}],{$XIQ_DISCONNECT_TIME})=0'
+                  name: 'AP {#HOSTNAME} ({#SERIAL}) is disconnected'
+                  priority: WARNING
+                  description: 'AP has been reported disconnected by XIQ for at least {$XIQ_DISCONNECT_TIME}.'
+                  tags:
+                    - tag: ap_model
+                      value: '{#MODEL}'
+                    - tag: ap_serial
+                      value: '{#SERIAL}'
+                    - tag: location
+                      value: '{#LOCATION}'
+                    - tag: scope
+                      value: availability
+            - uuid: ea6d33be1d5c46b88eddf23400cff628
+              name: 'AP {#HOSTNAME}: IP address'
+              type: DEPENDENT
+              key: 'xiq.ap.ip[{#SERIAL}]'
+              history: 30d
+              value_type: CHAR
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].ip.first()'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: network
+            - uuid: cc6740a8e7b4419fad37a1abd9a438fc
+              name: 'AP {#HOSTNAME}: Last check-in'
+              type: DEPENDENT
+              key: 'xiq.ap.lastconnect[{#SERIAL}]'
+              history: 30d
+              units: unixtime
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].last_connect.first()'
+                  error_handler: DISCARD_VALUE
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var n = parseInt(value);
+                      if (isNaN(n)) return 0;
+                      return n > 9999999999 ? Math.floor(n / 1000) : n;
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: heartbeat
+            - uuid: a58a18e6f96345b8acc863dcb5e6f4d2
+              name: 'AP {#HOSTNAME}: Uptime'
+              type: DEPENDENT
+              key: 'xiq.ap.uptime[{#SERIAL}]'
+              history: 30d
+              trends: 90d
+              units: uptime
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].uptime.first()'
+                  error_handler: DISCARD_VALUE
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var n = parseInt(value);
+                      if (isNaN(n)) return 0;
+                      return n > 9999999999 ? Math.floor(n / 1000) : n;
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: health
+            - uuid: 1760852ea4b84921ad19dfd582a6a8bb
+              name: 'AP {#HOSTNAME}: Software version'
+              type: DEPENDENT
+              key: 'xiq.ap.version[{#SERIAL}]'
+              history: 30d
+              value_type: CHAR
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.serial==''{#SERIAL}'')].version.first()'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
+              master_item:
+                key: xiq.devices.raw
+              tags:
+                - tag: ap_id
+                  value: '{#ID}'
+                - tag: ap_mac
+                  value: '{#MAC}'
+                - tag: ap_serial
+                  value: '{#SERIAL}'
+                - tag: component
+                  value: firmware
+          master_item:
+            key: xiq.devices.raw
+          lld_macro_paths:
+            - lld_macro: '{#FUNCTION}'
+              path: $.func
+            - lld_macro: '{#HOSTNAME}'
+              path: $.hostname
+            - lld_macro: '{#ID}'
+              path: $.id
+            - lld_macro: '{#IP}'
+              path: $.ip
+            - lld_macro: '{#LOCATION}'
+              path: $.location
+            - lld_macro: '{#MAC}'
+              path: $.mac
+            - lld_macro: '{#MODEL}'
+              path: $.model
+            - lld_macro: '{#POLICY}'
+              path: $.policy
+            - lld_macro: '{#SERIAL}'
+              path: $.serial
+      macros:
+        - macro: '{$XIQ_DISCONNECT_TIME}'
+          value: 10m
+          description: 'How long an AP must be disconnected before alerting'
+        - macro: '{$XIQ_FUNCTION}'
+          value: AP
+          description: 'device_function filter regex (AP, SWITCH, ROUTER, etc.)'
+        - macro: '{$XIQ_PAGE_SIZE}'
+          value: '100'
+          description: 'Devices per page'
+        - macro: '{$XIQ_TOKEN}'
+          type: SECRET_TEXT
+          description: 'XIQ permanent API token'
+        - macro: '{$XIQ_URL}'
+          value: 'https://api.extremecloudiq.com'
+          description: 'XIQ API base URL'
+      valuemaps:
+        - uuid: c2f3f2137db342b0a402165254675e4d
+          name: 'XIQ config mismatch'
+          mappings:
+            - value: '0'
+              newvalue: 'In sync'
+            - value: '1'
+              newvalue: Mismatch
+        - uuid: 72d5c0ff95c04d14bfea5165b5288d79
+          name: 'XIQ connected state'
+          mappings:
+            - value: '0'
+              newvalue: Disconnected
+            - value: '1'
+              newvalue: Connected

@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M0 — XIQ API Reference: Device Config &amp; Identity</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --info:     #0ea5e9;
+  --info2:    #0d1f3a;
+  --info3:    #1a3a6a;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --pf:       #a855f7;
+  --pf2:      #1e1028;
+  --pf3:      #3b1a5a;
+  --zbx:      #0ea5e9;
+  --zbx2:     #0d1f3a;
+  --zbx3:     #1a3a6a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 48px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.brand {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--acc);
+  margin-bottom: 8px;
+}
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-meta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg2);
+}
+.header-meta span { color: var(--fg); font-weight: 600; }
+
+/* ── Content ── */
+.main { padding: 32px 48px 64px; max-width: 1060px; }
+
+section { margin-bottom: 44px; }
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h2 .sec-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: .06em;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 20px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+p { color: var(--fg2); font-size: 13.5px; margin-bottom: 10px; }
+p:last-child { margin-bottom: 0; }
+
+/* ── Callout boxes ── */
+.callout {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 14px 0;
+}
+.callout strong { font-weight: 600; }
+.callout.warn  { background: var(--warn2); border-left: 3px solid var(--warn); color: #fcd34d; }
+.callout.ok    { background: var(--ok2);   border-left: 3px solid var(--ok);   color: #86efac; }
+.callout.info  { background: var(--info2); border-left: 3px solid var(--info); color: #7dd3fc; }
+.callout.err   { background: var(--err2);  border-left: 3px solid var(--err);  color: #fca5a5; }
+.callout.pf    { background: var(--pf2);   border-left: 3px solid var(--pf);   color: #d8b4fe; }
+
+/* ── Endpoint card ── */
+.endpoint {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 22px;
+  overflow: hidden;
+}
+.ep-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.method {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: .08em;
+}
+.method.get  { background: #0d3a1a; color: #4ade80; border: 1px solid #1a5a2a; }
+.method.post { background: #1a1a0d; color: #fbbf24; border: 1px solid #3a3a1a; }
+.ep-path {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.ep-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-left: auto;
+}
+.ep-tag.confirmed { background: var(--ok2);   border: 1px solid var(--ok3);   color: #86efac; }
+.ep-tag.inferred  { background: var(--warn2); border: 1px solid var(--warn3); color: #fcd34d; }
+.ep-tag.tbd       { background: var(--err2);  border: 1px solid var(--err3);  color: #fca5a5; }
+.ep-body { padding: 14px 16px; }
+.ep-desc { font-size: 13px; color: var(--fg2); margin-bottom: 14px; }
+
+/* ── Field table ── */
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+.field-table th {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--fg3);
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.field-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line2);
+  vertical-align: top;
+}
+.field-table tr:last-child td { border-bottom: none; }
+.field-table tr:hover td { background: rgba(255,255,255,.015); }
+.field-name  { font-family: var(--mono); font-size: 11.5px; color: #4ade80; white-space: nowrap; }
+.field-type  { font-family: var(--mono); font-size: 10px; color: var(--fg3); white-space: nowrap; }
+.field-desc  { color: var(--fg2); font-size: 12.5px; }
+.field-ui    { color: var(--fg); font-size: 12.5px; font-weight: 500; }
+
+/* ── Status badges ── */
+.fs-confirmed { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.fs-inferred  { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--warn2); border: 1px solid var(--warn3); color: #fcd34d; }
+.fs-tbd       { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--err2); border: 1px solid var(--err3); color: #fca5a5; }
+.fs-zbx-inv   { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: var(--zbx2); border: 1px solid var(--zbx3); color: #7dd3fc; }
+
+/* ── Source badges ── */
+.src { font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; letter-spacing:.04em; display: inline-block; }
+.src-xiq { background: var(--xiq2); border: 1px solid var(--xiq3); color: #34d399; }
+.src-zbx { background: var(--zbx2); border: 1px solid var(--zbx3); color: #7dd3fc; }
+.src-pf  { background: var(--pf2);  border: 1px solid var(--pf3);  color: #c084fc; }
+.src-inv { background: #1a1a0d; border: 1px solid #3a3a1a; color: #fbbf24; }
+.src-derived { background: var(--bg3); border: 1px solid var(--line); color: var(--fg2); }
+
+/* ── Master mapping table ── */
+.map-table { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.map-table th {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--fg3);
+  text-align: left; padding: 8px 12px; background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.map-table td { padding: 8px 12px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.map-table tr:last-child td { border-bottom: none; }
+.map-table tr:hover td { background: rgba(255,255,255,.012); }
+.map-table .group-hd td {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  background: var(--bg3); color: var(--fg3);
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.ui-row { font-weight: 600; color: var(--fg); font-size: 12.5px; }
+.json-field { font-family: var(--mono); font-size: 11px; color: #4ade80; }
+.endpoint-ref { font-family: var(--mono); font-size: 10.5px; color: var(--fg3); }
+.fallback-note { font-family: var(--mono); font-size: 10px; color: #fbbf24; }
+
+/* ── Overlap table ── */
+.overlap-table { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.overlap-table th {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--fg3);
+  text-align: left; padding: 8px 12px; background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+}
+.overlap-table td { padding: 8px 12px; border-bottom: 1px solid var(--line2); vertical-align: top; color: var(--fg2); font-size: 12.5px; }
+.overlap-table tr:last-child td { border-bottom: none; }
+.overlap-table tr:hover td { background: rgba(255,255,255,.012); }
+.resolution { color: var(--fg); font-weight: 500; }
+
+/* ── Pre blocks ── */
+pre {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px; overflow-x: auto; font-family: var(--mono);
+  font-size: 11.5px; line-height: 1.7; margin: 12px 0;
+}
+.cm { color: var(--fg3); }
+.k  { color: #4ade80; }
+.s  { color: #fca5a5; }
+.n  { color: #7dd3fc; }
+.v  { color: #c084fc; }
+.p  { color: var(--fg2); }
+.num{ color: #fbbf24; }
+.warn-inline { color: #fcd34d; }
+
+code {
+  font-family: var(--mono); font-size: 11px;
+  background: var(--bg3); color: var(--fg);
+  padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line);
+}
+
+/* ── Cache bar ── */
+.cache-row { display: flex; align-items: center; gap: 12px; margin: 6px 0; font-size: 12.5px; }
+.cache-label { font-family: var(--mono); font-size: 11px; color: var(--fg2); width: 240px; flex-shrink: 0; }
+.cache-pill {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 2px 10px; border-radius: 10px; white-space: nowrap;
+}
+.cache-live    { background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.cache-60s     { background: var(--info2); border: 1px solid var(--info3); color: #7dd3fc; }
+.cache-5m      { background: var(--xiq2); border: 1px solid var(--xiq3); color: #34d399; }
+.cache-10m     { background: #1a1a2a; border: 1px solid #2a2a4a; color: #a78bfa; }
+.cache-note    { color: var(--fg3); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">AP Dashboard · M0 Deliverable</div>
+    <h1>XIQ API Reference — Device Config &amp; Identity</h1>
+    <div class="subtitle">
+      <code>GET /devices/{id}</code> ·
+      <code>GET /network-policies/{id}</code> ·
+      <code>GET /ssids/{id}</code> ·
+      <code>GET /devices/{id}/location</code>
+      — field maps · UI row bindings · PF overlap · Zabbix fallbacks
+    </div>
+  </div>
+  <div class="header-meta">
+    <div>XIQ API version <span>25.9.0-36 (Apr 2026)</span></div>
+    <div>Spec source <span>api.extremecloudiq.com/openapi</span></div>
+    <div>Milestone <span>M0 — Foundation</span></div>
+    <div>Companion doc <span>M0_XIQ_Wireless_API_Reference</span></div>
+    <div>Status <span style="color:var(--warn)">Pending live AP validation</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ── SECTION 0: Path corrections ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--err2);color:#fca5a5;border:1px solid var(--err3)">!</span>
+    Path Corrections — Project Plan Had Wrong Paths
+  </h2>
+
+  <div class="callout err">
+    <strong>Three of the four endpoints in the project plan use incorrect paths.</strong>
+    The plan used an <code>/xapi/v1/</code> prefix (copied from an older XIQ Controller doc).
+    The live API at <code>api.extremecloudiq.com</code> has no such prefix — this was already
+    established in <code>M0_XIQ_Wireless_API_Reference</code>. Additionally, two resource names
+    are singular in the plan but plural in the live spec.
+  </div>
+
+  <table class="field-table" style="border: 1px solid var(--line); border-radius: 6px; overflow:hidden; margin-top:14px">
+    <thead>
+      <tr>
+        <th>Project plan path (WRONG)</th>
+        <th>Correct path</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="field-name" style="color:#fca5a5">/xapi/v1/devices/{id}</td>
+        <td class="field-name">/devices/{id}</td>
+        <td class="field-desc">Documented in M0_XIQ_Wireless_API_Reference §2. No change to field schema.</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:#fca5a5">/xapi/v1/network-policy/{id}</td>
+        <td class="field-name">/network-policies/{id}</td>
+        <td class="field-desc">Plural + no prefix. Confirmed from validation checklist Step 7 curl command.</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:#fca5a5">/xapi/v1/ssid/{id}</td>
+        <td class="field-name">/ssids/{id}</td>
+        <td class="field-desc">Plural + no prefix. Inferred from API naming conventions — validate exact path during M0 live test.</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:#fca5a5">/xapi/v1/location/{id}</td>
+        <td class="field-name">/devices/{id}/location</td>
+        <td class="field-desc">Location is a sub-resource of the device, not a standalone resource. Confirmed from validation checklist Step 6.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout info" style="margin-top:16px">
+    <strong>Update all M1 task descriptions</strong> before implementation begins.
+    The project plan task wording references the wrong paths. This document supersedes
+    the plan for all config/identity endpoint paths.
+  </div>
+</section>
+
+<!-- ── SECTION 1: GET /devices/{id} ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">1</span>
+    <code>GET /devices/{id}</code> — Device Identity &amp; Config
+  </h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}</span>
+      <span class="ep-tag confirmed">Confirmed in live spec</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Full device detail for one AP. Already documented in
+        <code>M0_XIQ_Wireless_API_Reference §2</code> — this section adds the full
+        UI row mapping for every field this endpoint contributes. The XIQ internal
+        <code>id</code> must be resolved once (by hostname or serial search) and cached
+        in a Zabbix host inventory field. All subsequent dashboard loads use the cached ID.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field</th>
+            <th>Type</th>
+            <th>Dashboard row</th>
+            <th>Panel</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="field-name">id</td>
+            <td class="field-type">int64</td>
+            <td class="field-desc">Internal XIQ device ID. Cached in Zabbix host inventory — not displayed in UI.</td>
+            <td class="field-type">—</td>
+            <td><span class="fs-confirmed">Confirmed</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">serial_number</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">System Info → Serial Number</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-confirmed">Confirmed</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">product_type</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">System Info → Device Model</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-confirmed">Confirmed — returns "AP305C"</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">software_version</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">System Info → IQ Engine (firmware + build)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — validate exact field name</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">mac_address</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">Network Info → MAC Address</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-confirmed">Confirmed</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">ip_address</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">Network Info → Mgt0 IPv4 (IP only; prefix len from Zabbix)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — validate field name</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">network_policy_id<br><span style="color:var(--fg3);font-size:10px">or network_policy_name</span></td>
+            <td class="field-type">int64 / string</td>
+            <td class="field-ui">System Info → Network Policy (display name)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — may be ID only; name via /network-policies/{id}</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">config_status<br><span style="color:var(--fg3);font-size:10px">or config_type</span></td>
+            <td class="field-type">string / enum</td>
+            <td class="field-ui">System Info → Configuration Type</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — mock shows "DHCP_CLIENT_WITHOUT_FALLBACK"; validate enum values</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">last_updated<br><span style="color:var(--fg3);font-size:10px">or config_update_time</span></td>
+            <td class="field-type">int64 (unix ms)</td>
+            <td class="field-ui">Network Info → Last Config Push (format as local datetime)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — validate field name; confirm unit is ms not s</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">ntp_server</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">Network Info → NTP</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-tbd">TBD — likely in config profile, not device object; see note below</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">connected_clients</td>
+            <td class="field-type">int32</td>
+            <td class="field-ui">Overview → client count badge (quick summary only)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — validate presence; main count from /clients endpoint</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>NTP server location is uncertain.</strong>
+        The mock data shows <code>"0.aerohive.pool.ntp.org"</code> (an Aerohive-era NTP pool address).
+        This suggests the NTP config predates the Extreme rebranding and likely lives in the device
+        configuration profile or network policy object, not the flat device detail response.
+        During M0 validation: <code>grep -i ntp</code> across the full <code>/devices/{id}</code>
+        response body. If absent, escalate to <code>GET /network-policies/{policy_id}</code>
+        and then Zabbix SNMP fallback (SNMPv2-MIB sysNTPServer or manual Zabbix host inventory field).
+      </div>
+
+      <div class="callout info" style="margin-top:10px">
+        <strong>Note on <code>ip_address</code> vs. Zabbix source:</strong>
+        The mock data tags Mgt0 IPv4 as <code>zbx</code> because Zabbix already knows the management IP
+        (it's the host interface IP used for SNMP polling), and the Zabbix value includes the prefix
+        length (<code>/22</code>) which XIQ may not provide. Use Zabbix as primary source for the full
+        <code>IP/prefix</code> display. XIQ <code>ip_address</code> is a useful cross-check but not the
+        primary source for this row.
+      </div>
+
+      <h3>Fields explicitly sourced to Zabbix, not XIQ</h3>
+      <p>These rows appear in System Info / Network Info but are <strong>not obtained from XIQ <code>/devices/{id}</code></strong>:</p>
+      <table class="field-table" style="margin-top:8px">
+        <thead>
+          <tr><th>Dashboard row</th><th>Source</th><th>How obtained</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="field-ui">System Info → Host Name</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">Zabbix <code>host.host</code> field — already in widget context.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">System Info → Visible Name</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">Zabbix <code>host.name</code> (visible name) — e.g. "BHS 1F Hallway · Rm 100s".</td>
+          </tr>
+          <tr>
+            <td class="field-ui">System Info → Device Template</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">Zabbix <code>host.parentTemplates[].name</code> via <code>host.get</code>.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">System Info → Function</td>
+            <td><span class="src src-derived">Derived</span></td>
+            <td class="field-desc">Hardcoded "Access Point" — derived from <code>product_type</code> prefix, no API call.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → Device Status</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">Zabbix <code>host.available</code> (1=OK, 2=Unavailable) + XIQ connection state if <code>connected_clients</code> present.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → Mgt0 IPv4 (with /prefix)</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">Zabbix host interface IP + prefix length from <code>hostinterface.get</code>.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → Mgt0 IPv6</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">SNMP <code>ipv6InterfaceAddress</code> item, or "—" if not configured.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → IPv4 Default Gateway</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">SNMP <code>ipForwardTable</code> default route item.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → DNS</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">SNMP host DNS item or host inventory field.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → LLDP Neighbor</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">SNMP LLDP-MIB walk — <code>lldpRemPortId</code> + <code>lldpRemPortDesc</code>.</td>
+          </tr>
+          <tr>
+            <td class="field-ui">Network Info → Uplink VLAN</td>
+            <td><span class="src src-zbx">ZBX</span></td>
+            <td class="field-desc">SNMP dot1qVlanStaticName or Zabbix host inventory tag.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 2: GET /network-policies/{id} ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">2</span>
+    <code>GET /network-policies/{id}</code> — Network Policy
+  </h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/network-policies/{id}</span>
+      <span class="ep-tag inferred">Path confirmed from validation checklist — response schema TBD</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Returns the full network policy object. The policy ID is obtained from <code>GET /devices/{id}</code>
+        (via <code>network_policy_id</code> or similar field). This call is the bridge between the device
+        and its SSID list — it provides the human-readable policy name and the array of SSID IDs that the
+        policy broadcasts. One <code>GET /ssids/{id}</code> call is then made per SSID ID in that array.
+        Cache this response aggressively (TTL ~5 min) — network policy configuration changes at most a
+        few times per semester.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>Dashboard row / use</th>
+            <th>Panel</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="field-name">id</td>
+            <td class="field-type">int64</td>
+            <td class="field-desc">Policy ID — used as cache key. Not displayed.</td>
+            <td class="field-type">—</td>
+            <td><span class="fs-inferred">Infer</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">name</td>
+            <td class="field-type">string</td>
+            <td class="field-ui">System Info → Network Policy (display name)</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-inferred">Infer — mock shows "TCS-Production"</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">ssid_profile_ids<br><span style="color:var(--fg3);font-size:10px">or ssid_ids / ssids</span></td>
+            <td class="field-type">int64[]</td>
+            <td class="field-ui">Drives the fan-out to <code>GET /ssids/{id}</code> — one call per ID</td>
+            <td class="field-type">Wireless tab</td>
+            <td><span class="fs-inferred">Infer — array of SSID profile IDs; validate field name</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">description</td>
+            <td class="field-type">string</td>
+            <td class="field-desc">Optional — tooltip or hover detail on the Network Policy row. Not a required display field.</td>
+            <td class="field-type">Overview</td>
+            <td><span class="fs-tbd">TBD</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>If <code>/devices/{id}</code> already returns <code>network_policy_name</code> as a string,</strong>
+        skip this endpoint for the System Info Network Policy display row — you already have the name.
+        Only call <code>/network-policies/{id}</code> if the device response gives an ID only, or to
+        obtain the SSID ID list. Validate during M0 step 5 curl.
+      </div>
+
+      <div class="callout info">
+        <strong>Fan-out limit:</strong> TCS-Production uses 3 SSIDs (TCS-Wireless, TCS-Guest-Registration,
+        TCS-VIPGuest). Never make more than the confirmed count of SSID calls. If the SSID ID array is
+        unexpectedly long (e.g. 20+ SSIDs from a shared policy), cap the fan-out and log a warning —
+        a misconfigured XIQ policy could spike your per-load call count well beyond the 8-call budget.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: GET /ssids/{id} ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">3</span>
+    <code>GET /ssids/{id}</code> — Per-SSID Config (one call per SSID)
+  </h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/ssids/{id}</span>
+      <span class="ep-tag inferred">Path inferred — VALIDATE exact path and response schema</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Returns the configuration profile for one SSID. Called once per SSID ID returned by
+        <code>GET /network-policies/{id}</code>. For the BHS pilot this is 3 calls.
+        Results are cached at 5-minute TTL — SSID config (auth method, encryption, VLAN) changes
+        only when the network team makes deliberate changes in XIQ. This is the primary data source
+        for the <strong>SSID Broadcast table</strong> on the Wireless tab.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>SSID Broadcast table column</th>
+            <th>PF overlap?</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="field-name">ssid_name<br><span style="color:var(--fg3);font-size:10px">or name</span></td>
+            <td class="field-type">string</td>
+            <td class="field-ui">SSID (col 1)</td>
+            <td class="field-desc"><strong>Yes</strong> — PF <code>locationlog.ssid</code> is the SSID a client connected to at session time. XIQ is the configured name. See §5 overlap analysis.</td>
+            <td><span class="fs-inferred">Infer</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">vlan_id<br><span style="color:var(--fg3);font-size:10px">or default_vlan / native_vlan</span></td>
+            <td class="field-type">int / string</td>
+            <td class="field-ui">VLAN (col 2)</td>
+            <td class="field-desc"><strong>Partial</strong> — XIQ shows the <em>configured</em> VLAN (or "role-based" if dynamic). PF <code>locationlog.vlan</code> shows the <em>assigned</em> VLAN per client. Display XIQ configured value; PF value is per-client and lives on the Clients tab. See §5.</td>
+            <td><span class="fs-inferred">Infer — TCS-Wireless has role-based VLANs (100/110/130/150); verify how XIQ represents this</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">security_type<br><span style="color:var(--fg3);font-size:10px">or auth_type / security_level</span></td>
+            <td class="field-type">string / enum</td>
+            <td class="field-ui">Auth (col 3) — e.g. "WPA2-Enterprise · EAP-TLS"</td>
+            <td class="field-desc"><strong>Partial</strong> — XIQ gives configured auth type. PF <code>connection_type</code> gives the EAP method used per client auth event. Different semantic: config vs. observed. See §5.</td>
+            <td><span class="fs-inferred">Infer — expect enum like "WPA2_ENTERPRISE", "OPEN", "CAPTIVE_PORTAL"</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">encryption_method<br><span style="color:var(--fg3);font-size:10px">or cipher_type</span></td>
+            <td class="field-type">string / enum</td>
+            <td class="field-ui">Encryption (col 4) — e.g. "AES", "Open + HTTPS"</td>
+            <td class="field-desc">No PF equivalent — XIQ-only</td>
+            <td><span class="fs-inferred">Infer — expect "AES", "TKIP", "NONE"</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">enable_24ghz<br>enable_5ghz</td>
+            <td class="field-type">bool</td>
+            <td class="field-ui">Band (col 5) — e.g. "2.4 + 5", "5 only"</td>
+            <td class="field-desc">No PF equivalent</td>
+            <td><span class="fs-inferred">Infer — may be a single <code>band_steering</code> enum or two separate booleans</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">band_steering</td>
+            <td class="field-type">bool / enum</td>
+            <td class="field-ui">Band col — append "(band steering)" if enabled</td>
+            <td class="field-desc">No PF equivalent</td>
+            <td><span class="fs-inferred">Infer</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>TCS-Wireless VLAN complexity:</strong> TCS-Wireless uses PF role-based VLAN assignment
+        (100 Faculty / 110 Students / 130 BYOD / 150 AV). XIQ SSID config likely shows a single default VLAN
+        or "dynamic" marker — it cannot enumerate the role-based VLAN map because that logic lives entirely
+        in PF. For the SSID Broadcast table, display the configured VLANs as the mock shows:
+        <code>100/110/130/150</code> — this string should come from a <strong>Zabbix host inventory field
+        or a static config map in the widget</strong>, not the XIQ API, since XIQ won't enumerate
+        the PF role VLAN assignments.
+      </div>
+
+      <h3>Clients column — SSID Broadcast table</h3>
+      <p>The Clients column in the SSID Broadcast table (count per SSID) is <strong>not returned by <code>/ssids/{id}</code></strong>. Source options:</p>
+      <table class="field-table" style="margin-top:8px">
+        <thead><tr><th>Option</th><th>Source</th><th>How</th><th>Recommendation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="field-desc">A — Group XIQ client list by SSID</td>
+            <td><span class="src src-xiq">XIQ</span></td>
+            <td class="field-desc">Count records from <code>GET /clients?device_id=X</code> grouped by <code>ssid</code> field</td>
+            <td class="field-desc"><strong>Preferred</strong> — already fetching this endpoint for Clients tab</td>
+          </tr>
+          <tr>
+            <td class="field-desc">B — Group PF locationlog by SSID</td>
+            <td><span class="src src-pf">PF</span></td>
+            <td class="field-desc">Active sessions from <code>locationlog</code> where <code>end_time = '0000-00-00 00:00:00'</code> grouped by <code>ssid</code></td>
+            <td class="field-desc">Acceptable fallback if XIQ /clients filter is unreliable</td>
+          </tr>
+          <tr>
+            <td class="field-desc">C — Sum radio client counts from wifi-if-stats</td>
+            <td><span class="src src-xiq">XIQ</span></td>
+            <td class="field-desc">Total from <code>associated_clients</code> per radio — does NOT break down by SSID</td>
+            <td class="field-desc">Cannot use — no SSID granularity</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>NAC Role column — SSID Broadcast table</h3>
+      <p>The NAC Role column is <strong>PF-only</strong>. XIQ has no concept of PF roles. Source is the PF connection profile name associated with each SSID. Implementation: look up the PF <code>realm</code> or <code>connection_profile</code> configured for each SSID name, or derive from the active session role distribution in <code>locationlog</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 4: GET /devices/{id}/location ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">4</span>
+    <code>GET /devices/{id}/location</code> — Location Metadata
+  </h2>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/location</span>
+      <span class="ep-tag inferred">Path confirmed from validation checklist — response schema TBD</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Returns the physical location context for the device: building, floor, coordinates, and
+        installation metadata. Used primarily by the <strong>AP Sidecar widget (M5)</strong> for
+        the floor plan view and location block. On the Overview tab, the building + floor name can
+        appear as a subtitle under the AP hostname. Cache at 10 minutes — location data changes
+        only when an AP is physically moved.
+      </div>
+
+      <table class="field-table">
+        <thead>
+          <tr>
+            <th>JSON field (expected)</th>
+            <th>Type</th>
+            <th>Dashboard use</th>
+            <th>Fallback</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="field-name">building_id<br>building_name</td>
+            <td class="field-type">int64 / string</td>
+            <td class="field-ui">Sidecar: Location block → Building. Overview: AP subtitle line.</td>
+            <td class="field-desc">Zabbix host group name — "Wireless/Bryant HS" → extract "Bryant HS" after the slash</td>
+            <td><span class="fs-inferred">Infer — validate field name</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">floor_id<br>floor_name</td>
+            <td class="field-type">int64 / string</td>
+            <td class="field-ui">Sidecar: Location block → Floor</td>
+            <td class="field-desc">Zabbix host inventory <code>location_lat</code> or free-text <code>notes</code> field</td>
+            <td><span class="fs-inferred">Infer — validate field name</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">x<br>y<br><span style="color:var(--fg3);font-size:10px">or latitude / longitude</span></td>
+            <td class="field-type">float</td>
+            <td class="field-ui">Sidecar: position marker on floor plan SVG (M5)</td>
+            <td class="field-desc">Zabbix host inventory <code>location_lat</code> / <code>location_lon</code></td>
+            <td><span class="fs-tbd">TBD — may be pixel coords on a floor plan image, not lat/lng</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">floor_plan_image_id<br><span style="color:var(--fg3);font-size:10px">or floor_plan_url</span></td>
+            <td class="field-type">int64 / string</td>
+            <td class="field-ui">Sidecar: floor plan background image (M5)</td>
+            <td class="field-desc">Static SVG asset stored per building in Zabbix host inventory field</td>
+            <td><span class="fs-tbd">TBD — may require a separate image fetch endpoint; validate format (PNG, SVG?)</span></td>
+          </tr>
+          <tr>
+            <td class="field-name">installation_date<br><span style="color:var(--fg3);font-size:10px">or deployed_at</span></td>
+            <td class="field-type">string / int64</td>
+            <td class="field-ui">Sidecar: installation metadata (M5) — not shown on Overview</td>
+            <td class="field-desc">Zabbix host inventory <code>date_hw_install</code></td>
+            <td><span class="fs-tbd">TBD — may not exist in XIQ</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>Coordinate system uncertainty:</strong> XIQ's floor plan coordinates may be in pixel
+        offsets relative to a floor plan image (x/y percentages), not geographic lat/lng.
+        Do not assume lat/lng until validated. If pixel coordinates, the Sidecar widget needs the
+        floor plan image dimensions to render the position marker correctly.
+      </div>
+
+      <div class="callout info">
+        <strong>Floor plan image fetch:</strong> If XIQ returns an image ID or URL, validate whether
+        the image is publicly accessible or requires an authenticated XIQ request with the bearer token.
+        If authenticated, <code>XIQClient.php</code> must proxy the image to avoid exposing the token
+        in an <code>&lt;img src=""&gt;</code> tag. If the image endpoint doesn't exist or the format
+        is unusable, fall back to a static per-building SVG stored as a Zabbix host tag value.
+        Decision required by M5 start.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 5: Complete field → UI row mapping ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">5</span>
+    Complete Field → Dashboard Row Mapping
+  </h2>
+
+  <p>Every row in System Info, Network Info, and the SSID Broadcast table mapped to its source endpoint and field. This is the authoritative reference for M1 implementation — if a row is not listed here, it is not in the dashboard design.</p>
+
+  <table class="map-table" style="margin-top:16px">
+    <thead>
+      <tr>
+        <th>Dashboard row</th>
+        <th>Source</th>
+        <th>Endpoint</th>
+        <th>JSON field</th>
+        <th>Notes / fallback</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- SYSTEM INFO group -->
+      <tr class="group-hd"><td colspan="5">System Info panel — Overview tab</td></tr>
+      <tr>
+        <td class="ui-row">Host Name</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">host.get</td>
+        <td class="json-field">host.host</td>
+        <td class="field-desc">Already in widget context — no extra API call.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Visible Name</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">host.get</td>
+        <td class="json-field">host.name</td>
+        <td class="field-desc">e.g. "BHS 1F Hallway · Rm 100s" — set by operator in Zabbix.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Network Policy</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}<br><span style="color:var(--fg3)">then /network-policies/{id}</span></td>
+        <td class="json-field">network_policy_name<br><span style="color:var(--fg3)">or name (from policy)</span></td>
+        <td class="field-desc">If /devices/{id} returns only an ID, make a secondary call to /network-policies/{id} for the name. Cache policy response 5 min.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">SSID (list)</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/ssids/{id} ×N</td>
+        <td class="json-field">ssid_name (or name)</td>
+        <td class="field-desc">Concatenate SSID names from all fan-out calls. e.g. "TCS-Wireless · TCS-Guest-Registration · TCS-VIPGuest".</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Device Model</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}</td>
+        <td class="json-field">product_type</td>
+        <td class="field-desc">Returns "AP305C". Display as "AP_305C" to match Extreme's product name convention.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Function</td>
+        <td><span class="src src-derived">Derived</span></td>
+        <td class="endpoint-ref">—</td>
+        <td class="json-field">—</td>
+        <td class="field-desc">Hardcoded "Access Point" — no API call. Derived from product_type starting with "AP".</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Device Template</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">host.get</td>
+        <td class="json-field">parentTemplates[].name</td>
+        <td class="field-desc">First template in the array matching "Extreme AP". Already in host.get response.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Configuration Type</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}</td>
+        <td class="json-field">config_status (TBD)</td>
+        <td class="field-desc">Mock shows "DHCP_CLIENT_WITHOUT_FALLBACK". Validate exact field name and enum. If missing from /devices/{id}, check /network-policies/{id}.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Serial Number</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}</td>
+        <td class="json-field">serial_number</td>
+        <td class="field-desc">Confirmed field name. Also available via SNMP entPhysicalSerialNum — Zabbix fallback.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">IQ Engine</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}</td>
+        <td class="json-field">software_version (TBD)</td>
+        <td class="field-desc">Display format: "10.7r5b · build c6be9b0". Validate whether firmware + build are one field or two. SNMP sysDescr fallback contains firmware string.</td>
+      </tr>
+
+      <!-- NETWORK INFO group -->
+      <tr class="group-hd"><td colspan="5">Network Info panel — Overview tab</td></tr>
+      <tr>
+        <td class="ui-row">Device Status</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">host.get</td>
+        <td class="json-field">available</td>
+        <td class="field-desc">1=MANAGED (OK), 2=UNMANAGED. Label "MANAGED" maps to Zabbix available=1.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Mgt0 IPv4</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">hostinterface.get</td>
+        <td class="json-field">ip + subnet</td>
+        <td class="field-desc">Zabbix host interface. Format: "172.16.97.59 / 22". XIQ ip_address omits prefix length.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Mgt0 IPv6</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">item.get (SNMP)</td>
+        <td class="json-field">ipv6 item lastvalue</td>
+        <td class="field-desc">Show "—" if not configured.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">IPv4 Default Gateway</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">item.get (SNMP)</td>
+        <td class="json-field">default route item</td>
+        <td class="field-desc">SNMP ipForwardTable or host inventory.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">DNS</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">item.get (SNMP)</td>
+        <td class="json-field">dns item lastvalue</td>
+        <td class="field-desc">Or host inventory field. Format multiple servers with " · " separator.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">NTP</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id} or /network-policies/{id}</td>
+        <td class="json-field">ntp_server (TBD)</td>
+        <td class="field-desc"><strong>Location uncertain — validate during M0.</strong> Fallback: SNMP sysNTPServer OID, then Zabbix host inventory <code>notes</code> field (operator enters manually).</td>
+      </tr>
+      <tr>
+        <td class="ui-row">MAC Address</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">hostinterface.get</td>
+        <td class="json-field">mac</td>
+        <td class="field-desc">XIQ also provides mac_address (Confirmed) — use either. Zabbix preferred for consistency.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">LLDP Neighbor</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">item.get (SNMP)</td>
+        <td class="json-field">LLDP-MIB items</td>
+        <td class="field-desc">Format: "BHS-CORE-SW01 · Gi1/0/56". No XIQ equivalent.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Uplink VLAN</td>
+        <td><span class="src src-zbx">ZBX</span></td>
+        <td class="endpoint-ref">item.get (SNMP)</td>
+        <td class="json-field">dot1q VLAN item</td>
+        <td class="field-desc">Or Zabbix host tag. No XIQ equivalent.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Last Config Push</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/devices/{id}</td>
+        <td class="json-field">last_updated (TBD)</td>
+        <td class="field-desc">Convert unix ms → local datetime. Format: "2026-04-29 14:02:11". Validate field name + unit (ms vs s).</td>
+      </tr>
+
+      <!-- SSID BROADCAST table group -->
+      <tr class="group-hd"><td colspan="5">SSID Broadcast table — Wireless tab (one row per SSID)</td></tr>
+      <tr>
+        <td class="ui-row">SSID name</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/ssids/{id}</td>
+        <td class="json-field">ssid_name (TBD)</td>
+        <td class="field-desc">Confirmed concept — validate exact field name.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">VLAN</td>
+        <td><span class="src src-xiq">XIQ</span> + <span class="src src-inv" style="margin-left:4px">INV</span></td>
+        <td class="endpoint-ref">/ssids/{id}</td>
+        <td class="json-field">vlan_id (TBD)</td>
+        <td class="field-desc">For role-based VLANs (TCS-Wireless): XIQ returns one configured VLAN. Display the full role VLAN map from a Zabbix host tag or static widget config. See §3 VLAN note.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Auth</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/ssids/{id}</td>
+        <td class="json-field">security_type (TBD)</td>
+        <td class="field-desc">Map XIQ enum → display string: "WPA2_ENTERPRISE" → "WPA2-Enterprise · EAP-TLS". May need EAP method from a separate field.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Encryption</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/ssids/{id}</td>
+        <td class="json-field">encryption_method (TBD)</td>
+        <td class="field-desc">Map: "AES" → "AES", "NONE" → "Open + HTTPS" (for captive portal SSIDs).</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Band</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/ssids/{id}</td>
+        <td class="json-field">enable_24ghz / enable_5ghz (TBD)</td>
+        <td class="field-desc">Render as "2.4 + 5", "5 only", "2.4 only".</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Clients (per SSID)</td>
+        <td><span class="src src-xiq">XIQ</span></td>
+        <td class="endpoint-ref">/clients (filtered by device_id)</td>
+        <td class="json-field">COUNT grouped by ssid field</td>
+        <td class="field-desc">Already fetched for Clients tab — group by SSID name client-side in PHP. No extra API call.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">NAC Role</td>
+        <td><span class="src src-pf">PF</span></td>
+        <td class="endpoint-ref">nodes/search or connection profile config</td>
+        <td class="json-field">role / connection_profile</td>
+        <td class="field-desc">No XIQ equivalent. Display "role-based" for SSIDs using PF dynamic roles, specific role name for fixed-role SSIDs.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 6: PacketFence overlap analysis ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">6</span>
+    PacketFence Overlap Analysis
+  </h2>
+
+  <div class="callout pf">
+    <strong>Key principle:</strong> XIQ and PacketFence provide different views of the same facts.
+    XIQ describes what is <em>configured</em> (policy intent). PacketFence describes what
+    <em>happened</em> per client per session (operational reality). These are complementary, not redundant.
+    No field should be dropped from either source because the other covers it.
+  </div>
+
+  <table class="overlap-table" style="margin-top:16px">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>XIQ provides</th>
+        <th>PF provides</th>
+        <th>Resolution — which wins where</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="ui-row">SSID name</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/ssids/{id}</code> → <code>ssid_name</code> — configured SSID name</td>
+        <td><span class="src src-pf">PF</span> <code>locationlog.ssid</code> — SSID the client actually connected to at session time</td>
+        <td class="resolution">XIQ wins for SSID Broadcast table (config definition). PF wins for Clients tab SSID column (per-client session truth). The two should match — if they don't for a session, that's an anomaly worth flagging.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">VLAN</td>
+        <td><span class="src src-xiq">XIQ</span> → configured default VLAN for the SSID</td>
+        <td><span class="src src-pf">PF</span> <code>locationlog.vlan</code> — VLAN PF actually assigned to each client (may vary by role)</td>
+        <td class="resolution">XIQ wins for SSID Broadcast table VLAN column (shows the policy intent). PF wins for Clients tab VLAN column (shows per-client assignment). For role-based VLANs, XIQ will show only the default; PF shows the actual assigned VLAN — both are needed.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Auth method</td>
+        <td><span class="src src-xiq">XIQ</span> → configured security type per SSID (e.g. WPA2-Enterprise, Captive Portal)</td>
+        <td><span class="src src-pf">PF</span> <code>locationlog.connection_type</code> — EAP method actually used per client (Wireless-802.11-EAP, PEAP, EAP-TLS, MAC-Auth)</td>
+        <td class="resolution">XIQ wins for SSID Broadcast table Auth column (config-level auth type). PF wins for Clients tab Auth column (per-client actual EAP method). Both are needed — they answer different questions.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Client count (per AP)</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/clients?device_id=X</code> → current connected clients, point-in-time</td>
+        <td><span class="src src-pf">PF</span> <code>locationlog</code> active sessions (<code>end_time = 0000...</code>) — current NAC-registered clients</td>
+        <td class="resolution">XIQ count = RF-associated clients. PF count = NAC-registered clients. They will differ: a client can be RF-associated but not yet NAC-registered (or vice versa during posture check). Show both in the Overview Issues panel as separate metrics if counts diverge significantly.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Client MAC address</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/clients</code> → <code>mac_address</code></td>
+        <td><span class="src src-pf">PF</span> <code>locationlog.mac</code> and <code>nodes.mac</code></td>
+        <td class="resolution">MAC is the JOIN key — use it to produce the enriched client row. Neither source "wins"; both are needed for the join. Normalize to uppercase colon-separated format before joining.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Client hostname</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/clients</code> → <code>hostname</code></td>
+        <td><span class="src src-pf">PF</span> <code>node.computername</code></td>
+        <td class="resolution">PF wins — PF uses the DHCP-registered hostname which is more reliable for inventory (e.g. "BHS-CHROME-1142"). XIQ hostname may be mDNS-discovered and can be empty. Use PF as primary, XIQ as fallback.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Encryption</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/ssids/{id}</code> → configured cipher type</td>
+        <td>Not in PF</td>
+        <td class="resolution">XIQ only — no overlap. SSID Broadcast table Encryption column is XIQ-only.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">Band / radio</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/clients</code> → <code>radio_index</code> / band</td>
+        <td>Not in PF locationlog</td>
+        <td class="resolution">XIQ only — PF does not record radio band. Band column in Clients tab comes entirely from XIQ.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">RSSI / signal strength</td>
+        <td><span class="src src-xiq">XIQ</span> <code>/clients</code> → <code>rssi</code></td>
+        <td>Not in PF</td>
+        <td class="resolution">XIQ only — PF has no RSSI. RSSI bar in Clients tab is XIQ-only.</td>
+      </tr>
+      <tr>
+        <td class="ui-row">NAC role / posture</td>
+        <td>Not in XIQ</td>
+        <td><span class="src src-pf">PF</span> <code>node.status</code>, <code>node.category</code></td>
+        <td class="resolution">PF only — XIQ has no NAC role or posture concept. All role/posture data in Clients tab is PF-only.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 7: Caching strategy ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--xiq2);color:#34d399;border:1px solid var(--xiq3)">7</span>
+    Caching Strategy — Config vs. Live Endpoints
+  </h2>
+
+  <p>All config-class data changes on operator action only — not continuously. Cache aggressively to protect the 7,500 req/hr quota. Live session data (clients, radio stats) must not be cached.</p>
+
+  <div style="margin-top:14px">
+    <div class="cache-row">
+      <span class="cache-label">/devices/{id}</span>
+      <span class="cache-pill cache-60s">60 s</span>
+      <span class="cache-note">Device status and client count change frequently — short TTL.</span>
+    </div>
+    <div class="cache-row">
+      <span class="cache-label">/clients (filtered)</span>
+      <span class="cache-pill cache-live">No cache — live</span>
+      <span class="cache-note">Real-time client sessions. Fetch every dashboard load.</span>
+    </div>
+    <div class="cache-row">
+      <span class="cache-label">/devices/{id}/wifi-if-stats</span>
+      <span class="cache-pill cache-live">No cache — live</span>
+      <span class="cache-note">Current RF metrics snapshot. Fetch every dashboard load.</span>
+    </div>
+    <div class="cache-row">
+      <span class="cache-label">/network-policies/{id}</span>
+      <span class="cache-pill cache-5m">5 min</span>
+      <span class="cache-note">Policy config changes only on deliberate network team action.</span>
+    </div>
+    <div class="cache-row">
+      <span class="cache-label">/ssids/{id} ×N</span>
+      <span class="cache-pill cache-5m">5 min</span>
+      <span class="cache-note">Same as policy — cache each SSID by its ID as the key.</span>
+    </div>
+    <div class="cache-row">
+      <span class="cache-label">/devices/{id}/location</span>
+      <span class="cache-pill cache-10m">10 min</span>
+      <span class="cache-note">Changes only when AP is physically moved. Very slow-changing.</span>
+    </div>
+  </div>
+
+  <pre style="margin-top:18px">
+<span class="cm">// XIQClient.php — APCu cache key conventions</span>
+<span class="cm">// Namespace all keys under "xiq:" to avoid collision with other APCu users</span>
+
+<span class="k">$device_cache_key</span>  = <span class="s">"xiq:device:{$xiq_device_id}"</span>;        <span class="cm">// TTL: 60s</span>
+<span class="k">$policy_cache_key</span>  = <span class="s">"xiq:policy:{$network_policy_id}"</span>;     <span class="cm">// TTL: 300s</span>
+<span class="k">$ssid_cache_key</span>    = <span class="s">"xiq:ssid:{$ssid_id}"</span>;                  <span class="cm">// TTL: 300s (per SSID)</span>
+<span class="k">$location_cache_key</span>= <span class="s">"xiq:location:{$xiq_device_id}"</span>;        <span class="cm">// TTL: 600s</span>
+
+<span class="cm">// Live endpoints — never cached:</span>
+<span class="cm">// GET /clients?device_id=X</span>
+<span class="cm">// GET /devices/{id}/wifi-if-stats</span>
+
+<span class="cm">// Cache the resolved XIQ device ID separately (almost never changes):</span>
+<span class="k">$id_cache_key</span>      = <span class="s">"xiq:id:host:{$zabbix_host_id}"</span>;        <span class="cm">// TTL: 3600s (1h)</span>
+</pre>
+
+  <div class="callout warn">
+    <strong>APCu is per-PHP-worker-process.</strong> If the Zabbix web server spawns multiple PHP-FPM
+    workers (typical default: 5–10), each worker will have its own APCu segment. A cache set in worker A
+    is not visible to worker B. This means up to 10× your expected call count until each worker primes
+    its cache independently. This is the expected behavior — it does not indicate a bug. The 7,500 req/hr
+    quota with 10 workers and 10 operator sessions is still within budget, but monitor
+    <code>RateLimit-Remaining</code> headers in production.
+  </div>
+</section>
+
+<!-- ── SECTION 8: M0 validation checklist additions ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--warn2);color:#fcd34d;border:1px solid var(--warn3)">8</span>
+    M0 Validation — Additional Curl Commands for Config Endpoints
+  </h2>
+
+  <p>These supplement the validation checklist in <code>M0_XIQ_Wireless_API_Reference §9</code>. Run after obtaining <code>$TOKEN</code> and <code>$DEVICE_ID</code> from Steps 1–2 of that checklist.</p>
+
+<pre>
+<span class="cm"># Step A — Full /devices/{id} response — grep for config/NTP fields</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span> | python3 -m json.tool | grep -iE \
+  <span class="s">"ntp|config|policy|software|version|status|updated|time"</span>
+<span class="cm"># VALIDATE: ntp_server presence, config_status field name, software_version,</span>
+<span class="cm"># network_policy_id vs network_policy_name, last_updated unit (check if value</span>
+<span class="cm"># looks like unix seconds (~1.7e9) or unix ms (~1.7e12))</span>
+
+<span class="cm"># Step B — Extract network_policy_id from device response</span>
+<span class="k">POLICY_ID</span>=$(<span class="k">curl</span> -s https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span> | python3 -c \
+  <span class="s">"import sys,json; d=json.load(sys.stdin); print(d.get('network_policy_id','FIELD_NOT_FOUND'))"</span>)
+<span class="k">echo</span> <span class="s">"Policy ID: $POLICY_ID"</span>
+
+<span class="cm"># Step C — Network policy (validate name field + SSID ID array field name)</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/network-policies/<span class="v">$POLICY_ID</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span> | python3 -m json.tool
+<span class="cm"># VALIDATE: response is an object (not paginated list), field names for:</span>
+<span class="cm"># policy name (expected: "name"), SSID ID array (expected: "ssid_profile_ids" or "ssid_ids")</span>
+
+<span class="cm"># Step D — Single SSID detail (use first ID from policy response)</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/ssids/<span class="v">$SSID_ID_1</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span> | python3 -m json.tool
+<span class="cm"># VALIDATE: ssid_name / name, vlan_id, security_type enum values,</span>
+<span class="cm"># encryption_method, band fields (enable_24ghz / enable_5ghz or single band enum)</span>
+
+<span class="cm"># Step E — If /ssids/{id} returns 404, try alternate paths:</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/ssid-profiles/<span class="v">$SSID_ID_1</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/wifi-networks/<span class="v">$SSID_ID_1</span> \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span>
+
+<span class="cm"># Step F — Location (validate field names, coordinate system)</span>
+<span class="k">curl</span> -s https://api.extremecloudiq.com/devices/<span class="v">$DEVICE_ID</span>/location \
+  -H <span class="s">'Authorization: Bearer $TOKEN'</span> | python3 -m json.tool
+<span class="cm"># VALIDATE: building_name / building.name field path, floor_name, x/y vs lat/lng,</span>
+<span class="cm"># presence of floor_plan_image_id or similar, installation_date field</span>
+
+<span class="cm"># Step G — Check if floor plan image requires auth (do NOT hardcode token in img src)</span>
+<span class="cm"># If location response contains an image URL, try fetching it without auth first:</span>
+<span class="k">curl</span> -I <span class="s">"$FLOOR_PLAN_URL"</span>
+<span class="cm"># 200 without auth = public URL, safe for &lt;img src=""&gt;</span>
+<span class="cm"># 401/403 = must proxy through XIQClient.php — plan accordingly for M5</span>
+</pre>
+</section>
+
+<!-- ── SECTION 9: Open questions ── -->
+<section>
+  <h2>
+    <span class="sec-num" style="background:var(--err2);color:#fca5a5;border:1px solid var(--err3)">9</span>
+    Open Questions — Config &amp; Identity Endpoints
+  </h2>
+
+  <p>All must be resolved before M1 implementation of <code>doAction()</code> in the PHP controller.</p>
+
+  <table class="field-table" style="border: 1px solid var(--line); border-radius: 6px; overflow: hidden">
+    <thead>
+      <tr><th>#</th><th>Question</th><th>Impact if unresolved</th><th>How to resolve</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C1</td>
+        <td class="field-desc">Does <code>/devices/{id}</code> return <code>network_policy_name</code> (string) or only <code>network_policy_id</code> (int)?</td>
+        <td class="field-desc">If ID-only: extra API call to <code>/network-policies/{id}</code> required just for the System Info Network Policy row</td>
+        <td class="field-desc">Step A + Step B curls above</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C2</td>
+        <td class="field-desc">Is <code>ntp_server</code> present anywhere in the XIQ API (device, policy, profile)?</td>
+        <td class="field-desc">Network Info NTP row shows "—" or requires a manual Zabbix host inventory field</td>
+        <td class="field-desc">Step A curl with grep; if absent, fall back to SNMP item or host inventory</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C3</td>
+        <td class="field-desc">What is the exact path for SSID config — <code>/ssids/{id}</code>, <code>/ssid-profiles/{id}</code>, or <code>/wifi-networks/{id}</code>?</td>
+        <td class="field-desc">SSID Broadcast table blocked until confirmed</td>
+        <td class="field-desc">Step D + Step E curls above</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C4</td>
+        <td class="field-desc">How does XIQ represent multi-VLAN SSIDs (role-based VLAN assignment)? Does it show the default VLAN only, or "dynamic"?</td>
+        <td class="field-desc">SSID Broadcast table VLAN column will show incomplete data for TCS-Wireless unless supplemented from Zabbix host inventory</td>
+        <td class="field-desc">Step D curl on TCS-Wireless SSID; inspect vlan field value</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C5</td>
+        <td class="field-desc">What is the XIQ security_type enum for WPA2-Enterprise? Does a separate field carry the EAP method (EAP-TLS vs PEAP)?</td>
+        <td class="field-desc">Auth column in SSID Broadcast table may only show "WPA2-Enterprise" without the EAP method qualifier</td>
+        <td class="field-desc">Step D curl; look for eap_type, auth_method, or dot1x_config sub-object</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C6</td>
+        <td class="field-desc">What coordinate system does <code>/devices/{id}/location</code> use — lat/lng or pixel x/y on a floor plan canvas?</td>
+        <td class="field-desc">AP Sidecar position marker (M5) implementation changes significantly between the two</td>
+        <td class="field-desc">Step F curl; check numeric range (lat/lng will be ~33.2, ~87.5 for TCS; x/y will be 0–1000 or similar)</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color:var(--fg3)">Q-C7</td>
+        <td class="field-desc">Does the floor plan image endpoint require XIQ auth? Is the image format usable as an HTML background (PNG/SVG) or requires conversion?</td>
+        <td class="field-desc">If auth required: must proxy via XIQClient.php in M5, adding complexity. If format is unrenderable: use static SVG fallback.</td>
+        <td class="field-desc">Step G curl — try unauthenticated access to the floor plan URL</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div><!-- /main -->
+</body>
+</html>
