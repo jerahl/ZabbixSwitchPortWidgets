@@ -92,7 +92,7 @@ final class XIQClient
     private const TTL_DEVICE   = 300;    // 5 min — config-class data (identity, model, policy ref, NTP, last config push). Live client counts come from /clients/active, NOT this endpoint, so the M0 §7 60-second guidance does not apply here.
     private const TTL_POLICY   = 300;
     private const TTL_SSID     = 300;
-    private const TTL_LOCATION = 600;
+    private const TTL_LOCATION = 300;    // 5 min — per M1 task spec. M0 §7 suggested 600s but per-task guidance is authoritative; location data still rarely changes (only on physical AP move) so under-caching at 5 min is safe.
     private const TTL_XIQ_ID   = 3600;
 
     /** Warn the widget view when remaining quota drops below this. */
@@ -992,22 +992,64 @@ final class XIQClient
     // ── Location ─────────────────────────────────────────────────────────────
 
     /**
-     * Fetch location metadata for a device.
+     * Fetch location metadata for a location ID, normalised for the dashboard.
      *
-     * Endpoint: GET /locations/{locationId}
+     * Endpoint: GET /locations/{id}
      *
-     * The location ID is found in getDevice() response — look for 'location_id'
-     * or similar field (confirm field name against live AP in M0 validation).
+     * Path note: the M0 closeout live-validated /devices/{id}/location
+     * (sub-resource on the device), which returns a slim shape with
+     * `location_unique_name` like "BUILDING|FLOOR".  The TOP-LEVEL endpoint
+     * /locations/{id} — used here, matching the project plan task and the
+     * Extreme_XIQ_APs.yaml host-macro design — is NOT in the closeout's
+     * "what was validated" table.  It is documented in the OpenAPI spec
+     * (510 paths) but live-validation against BHS-56-Hallway is still
+     * outstanding.  If the live AP returns 404 here, fall back to using
+     * the device sub-resource via getDevice()['raw']['location_unique_name']
+     * for the building/floor labels — that's the closeout-confirmed path.
      *
-     * Returns: building name, floor, coordinates, installation metadata.
-     * Cached 600 s — location assignments almost never change.
+     * Cached {@see self::TTL_LOCATION} seconds (5 min) under
+     * `xiq:location:{id}`.  Location assignments change only when an AP
+     * is physically moved.
      *
-     * @param  int  $locationId  From getDevice()['location_id'].
-     * @return array<string,mixed>
+     * Used by:
+     *   • Overview tab — building / floor subtitle under the AP hostname
+     *   • M5 device sidecar — full location block + floor-plan position marker
+     *
+     * Field-name resilience: NONE of the fields in this response shape
+     * have closeout-confirmed names.  The normaliser accepts the most
+     * plausible variants per the M0 doc Section 4 callouts (building_id /
+     * building.id; floor_name / floor.name; x/y or latitude/longitude).
+     * If the live response uses fields outside the alias set, they remain
+     * accessible via `raw`.
+     *
+     * @param  int  $locationId  XIQ location ID, from getDevice()['location_id']
+     *                           or the {$XIQ_LOCATION_ID} host macro.
+     *
+     * @return array{
+     *     id:                int,
+     *     name:              string,
+     *     unique_name:       string,
+     *     building_id:       int,
+     *     building_name:     string,
+     *     floor_id:          int,
+     *     floor_name:        string,
+     *     parent_id:         int,
+     *     coordinates:       array{x: float, y: float, latitude: float, longitude: float},
+     *     installation_date: int,
+     *     address:           string,
+     *     raw:               array<string,mixed>,
+     * }
+     *
      * @throws XIQException
      */
     public function getLocation(int $locationId): array
     {
+        if ($locationId <= 0) {
+            throw new XIQException(
+                "XIQClient::getLocation() requires a positive location ID, got {$locationId}"
+            );
+        }
+
         $cacheKey = "xiq:location:{$locationId}";
 
         $cached = $this->cacheGet($cacheKey);
@@ -1015,11 +1057,181 @@ final class XIQClient
             return $cached;
         }
 
-        $data = $this->httpGet("/locations/{$locationId}");
+        $raw = $this->httpGet("/locations/{$locationId}");
 
-        $this->cacheSet($cacheKey, $data, self::TTL_LOCATION);
+        if (!is_array($raw)) {
+            throw new XIQException(
+                "XIQClient::getLocation({$locationId}) — non-array response"
+            );
+        }
 
-        return $data;
+        $normalised = $this->normaliseLocation($locationId, $raw);
+
+        $this->cacheSet($cacheKey, $normalised, self::TTL_LOCATION);
+
+        return $normalised;
+    }
+
+    /**
+     * Probe the floor-plan endpoint and report what's available.
+     *
+     * Endpoint: GET /locations/{id}/floor-plan
+     *
+     * This method is deliberately fail-soft: any error (404, network
+     * failure, non-JSON response, malformed payload) is caught and surfaces
+     * as `available: false` with the failure reason logged via error_log.
+     * The M5 device sidecar needs a graceful path to fall back to a static
+     * per-building SVG stored in Zabbix host inventory when XIQ's floor
+     * plan is unusable.
+     *
+     * Negative results ARE cached (under the same TTL as getLocation) — we
+     * do not want to hammer a 404 on every page load.  When the endpoint
+     * starts working in a future XIQ build / for a newly-mapped building,
+     * the cache horizon is short enough to pick it up within 5 minutes.
+     *
+     * Response shape interpretation:
+     *   • If XIQ returns JSON metadata (URL + format) → fields populated.
+     *   • If XIQ returns raw image bytes → caught as JSON-decode failure
+     *     and reported as available=false; M5 sidecar must do a separate
+     *     authenticated fetch via this client (out of scope for M1).
+     *   • If XIQ returns 404 → available=false; static SVG fallback.
+     *
+     * The shape that DOES come back is mostly speculative — the floor-plan
+     * endpoint has not been live-validated.  See M0_XIQ_Device_Config_API
+     * §4 callouts on coordinate-system uncertainty and image format.
+     *
+     * @param  int  $locationId  XIQ location ID.
+     *
+     * @return array{
+     *     available: bool,
+     *     format:    string,
+     *     url:       string,
+     *     data_b64:  string,
+     *     reason:    string,
+     *     raw:       array<string,mixed>,
+     * }
+     *
+     * @throws XIQException  Only on non-positive ID.  Network / 404 / decode
+     *                       failures are absorbed and reported via the
+     *                       returned `available` flag.
+     */
+    public function getFloorPlan(int $locationId): array
+    {
+        if ($locationId <= 0) {
+            throw new XIQException(
+                "XIQClient::getFloorPlan() requires a positive location ID, got {$locationId}"
+            );
+        }
+
+        $cacheKey = "xiq:floorplan:{$locationId}";
+
+        $cached = $this->cacheGet($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Default "not available" sentinel — populated only on success below.
+        $result = [
+            'available' => false,
+            'format'    => '',
+            'url'       => '',
+            'data_b64'  => '',
+            'reason'    => '',
+            'raw'       => [],
+        ];
+
+        try {
+            $resp = $this->httpGet("/locations/{$locationId}/floor-plan");
+
+            if (is_array($resp) && !empty($resp)) {
+                $result = [
+                    'available' => true,
+                    'format'    => (string)(
+                        $resp['format']
+                        ?? $resp['content_type']
+                        ?? $resp['mime_type']
+                        ?? ''
+                    ),
+                    'url'       => (string)(
+                        $resp['url']
+                        ?? $resp['floor_plan_url']
+                        ?? $resp['image_url']
+                        ?? ''
+                    ),
+                    // Some APIs return image data inline as base64.  Surface it
+                    // here if present; M5 sidecar can render directly via a
+                    // data: URI without a second HTTP call.
+                    'data_b64'  => (string)(
+                        $resp['image']
+                        ?? $resp['data']
+                        ?? $resp['floor_plan_data']
+                        ?? ''
+                    ),
+                    'reason'    => '',
+                    'raw'       => $resp,
+                ];
+            } else {
+                $result['reason'] = 'empty_response';
+            }
+        } catch (\Throwable $e) {
+            // Catches XIQException (HTTP error like 404), JsonException
+            // (raw image bytes that fail to decode), and any other
+            // failure mode.  The M5 sidecar fallback to static SVG is
+            // the documented path here — see M0_XIQ_Device_Config_API §4
+            // image-fetch callout.
+            $result['reason'] = $this->classifyFloorPlanError($e);
+
+            error_log(sprintf(
+                'XIQClient::getFloorPlan(%d) — unavailable (%s): %s. '
+                . 'Sidecar should fall back to static SVG from host inventory.',
+                $locationId,
+                $result['reason'],
+                $e->getMessage(),
+            ));
+        }
+
+        $this->cacheSet($cacheKey, $result, self::TTL_LOCATION);
+
+        return $result;
+    }
+
+    /**
+     * Categorise a floor-plan probe failure into a short tag for logging
+     * and for the dashboard's diagnostic display.
+     *
+     * Tags returned:
+     *   • not_found   — HTTP 404 (endpoint absent on this XIQ build /
+     *                   location not mapped)
+     *   • auth        — authentication failure
+     *   • rate_limit  — 429
+     *   • decode      — non-JSON payload (likely raw image bytes;
+     *                   needs separate proxy fetch)
+     *   • http        — other HTTP error
+     *   • error       — generic catch-all
+     */
+    private function classifyFloorPlanError(\Throwable $e): string
+    {
+        $msg = $e->getMessage();
+
+        if ($e instanceof XIQAuthException) {
+            return 'auth';
+        }
+        if ($e instanceof XIQRateLimitException) {
+            return 'rate_limit';
+        }
+        if ($e instanceof \JsonException
+            || stripos($msg, 'json') !== false
+            || stripos($msg, 'syntax') !== false
+        ) {
+            return 'decode';
+        }
+        if (preg_match('/HTTP\s*404\b/i', $msg) === 1) {
+            return 'not_found';
+        }
+        if (preg_match('/HTTP\s*4\d\d|HTTP\s*5\d\d/i', $msg) === 1) {
+            return 'http';
+        }
+        return 'error';
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -1611,6 +1823,101 @@ final class XIQClient
             return $m[1] . 'GHz';
         }
         return '';
+    }
+
+    /**
+     * Map a raw /locations/{id} response onto the dashboard's stable shape.
+     *
+     * IMPORTANT: this endpoint was not in the M0 closeout's "what was
+     * validated" table.  The field names below are the union of M0 §4
+     * inferences and what the OpenAPI spec hints at.  The normaliser is
+     * intentionally permissive — it accepts both flat and nested forms
+     * for building/floor (a minor schema variation observed across XIQ
+     * builds) and keeps the full raw payload accessible for any field
+     * that hasn't been promoted to the normalised set.
+     *
+     * Coordinate handling: M0 §4 flagged a real ambiguity — XIQ floor
+     * plan coordinates may be pixel offsets (x/y on a floor plan canvas)
+     * OR geographic lat/lng.  Both pairs are surfaced in the
+     * `coordinates` sub-object; the M5 sidecar checks whichever pair is
+     * non-zero to decide how to render the position marker.
+     *
+     * @param  int                  $locationId  Echoed back into `id` if
+     *                                           the raw response omits it.
+     * @param  array<string,mixed>  $r           Raw /locations/{id} body.
+     * @return array<string,mixed>
+     */
+    private function normaliseLocation(int $locationId, array $r): array
+    {
+        // Building / floor — accept flat or nested form.
+        $buildingNested = is_array($r['building'] ?? null) ? $r['building'] : [];
+        $floorNested    = is_array($r['floor']    ?? null) ? $r['floor']    : [];
+
+        $buildingId = (int)(
+            $r['building_id']
+            ?? $buildingNested['id']
+            ?? 0
+        );
+        $buildingName = (string)(
+            $r['building_name']
+            ?? $buildingNested['name']
+            ?? ''
+        );
+        $floorId = (int)(
+            $r['floor_id']
+            ?? $floorNested['id']
+            ?? 0
+        );
+        $floorName = (string)(
+            $r['floor_name']
+            ?? $floorNested['name']
+            ?? ''
+        );
+
+        // Coordinates — pixel pair, geographic pair, or both.  Cast through
+        // float so int and string-numeric inputs both work.
+        $coords = is_array($r['coordinates'] ?? null) ? $r['coordinates'] : [];
+        $x       = (float)($r['x']         ?? $coords['x']         ?? 0);
+        $y       = (float)($r['y']         ?? $coords['y']         ?? 0);
+        $lat     = (float)($r['latitude']  ?? $coords['latitude']  ?? $r['lat'] ?? 0);
+        $lng     = (float)($r['longitude'] ?? $coords['longitude'] ?? $r['lng'] ?? $r['lon'] ?? 0);
+
+        // Installation date — may arrive as a unix timestamp (seconds or ms,
+        // routed through normaliseUnixTime for the same > 1e10 detection
+        // used elsewhere) or an ISO 8601 string.  Strings are converted via
+        // strtotime which yields seconds; anything unparseable becomes 0.
+        $installRaw = $r['installation_date'] ?? $r['deployed_at'] ?? $r['installed_at'] ?? 0;
+        if (is_string($installRaw) && $installRaw !== '' && !is_numeric($installRaw)) {
+            $installDate = (int)strtotime($installRaw);
+            if ($installDate < 0) {
+                $installDate = 0;
+            }
+        } else {
+            $installDate = $this->normaliseUnixTime($installRaw);
+        }
+
+        return [
+            'id'                => (int)   ($r['id']                        ?? $locationId),
+            'name'              => (string)($r['name'] ?? $r['location_name'] ?? ''),
+            // location_unique_name is the closeout-confirmed shape on the
+            // device sub-resource ("BUILDING|FLOOR").  Carry it through
+            // here for callers that prefer the canonical hierarchy string.
+            'unique_name'       => (string)($r['unique_name'] ?? $r['location_unique_name'] ?? ''),
+            'building_id'       => $buildingId,
+            'building_name'     => $buildingName,
+            'floor_id'          => $floorId,
+            'floor_name'        => $floorName,
+            'parent_id'         => (int)   ($r['parent_id'] ?? 0),
+            'coordinates'       => [
+                'x'         => $x,
+                'y'         => $y,
+                'latitude'  => $lat,
+                'longitude' => $lng,
+            ],
+            'installation_date' => $installDate,
+            'address'           => (string)($r['address'] ?? $r['street_address'] ?? ''),
+            'raw'               => $r,
+        ];
     }
 
     /**
