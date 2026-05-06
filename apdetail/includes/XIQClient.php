@@ -63,9 +63,10 @@ namespace Modules\APDetail;
  * G5  /clients/active default view emits only 12 fields.  Always append
  *     views=FULL to get rssi, snr, channel, connection_duration, locations[].
  *
- * G6  /devices/{id}/wifi-if-stats requires startTime + endTime even though
+ * G6  /devices/{id}/interfaces/wifi requires startTime + endTime even though
  *     the OpenAPI spec marks them optional.  A window < 10 min returns [].
  *     Use a 15-minute trailing window for "current" radio values.
+ *     (M0 inferred path was /wifi-if-stats; live-validated path is /interfaces/wifi.)
  *
  * G7  /devices/{id}/ssid/status returns a map keyed by SSID id (int), not
  *     name.  Join against getPolicySsids() to resolve name + security.
@@ -88,7 +89,7 @@ final class XIQClient
 
     /** APCu / filesystem cache TTLs (seconds). */
     private const TTL_TOKEN    = 6600;   // login JWT ~2h; refresh at 110 min
-    private const TTL_DEVICE   = 60;
+    private const TTL_DEVICE   = 300;    // 5 min — config-class data (identity, model, policy ref, NTP, last config push). Live client counts come from /clients/active, NOT this endpoint, so the M0 §7 60-second guidance does not apply here.
     private const TTL_POLICY   = 300;
     private const TTL_SSID     = 300;
     private const TTL_LOCATION = 600;
@@ -99,6 +100,17 @@ final class XIQClient
 
     /** WiFi stats window in seconds — must be ≥ 10 min or XIQ returns []. */
     private const WIFI_STATS_WINDOW_SEC = 900;  // 15 minutes (G6)
+
+    /**
+     * Cap on parallel /ssids/{id} fan-out requests.
+     *
+     * Per M0_XIQ_Device_Config_API §1: TCS-Production has 3 SSIDs; this is a
+     * 5× safety margin against a misconfigured policy with an unexpectedly
+     * long SSID list (a shared policy with 20+ SSIDs would otherwise spike
+     * per-load call count well beyond the per-widget budget).  When this cap
+     * is exceeded, getSsids() logs a warning and proceeds with the first N.
+     */
+    private const MAX_SSID_FAN_OUT = 16;
 
     /** Filesystem cache directory (APCu fallback). */
     private const FS_CACHE_DIR = '/tmp/zabbix_xiq_cache';
@@ -223,23 +235,67 @@ final class XIQClient
     // ── Device identity ──────────────────────────────────────────────────────
 
     /**
-     * Fetch full device metadata for one XIQ device.
+     * Fetch device identity & config for one XIQ device, normalised for the dashboard.
      *
-     * Cached 60 s.  Returns the raw decoded JSON object as an associative
-     * array.  Key fields used by the widget:
-     *   id, hostname, mac_address (wireless base MAC — see macInsertColons()),
-     *   serial_number, product_type, software_version, device_admin_state,
-     *   connected, config_mismatch, system_up_time (epoch ms).
+     * Wraps GET /devices/{id}.  Cached {@see self::TTL_DEVICE} seconds (5 min) under
+     * `xiq:device:{id}` — config-class data; not per-page-load.
+     *
+     * Returns a STABLE normalised shape — not the raw XIQ JSON.  This insulates
+     * widget.view.php and downstream consumers from XIQ field-name churn (M0
+     * marked several fields as "Infer — validate exact name"; aliases for each
+     * are accepted below).  The full raw response is preserved under `raw` so
+     * debug-mode dumps and ad-hoc field access still work.
+     *
+     * Timestamp fields are unix SECONDS (XIQ wire format is unix ms; we
+     * normalise via {@see self::normaliseUnixTime()} using the same > 1e10 test
+     * the Extreme_XIQ_APs.yaml master-item already uses for `last_connect`).
+     *
+     * The `mac` field is colon-formatted via {@see self::macInsertColons()}
+     * because XIQ returns it without delimiters (G3).  This is the wireless
+     * BASE MAC, not the eth0 management MAC — see G3 callout for context.
      *
      * The XIQ device ID is stored as a Zabbix host macro {$XIQ_DEVICE_ID} by
      * the fleet discovery template — no lookup required per widget load.
      *
-     * @param  int   $xiqDeviceId  XIQ internal device ID (from {$XIQ_DEVICE_ID}).
-     * @return array<string,mixed>
-     * @throws XIQException
+     * @param  int  $xiqDeviceId  XIQ internal device ID (NOT the Zabbix host ID).
+     *
+     * @return array{
+     *     id:                  int,
+     *     hostname:            string,
+     *     serial:              string,
+     *     model:               string,
+     *     function:            string,
+     *     firmware:            string,
+     *     mac:                 string,
+     *     ip:                  string,
+     *     config_type:         string,
+     *     config_mismatch:     bool,
+     *     connected:           bool,
+     *     admin_state:         string,
+     *     ntp_server:          string,
+     *     last_config_push:    int,
+     *     last_connect:        int,
+     *     uptime:              int,
+     *     network_policy_id:   int,
+     *     network_policy_name: string,
+     *     location_id:         int,
+     *     connected_clients:   int,
+     *     raw:                 array<string,mixed>,
+     * }
+     *
+     * @throws XIQException  On HTTP failure or malformed response.  401 retry
+     *                       (fromCredentials path) is transparent inside
+     *                       httpGet().  404 propagates as XIQException with
+     *                       the XIQ error message attached.
      */
     public function getDevice(int $xiqDeviceId): array
     {
+        if ($xiqDeviceId <= 0) {
+            throw new XIQException(
+                "XIQClient::getDevice() requires a positive device ID, got {$xiqDeviceId}"
+            );
+        }
+
         $cacheKey = "xiq:device:{$xiqDeviceId}";
 
         $cached = $this->cacheGet($cacheKey);
@@ -247,11 +303,19 @@ final class XIQClient
             return $cached;
         }
 
-        $data = $this->httpGet("/devices/{$xiqDeviceId}");
+        $raw = $this->httpGet("/devices/{$xiqDeviceId}");
 
-        $this->cacheSet($cacheKey, $data, self::TTL_DEVICE);
+        if (!is_array($raw) || !array_key_exists('id', $raw)) {
+            throw new XIQException(
+                "XIQClient::getDevice({$xiqDeviceId}) — malformed response (no 'id' field)"
+            );
+        }
 
-        return $data;
+        $normalised = $this->normaliseDevice($raw);
+
+        $this->cacheSet($cacheKey, $normalised, self::TTL_DEVICE);
+
+        return $normalised;
     }
 
     /**
@@ -284,27 +348,118 @@ final class XIQClient
     }
 
     /**
-     * Fetch all SSIDs for a network policy, fanned out in parallel.
+     * Fetch a network policy by its policy ID, normalised for the dashboard.
      *
-     * Endpoint: GET /network-policies/{policyId}/ssids → array of SSID objects
-     * then GET /ssids/{id} per entry.
+     * Endpoint composition (parallel): GET /network-policies/{id} for policy
+     * metadata (name, type, description) + GET /network-policies/{id}/ssids for
+     * the authoritative SSID list.  Both calls go through httpGetMulti so the
+     * cache miss costs one round-trip instead of two.
      *
-     * The first call returns a lightweight list (id + name).  Each SSID detail
-     * call returns: vlan, auth_type (WPA2-Enterprise / Open / etc.), encryption,
-     * band_steering, enabled_bands.  Fan-out uses curl_multi for concurrency.
+     * Why two calls:
+     *   • /network-policies/{id} returns name + meta but its SSID-id field
+     *     name is inferred ("ssid_profile_ids" / "ssid_ids") — varies by XIQ
+     *     build.  The closeout did NOT validate this path against live data.
+     *   • /network-policies/{id}/ssids IS live-validated (M0 Closeout §3) and
+     *     returns the rich SSID summary — id, name, broadcast_name, and the
+     *     access_security nested object.  Authoritative for the SSID id list.
      *
-     * Each SSID detail response is cached individually under xiq:ssid:{id}
-     * (300 s).  The policy SSID list is cached under xiq:policylist:{policyId}
-     * (300 s).
+     * Cached {@see self::TTL_POLICY} seconds (5 min) under `xiq:policy:{id}`.
+     * Network policy assignments change at most a few times per semester.
      *
-     * Returns an array of enriched SSID objects (list fields merged with detail
-     * fields).
+     * For the SSID Broadcast table, callers typically want richer per-SSID
+     * detail than this method exposes — use {@see self::getPolicySsids()},
+     * which composes this method's SSID-id list with {@see self::getSsids()}
+     * to produce the full enriched flat list.
+     *
+     * @param  int  $policyId  XIQ network policy ID, e.g. from
+     *                         getDeviceNetworkPolicy()['id'].
+     *
+     * @return array{
+     *     id:       int,
+     *     name:     string,
+     *     type:     string,
+     *     ssid_ids: int[],
+     *     raw:      array{meta: array<string,mixed>, ssids: array<int,array<string,mixed>>},
+     * }
+     *
+     * @throws XIQException
+     */
+    public function getNetworkPolicy(int $policyId): array
+    {
+        if ($policyId <= 0) {
+            throw new XIQException(
+                "XIQClient::getNetworkPolicy() requires a positive policy ID, got {$policyId}"
+            );
+        }
+
+        $cacheKey = "xiq:policy:{$policyId}";
+
+        $cached = $this->cacheGet($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Two parallel calls: policy meta + SSID list.  httpGetMulti returns
+        // results in the order of the input paths.
+        $responses = $this->httpGetMulti(
+            paths: [
+                "/network-policies/{$policyId}",
+                "/network-policies/{$policyId}/ssids",
+            ],
+            params: [],
+        );
+
+        $meta     = $responses[0] ?? [];
+        $ssidsRaw = $responses[1] ?? [];
+
+        // /network-policies/{id}/ssids may wrap the array in a 'data' envelope
+        $ssidArray = is_array($ssidsRaw['data'] ?? null) ? $ssidsRaw['data'] : $ssidsRaw;
+        if (!is_array($ssidArray)) {
+            $ssidArray = [];
+        }
+
+        $normalised = $this->normaliseNetworkPolicy(
+            policyId: $policyId,
+            meta:     is_array($meta) ? $meta : [],
+            ssids:    $ssidArray,
+        );
+
+        $this->cacheSet($cacheKey, $normalised, self::TTL_POLICY);
+
+        return $normalised;
+    }
+
+    /**
+     * Fetch all SSIDs for a network policy, summary + detail merged.
+     *
+     * High-level convenience method composed of:
+     *   1. GET /network-policies/{policyId}/ssids — returns the SSID summary
+     *      list with id, name, broadcast_name, and the access_security nested
+     *      object (security_type / encryption_method).  Live-validated in M0
+     *      Closeout §3.
+     *   2. {@see self::getSsids()} — fans out per-SSID detail calls in
+     *      parallel via curl_multi for VLAN, auth method, encryption type,
+     *      band steering, enabled bands.  Cap at MAX_SSID_FAN_OUT.
+     *
+     * Each SSID's normalised detail is cached individually under `xiq:ssid:{id}`
+     * by getSsids() (5 min).  The merged flat list is also cached under
+     * `xiq:policylist:{policyId}` (5 min) so subsequent calls within the
+     * cache horizon skip both summary and fan-out work entirely.
+     *
+     * Returns a flat list of SSID rows.  Each row preserves both the SUMMARY
+     * shape (with the `access_security` nested object — required by the M0
+     * Closeout §5 SSID Broadcast join recipe) AND the raw fields from
+     * /ssids/{id}.  Field order: summary keys first, then any additional
+     * detail keys.  Consumers that need normalised detail field access
+     * (e.g. `vlan` instead of `vlan_id`) should use {@see self::getSsid()} or
+     * {@see self::getSsids()} directly.
      *
      * NOTE (G7): /devices/{id}/ssid/status returns a map keyed by SSID id.
      * JOIN the returned 'id' fields against that map to get per-SSID admin state.
      *
-     * @param  int  $policyId  From getDeviceNetworkPolicy()['id'].
-     * @return array<int,array<string,mixed>>
+     * @param  int  $policyId  From getDeviceNetworkPolicy()['id'] or
+     *                         getNetworkPolicy()['id'].
+     * @return array<int,array<string,mixed>>  Flat list of merged SSID rows.
      * @throws XIQException
      */
     public function getPolicySsids(int $policyId): array
@@ -316,56 +471,220 @@ final class XIQClient
             return $cached;
         }
 
-        // Step 1 — get SSID id list for the policy
-        $list = $this->httpGet("/network-policies/{$policyId}/ssids");
-        $ssidList = $list['data'] ?? $list; // unwrap pagination envelope if present
+        // Step 1 — SSID summary list.  This is the live-validated path that
+        // returns broadcast_name + access_security.  We keep this call here
+        // (rather than going through getNetworkPolicy()) because we need the
+        // FULL summary entries to merge with details, not just the IDs.
+        $list     = $this->httpGet("/network-policies/{$policyId}/ssids");
+        $ssidList = $list['data'] ?? $list;   // unwrap pagination envelope if present
 
-        if (empty($ssidList)) {
+        if (!is_array($ssidList) || empty($ssidList)) {
             return [];
         }
 
-        // Step 2 — fetch per-SSID detail, serving from cache where possible
-        $toFetch = [];   // ssid id => true
-        $results = [];
-
+        // Step 2 — collect SSID IDs and index summaries by id for O(1) merge.
+        $ssidIds   = [];
+        $summaries = [];
         foreach ($ssidList as $entry) {
-            $ssidId = (int)($entry['id'] ?? 0);
-            if ($ssidId === 0) {
+            $sid = (int)($entry['id'] ?? 0);
+            if ($sid <= 0) {
                 continue;
             }
-            $ssidKey = "xiq:ssid:{$ssidId}";
-            $detail  = $this->cacheGet($ssidKey);
-            if ($detail !== null) {
-                $results[$ssidId] = array_merge($entry, $detail);
+            $ssidIds[]        = $sid;
+            $summaries[$sid]  = $entry;
+        }
+
+        // Step 3 — fan out per-SSID details via curl_multi (cache-aware).
+        $details = $this->getSsids($ssidIds);
+
+        // Step 4 — merge summary + raw detail per SSID.  We use the detail's
+        // `raw` field (the unnormalised /ssids/{id} response) so this method
+        // continues to return the flat-merged shape it always did — the M0
+        // closeout join recipe relies on the summary's nested `access_security`
+        // object remaining intact.
+        $merged = [];
+        foreach ($summaries as $sid => $summary) {
+            $detailRaw = $details[$sid]['raw'] ?? [];
+            $merged[]  = array_merge($summary, $detailRaw);
+        }
+
+        $this->cacheSet($listKey, $merged, self::TTL_POLICY);
+
+        return $merged;
+    }
+
+    /**
+     * Fetch one SSID's full configuration profile, normalised.
+     *
+     * Endpoint: GET /ssids/{id}.  Returns the per-SSID config used by the
+     * Wireless tab's SSID Broadcast table — VLAN, auth method, encryption
+     * type, band steering, enabled bands.
+     *
+     * Cached {@see self::TTL_SSID} seconds (5 min) under `xiq:ssid:{id}`.
+     * SSID config changes only on deliberate network-team action.
+     *
+     * Field-name resilience: M0_XIQ_Device_Config_API §3 marked several
+     * /ssids/{id} fields as "Infer — validate exact name" (the closeout
+     * directly validated /network-policies/{id}/ssids but not /ssids/{id}).
+     * The normaliser accepts plausible aliases for each so a XIQ build flip
+     * (e.g. ssid_name → name, vlan_id → default_vlan) does not take down
+     * the widget.
+     *
+     * VLAN handling: TCS-Wireless uses PF role-based VLANs (100/110/130/150).
+     * XIQ likely returns a single configured default VLAN or a "dynamic"
+     * marker — it cannot enumerate the PF role map.  The full role-VLAN
+     * string for the Wireless tab comes from a Zabbix host inventory field,
+     * not this method.  See M0_XIQ_Device_Config_API §3 VLAN callout.
+     *
+     * @param  int  $ssidId  XIQ SSID ID, e.g. from getNetworkPolicy()['ssid_ids'][0].
+     *
+     * @return array{
+     *     id:             int,
+     *     name:           string,
+     *     broadcast_name: string,
+     *     vlan:           int,
+     *     auth_method:    string,
+     *     encryption:     string,
+     *     band_steering:  bool,
+     *     enabled_bands:  string[],
+     *     raw:            array<string,mixed>,
+     * }
+     *
+     * @throws XIQException
+     */
+    public function getSsid(int $ssidId): array
+    {
+        if ($ssidId <= 0) {
+            throw new XIQException(
+                "XIQClient::getSsid() requires a positive SSID ID, got {$ssidId}"
+            );
+        }
+
+        $cacheKey = "xiq:ssid:{$ssidId}";
+
+        $cached = $this->cacheGet($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $raw = $this->httpGet("/ssids/{$ssidId}");
+
+        if (!is_array($raw) || !array_key_exists('id', $raw)) {
+            throw new XIQException(
+                "XIQClient::getSsid({$ssidId}) — malformed response (no 'id' field)"
+            );
+        }
+
+        $normalised = $this->normaliseSsid($raw);
+
+        $this->cacheSet($cacheKey, $normalised, self::TTL_SSID);
+
+        return $normalised;
+    }
+
+    /**
+     * Batch fetch multiple SSIDs in parallel via curl_multi.
+     *
+     * The fan-out pattern called out in M0 §1 as "the slowest calls by
+     * volume — fan-out pattern is critical".  Cache-aware: any IDs already
+     * in the per-SSID cache are served from there; only true cache misses
+     * become parallel HTTP calls.
+     *
+     * Caps the live fan-out at {@see self::MAX_SSID_FAN_OUT} to protect
+     * the per-VIQ 7,500/hr quota against a misconfigured shared policy
+     * with an unexpectedly long SSID list.  When the cap kicks in, a
+     * warning is written to the PHP error log and the first N IDs are
+     * fetched.  Callers should not normally hit this — TCS-Production
+     * has 3 SSIDs.
+     *
+     * Each fetched SSID is also written to the per-SSID cache under
+     * `xiq:ssid:{id}` so subsequent {@see self::getSsid()} calls hit the
+     * same warm entries.
+     *
+     * Failure semantics (inherited from {@see self::httpGetMulti()}):
+     * if ANY single fan-out call returns non-2xx, the entire batch
+     * throws.  This is the existing behaviour — getPolicySsids() has
+     * always been all-or-nothing in this regard.  A more resilient
+     * variant can be added if a single stale SSID id starts blacking
+     * out the Wireless tab in production.
+     *
+     * @param  int[]  $ssidIds  XIQ SSID IDs.  Duplicates and non-positive
+     *                          values are filtered out.
+     *
+     * @return array<int, array<string,mixed>>  Map of ssidId → normalised
+     *                                          shape.  Same shape as
+     *                                          {@see self::getSsid()}.
+     *
+     * @throws XIQException
+     */
+    public function getSsids(array $ssidIds): array
+    {
+        // Filter to unique positive ints
+        $clean = [];
+        foreach ($ssidIds as $sid) {
+            if (is_int($sid) && $sid > 0) {
+                $clean[$sid] = true;
+            } elseif (is_numeric($sid) && (int)$sid > 0) {
+                $clean[(int)$sid] = true;
+            }
+        }
+        $ssidIds = array_keys($clean);
+
+        if (empty($ssidIds)) {
+            return [];
+        }
+
+        $results = [];
+        $toFetch = [];
+
+        // Cache check pass — collect hits, queue misses
+        foreach ($ssidIds as $sid) {
+            $cached = $this->cacheGet("xiq:ssid:{$sid}");
+            if ($cached !== null) {
+                $results[$sid] = $cached;
             } else {
-                $toFetch[$ssidId] = $entry;
+                $toFetch[] = $sid;
             }
         }
 
-        // Step 3 — parallel fetch for cache-miss SSIDs
+        // Apply fan-out cap with a logged warning if exceeded
+        if (count($toFetch) > self::MAX_SSID_FAN_OUT) {
+            error_log(sprintf(
+                'XIQClient::getSsids — fan-out cap hit: %d SSIDs requested, capping to %d. '
+                . 'Check XIQ network policy for unexpectedly large SSID list.',
+                count($toFetch),
+                self::MAX_SSID_FAN_OUT,
+            ));
+            $toFetch = array_slice($toFetch, 0, self::MAX_SSID_FAN_OUT);
+        }
+
         if (!empty($toFetch)) {
-            $fetched = $this->httpGetMulti(
-                paths: array_map(
+            $rawResponses = $this->httpGetMulti(
+                paths:  array_map(
                     fn(int $id): string => "/ssids/{$id}",
-                    array_keys($toFetch),
+                    $toFetch,
                 ),
                 params: [],
             );
 
-            foreach ($fetched as $index => $detail) {
-                $ssidId  = array_keys($toFetch)[$index];
-                $ssidKey = "xiq:ssid:{$ssidId}";
-                $this->cacheSet($ssidKey, $detail, self::TTL_SSID);
-                $results[$ssidId] = array_merge($toFetch[$ssidId], $detail);
+            foreach ($rawResponses as $i => $raw) {
+                $sid = $toFetch[$i];
+
+                if (!is_array($raw) || !array_key_exists('id', $raw)) {
+                    // Don't throw on a single malformed payload here — the
+                    // batch already succeeded HTTP-wise (httpGetMulti throws
+                    // on non-2xx).  Skip and continue; caller checks key
+                    // presence in the returned map.
+                    continue;
+                }
+
+                $normalised = $this->normaliseSsid($raw);
+                $this->cacheSet("xiq:ssid:{$sid}", $normalised, self::TTL_SSID);
+                $results[$sid] = $normalised;
             }
         }
 
-        // Return as a flat array (not keyed by SSID id) for template iteration
-        $flat = array_values($results);
-
-        $this->cacheSet($listKey, $flat, self::TTL_POLICY);
-
-        return $flat;
+        return $results;
     }
 
     /**
@@ -394,45 +713,93 @@ final class XIQClient
     // ── Radio / wireless stats ───────────────────────────────────────────────
 
     /**
-     * Fetch per-radio WiFi interface stats for one device.
+     * Fetch per-radio WiFi interface stats for one device, normalised.
      *
-     * Endpoint: GET /devices/{id}/wifi-if-stats
+     * Endpoint: GET /devices/{id}/interfaces/wifi
      *
-     * G6: startTime + endTime are REQUIRED even though the spec marks them
-     * optional.  A window < ~10 min returns [].  This method always uses a
-     * 15-minute trailing window to guarantee data.
+     * Path correction: M0 inferred /devices/{id}/wifi-if-stats (the API
+     * reference anchor name); the M0 v3+v4+v5 closeout live-validated
+     * /devices/{id}/interfaces/wifi against BHS-56-Hallway.  This method
+     * uses the live path.
      *
-     * Returns an array of radio stat objects.  Confirmed fields (M0 v5):
-     *   radio_index (int), frequency_band (string or MHz int), channel (int),
-     *   channel_width (int MHz or string), tx_power → field name 'power' (int dBm),
-     *   channel_utilization → 'total_utilization' (int %),
-     *   noise_floor (int dBm, negative), client_count (int),
-     *   ssid_count (int), mac_address (BSSID, no colons),
-     *   radio_profile_name (string), tx_retry_frame (int),
-     *   tx_byte_count / rx_byte_count (int), scan_avg_interference (int).
+     * G6: startTime + endTime are REQUIRED even though the OpenAPI spec
+     * marks them optional.  The snapshot form (no params) returns 400.
+     * A window shorter than ~10 min returns [] because XIQ buckets at
+     * ~10-minute intervals.  This method always uses a 15-minute trailing
+     * window to guarantee data ({@see self::WIFI_STATS_WINDOW_SEC}).
      *
-     * Not cached — called per page load for live telemetry.
+     * G10 — band label source: do NOT derive band from radio_index.  The
+     * pilot AP runs dual-5G mode — both wifi0 (channel 40) and wifi1
+     * (channel 149) report frequency "5G".  Any 0=2.4 / 1=5 mapping would
+     * be wrong on this hardware.  The normaliser uses the XIQ `frequency`
+     * field directly.  Other deployments may run 2.4 + 5 + 5 (tri-radio)
+     * or other combos — always enumerate from the API response.
+     *
+     * Not cached — called per page load.  Drives current-value badges
+     * for channel utilization and noise floor on the Live Telemetry strip
+     * (no XIQ history at this endpoint; sparklines come from
+     * /d360/wireless/interfaces-graph instead).
+     *
+     * Returns one normalised entry per radio in the order XIQ returned.
      *
      * @param  int  $xiqDeviceId
-     * @return array<int,array<string,mixed>>
+     *
+     * @return array<int, array{
+     *     radio_index:    int,
+     *     interface_name: string,
+     *     band:           string,
+     *     channel:        int,
+     *     channel_width:  int,
+     *     tx_power:       int,
+     *     channel_util:   int,
+     *     noise_floor:    int,
+     *     client_count:   int,
+     *     ssid_count:     int,
+     *     bssid:          string,
+     *     profile_name:   string,
+     *     retry_frames:   int,
+     *     tx_bytes:       int,
+     *     rx_bytes:       int,
+     *     raw:            array<string,mixed>,
+     * }>
+     *
      * @throws XIQException
      */
     public function getWifiStats(int $xiqDeviceId): array
     {
+        if ($xiqDeviceId <= 0) {
+            throw new XIQException(
+                "XIQClient::getWifiStats() requires a positive device ID, got {$xiqDeviceId}"
+            );
+        }
+
         $now       = time();
-        $startTime = ($now - self::WIFI_STATS_WINDOW_SEC) * 1000; // epoch ms
+        $startTime = ($now - self::WIFI_STATS_WINDOW_SEC) * 1000;   // epoch ms
         $endTime   = $now * 1000;
 
         $data = $this->httpGet(
-            path:   "/devices/{$xiqDeviceId}/wifi-if-stats",
+            path:   "/devices/{$xiqDeviceId}/interfaces/wifi",
             params: [
                 'startTime' => $startTime,
                 'endTime'   => $endTime,
             ],
         );
 
-        // Response may be wrapped in a 'data' envelope or be a bare array
-        return $data['data'] ?? (array_is_list($data) ? $data : []);
+        // Response may be wrapped in a 'data' envelope or be a bare list.
+        $radios = $data['data'] ?? (array_is_list($data) ? $data : []);
+        if (!is_array($radios)) {
+            return [];
+        }
+
+        $normalised = [];
+        foreach ($radios as $radio) {
+            if (!is_array($radio)) {
+                continue;
+            }
+            $normalised[] = $this->normaliseWifiInterface($radio);
+        }
+
+        return $normalised;
     }
 
     /**
@@ -553,6 +920,483 @@ final class XIQClient
         $this->cacheSet($cacheKey, $data, self::TTL_LOCATION);
 
         return $data;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PRIVATE — RESPONSE NORMALISERS
+    // ═════════════════════════════════════════════════════════════════════════
+    //
+    // These map raw XIQ JSON onto stable, PHP-native shapes consumed by the
+    // widget views.  Goals:
+    //
+    //   • Insulate the view layer from XIQ field-name churn.  Several fields
+    //     were marked "Infer — validate exact name" in the M0 docs; we accept
+    //     each documented alias here so a XIQ build that flips e.g.
+    //     software_version → firmware_version doesn't take down the widget.
+    //   • Normalise unit ambiguity.  XIQ mixes unix-ms and unix-seconds
+    //     across timestamp fields with no consistent rule; normaliseUnixTime()
+    //     uses the same > 1e10 test the existing Zabbix template YAML uses.
+    //   • Preserve the full raw response under `raw` for debug-mode dumps and
+    //     ad-hoc access to fields that haven't been promoted to the
+    //     normalised set yet.
+
+    /**
+     * Map a raw /devices/{id} response onto the dashboard's stable shape.
+     *
+     * Field-name resilience: where M0 marked a field "Infer — validate exact
+     * name", we accept multiple plausible aliases.  The first non-empty value
+     * wins.
+     *
+     * @param  array<string,mixed>  $r  Raw JSON-decoded /devices/{id} body.
+     * @return array<string,mixed>      Normalised dashboard shape.
+     */
+    private function normaliseDevice(array $r): array
+    {
+        // Firmware: validated as a single field (M0 v3) — sample value
+        // "10.7r5b · build c6be9b0" is one string from `software_version`.
+        // No split needed; the dashboard wants the joined display anyway.
+        $firmware = (string)(
+            $r['software_version']
+            ?? $r['firmware_version']
+            ?? $r['os_version']
+            ?? ''
+        );
+
+        // Config type / status — M0 marked as "infer enum values".
+        // Mock data shows "DHCP_CLIENT_WITHOUT_FALLBACK".
+        $configType = (string)(
+            $r['config_status']
+            ?? $r['config_type']
+            ?? ''
+        );
+
+        // Policy reference — may arrive as id-only, name-only, or both.
+        // The view should call getDeviceNetworkPolicy() for the human-readable
+        // name when only the ID is present here.
+        $policyId = (int)(
+            $r['network_policy_id']
+            ?? $r['policy_id']
+            ?? 0
+        );
+        $policyName = (string)(
+            $r['network_policy_name']
+            ?? $r['policy_name']
+            ?? ''
+        );
+
+        // Last config push — XIQ wire format is unix ms; same > 1e10 test as
+        // the Extreme_XIQ_APs.yaml master-item preprocessing for last_connect.
+        $lastConfigPush = $this->normaliseUnixTime(
+            $r['last_updated']
+            ?? $r['config_update_time']
+            ?? 0
+        );
+        $lastConnect = $this->normaliseUnixTime(
+            $r['last_connect_time']
+            ?? $r['last_connect']
+            ?? 0
+        );
+        $uptime = $this->normaliseUnixTime(
+            $r['system_up_time']
+            ?? $r['uptime']
+            ?? 0
+        );
+
+        // NTP — M0 flagged as TBD; may live on the device profile, not the
+        // device object directly.  Empty string here triggers the SNMP/host-
+        // inventory fallback path in WidgetView.
+        $ntp = (string)($r['ntp_server'] ?? '');
+
+        // MAC: XIQ returns 12-char hex without delimiters (G3).  Insert colons
+        // so the dashboard can render directly.
+        $macRaw = (string)($r['mac_address'] ?? '');
+        $mac    = $macRaw !== '' ? self::macInsertColons($macRaw) : '';
+
+        return [
+            'id'                  => (int)    $r['id'],
+            'hostname'            => (string) ($r['hostname']           ?? ''),
+            'serial'              => (string) ($r['serial_number']      ?? ''),
+            'model'               => (string) ($r['product_type']       ?? ''),
+            'function'            => (string) ($r['device_function']    ?? ''),
+            'firmware'            => $firmware,
+            'mac'                 => $mac,
+            'ip'                  => (string) ($r['ip_address']         ?? ''),
+            'config_type'         => $configType,
+            'config_mismatch'     => (bool)   ($r['config_mismatch']    ?? false),
+            'connected'           => (bool)   ($r['connected']          ?? false),
+            'admin_state'         => (string) ($r['device_admin_state'] ?? ''),
+            'ntp_server'          => $ntp,
+            'last_config_push'    => $lastConfigPush,
+            'last_connect'        => $lastConnect,
+            'uptime'              => $uptime,
+            'network_policy_id'   => $policyId,
+            'network_policy_name' => $policyName,
+            'location_id'         => (int) ($r['location_id'] ?? 0),
+            'connected_clients'   => (int) ($r['connected_clients'] ?? 0),
+            'raw'                 => $r,
+        ];
+    }
+
+    /**
+     * Map a raw /network-policies/{id} + /network-policies/{id}/ssids
+     * response pair onto the dashboard's stable shape.
+     *
+     * @param  int                                        $policyId
+     * @param  array<string,mixed>                        $meta
+     * @param  array<int,array<string,mixed>>             $ssids
+     * @return array<string,mixed>
+     */
+    private function normaliseNetworkPolicy(int $policyId, array $meta, array $ssids): array
+    {
+        // SSID-id list authoritatively comes from /network-policies/{id}/ssids
+        // (live-validated in M0 Closeout §3).  /network-policies/{id} alone
+        // may also include an SSID-id array under "ssid_profile_ids" or
+        // "ssid_ids" depending on XIQ build, but we treat the SSID call as
+        // the source of truth so the result is stable across builds.
+        $ssidIds = [];
+        foreach ($ssids as $entry) {
+            $sid = (int)($entry['id'] ?? 0);
+            if ($sid > 0) {
+                $ssidIds[] = $sid;
+            }
+        }
+
+        // De-dupe in case /network-policies/{id}/ssids ever returns the same
+        // id twice (paranoid; not observed).
+        $ssidIds = array_values(array_unique($ssidIds));
+
+        return [
+            'id'       => (int)   ($meta['id']   ?? $policyId),
+            'name'     => (string)($meta['name'] ?? ''),
+            'type'     => (string)($meta['type'] ?? ''),
+            'ssid_ids' => $ssidIds,
+            'raw'      => [
+                'meta'  => $meta,
+                'ssids' => $ssids,
+            ],
+        ];
+    }
+
+    /**
+     * Map a raw /ssids/{id} response onto the dashboard's stable shape.
+     *
+     * Field-name resilience: M0 marked all of these as "Infer — validate
+     * exact name".  The closeout did not directly validate /ssids/{id}.
+     * Each field is read with multiple plausible aliases; the first
+     * non-empty / present value wins.
+     *
+     * Two-layer access for security/encryption: XIQ may return them flat
+     * at the top level OR nested under an `access_security` object (the
+     * latter is the shape /network-policies/{id}/ssids returns for the
+     * same fields — closeout-confirmed).  We probe both shapes.
+     *
+     * @param  array<string,mixed>  $r  Raw JSON-decoded /ssids/{id} body.
+     * @return array<string,mixed>      Normalised dashboard shape.
+     */
+    private function normaliseSsid(array $r): array
+    {
+        // Two shapes seen in the wild for security fields:
+        //   • Flat:   {security_type: "...", encryption_method: "..."}
+        //   • Nested: {access_security: {security_type: "...", encryption_method: "..."}}
+        $access = is_array($r['access_security'] ?? null) ? $r['access_security'] : [];
+
+        $authMethod = (string)(
+            $r['security_type']
+            ?? $access['security_type']
+            ?? $r['auth_type']
+            ?? $r['security_level']
+            ?? ''
+        );
+
+        $encryption = (string)(
+            $r['encryption_method']
+            ?? $access['encryption_method']
+            ?? $r['cipher_type']
+            ?? ''
+        );
+
+        // VLAN: int when known, 0 when "dynamic" / role-based / unset.
+        // TCS-Wireless uses PF role-based VLANs (M0 §3 callout) — XIQ may
+        // return null, 0, or a string sentinel here.  Callers display
+        // "—" or "role-based" for 0.
+        $vlanRaw = $r['vlan_id']
+            ?? $r['default_vlan']
+            ?? $r['native_vlan']
+            ?? null;
+        $vlan = is_numeric($vlanRaw) ? (int)$vlanRaw : 0;
+
+        // Band steering: bool or enum string.  Coerce to bool — true if
+        // explicitly enabled, false otherwise.
+        $bsRaw = $r['band_steering']
+            ?? $r['band_steering_enabled']
+            ?? false;
+        $bandSteering = is_string($bsRaw)
+            ? !in_array(strtoupper($bsRaw), ['', 'OFF', 'DISABLED', 'NONE', 'FALSE', '0'], true)
+            : (bool)$bsRaw;
+
+        // Enabled bands: collect from individual booleans, OR a list field
+        // if XIQ returns one.  Output is a stable string array like
+        // ["2.4", "5"] for downstream display logic ("2.4 + 5", "5 only").
+        $enabledBands = [];
+        if (!empty($r['enable_24ghz']) || !empty($r['enable_2g']) || !empty($r['enable_2_4ghz'])) {
+            $enabledBands[] = '2.4';
+        }
+        if (!empty($r['enable_5ghz']) || !empty($r['enable_5g'])) {
+            $enabledBands[] = '5';
+        }
+        if (!empty($r['enable_6ghz']) || !empty($r['enable_6g'])) {
+            $enabledBands[] = '6';
+        }
+        // List-shape fallback: some XIQ builds may return enabled_bands or
+        // bands as a string array directly.
+        if (empty($enabledBands)) {
+            foreach (['enabled_bands', 'bands', 'radio_bands'] as $listKey) {
+                if (is_array($r[$listKey] ?? null) && !empty($r[$listKey])) {
+                    $enabledBands = array_values(array_map('strval', $r[$listKey]));
+                    break;
+                }
+            }
+        }
+
+        return [
+            'id'             => (int)    $r['id'],
+            'name'           => (string) ($r['ssid_name']      ?? $r['name']           ?? ''),
+            'broadcast_name' => (string) ($r['broadcast_name'] ?? $r['ssid_broadcast_name'] ?? ''),
+            'vlan'           => $vlan,
+            'auth_method'    => $authMethod,
+            'encryption'     => $encryption,
+            'band_steering'  => $bandSteering,
+            'enabled_bands'  => $enabledBands,
+            'raw'            => $r,
+        ];
+    }
+
+    /**
+     * Map one entry from /devices/{id}/interfaces/wifi onto the dashboard's
+     * stable per-radio shape.
+     *
+     * Closeout-confirmed (M0 v5) field names this normaliser reads, with the
+     * M0 inferred names accepted as fallback aliases:
+     *   • interface_name (e.g. "wifi0")           — radio identifier
+     *   • frequency      (e.g. "5G", "2.4G", "6G")— authoritative band label (G10)
+     *   • channel        (int)                    — channel number
+     *   • channel_width  (int MHz)
+     *   • channel_util   (int %)                  — NOT channel_utilization
+     *   • noise_floor    (int dBm, negative)
+     *   • power          (int dBm)                — NOT tx_power
+     *   • client_count   (int)
+     *   • ssid_count     (int)
+     *   • mac_address    (12-char hex, no colons) — radio BSSID (G3)
+     *   • radio_profile_name (string)
+     *   • tx_retry_frame (int)                    — frame COUNT, not a rate
+     *   • tx_byte_count / rx_byte_count (int)
+     *
+     * G10 — band label: do NOT derive from radio_index.  The pilot AP runs
+     * dual-5G with both wifi0 and wifi1 reporting frequency "5G".  The XIQ
+     * `frequency` field is the source of truth.  We map "2.4G" / "5G" / "6G"
+     * to user-facing "2.4GHz" / "5GHz" / "6GHz" for display.
+     *
+     * `radio_index` is derived from the `wifi<N>` suffix of `interface_name`
+     * for callers that genuinely need an integer index (e.g. mapping to
+     * Zabbix per-radio item keys), but it is NOT used for band selection.
+     *
+     * `bssid` is colon-formatted via {@see self::macInsertColons()} since
+     * XIQ returns BSSIDs without delimiters (G3).
+     *
+     * @param  array<string,mixed>  $r  Raw radio entry from the wifi-if response.
+     * @return array<string,mixed>      Normalised dashboard shape.
+     */
+    private function normaliseWifiInterface(array $r): array
+    {
+        // ── Identity ──────────────────────────────────────────────────────
+        $ifName     = (string)($r['interface_name'] ?? $r['name'] ?? '');
+        $radioIndex = $this->parseRadioIndex($ifName);
+
+        // ── Band label (G10 — from `frequency` field, never from index) ───
+        // Closeout sample shows "5G".  Some builds may use "2.4GHz" / "5GHz"
+        // already, or numeric MHz (2400 / 5000 / 6000) — handle all three.
+        $frequency = $r['frequency'] ?? $r['frequency_band'] ?? $r['band'] ?? null;
+        $band      = $this->normaliseBandLabel($frequency);
+
+        // ── Numeric metrics — accept M0 inferred names as aliases ─────────
+        $channel = (int)($r['channel'] ?? 0);
+
+        // channel_width may be int MHz or a string like "20MHz" / "VHT80"
+        $channelWidth = $this->parseChannelWidth(
+            $r['channel_width'] ?? $r['width'] ?? 0
+        );
+
+        $txPower = (int)(
+            $r['power']
+            ?? $r['tx_power']
+            ?? 0
+        );
+
+        // channel_util is the simple per-channel utilization %, range 0-100.
+        // total_utilization is a different aggregate (Tx + Rx + interference
+        // + retries) — accept it only if channel_util is missing.
+        $channelUtil = (int)(
+            $r['channel_util']
+            ?? $r['channel_utilization']
+            ?? $r['total_utilization']
+            ?? 0
+        );
+
+        // Noise floor is a signed integer dBm (e.g. -95).  Don't clamp to
+        // unsigned — the closeout sample is -95 / -96.
+        $noiseFloor = isset($r['noise_floor']) && is_numeric($r['noise_floor'])
+            ? (int)$r['noise_floor']
+            : 0;
+
+        $clientCount = (int)(
+            $r['client_count']
+            ?? $r['associated_clients']
+            ?? 0
+        );
+        $ssidCount = (int)($r['ssid_count'] ?? 0);
+
+        // ── BSSID (G3 — XIQ returns colon-less hex) ───────────────────────
+        $bssidRaw = (string)($r['mac_address'] ?? $r['bssid'] ?? '');
+        $bssid    = $bssidRaw !== '' ? self::macInsertColons($bssidRaw) : '';
+
+        // ── Profile + retry / byte counters ───────────────────────────────
+        $profile = (string)($r['radio_profile_name'] ?? $r['profile_name'] ?? '');
+
+        $retryFrames = (int)(
+            $r['tx_retry_frame']
+            ?? $r['tx_retry_frames']
+            ?? $r['tx_retry_rate']
+            ?? 0
+        );
+        $txBytes = (int)($r['tx_byte_count'] ?? $r['tx_bytes'] ?? 0);
+        $rxBytes = (int)($r['rx_byte_count'] ?? $r['rx_bytes'] ?? 0);
+
+        return [
+            'radio_index'    => $radioIndex,
+            'interface_name' => $ifName,
+            'band'           => $band,
+            'channel'        => $channel,
+            'channel_width'  => $channelWidth,
+            'tx_power'       => $txPower,
+            'channel_util'   => $channelUtil,
+            'noise_floor'    => $noiseFloor,
+            'client_count'   => $clientCount,
+            'ssid_count'     => $ssidCount,
+            'bssid'          => $bssid,
+            'profile_name'   => $profile,
+            'retry_frames'   => $retryFrames,
+            'tx_bytes'       => $txBytes,
+            'rx_bytes'       => $rxBytes,
+            'raw'            => $r,
+        ];
+    }
+
+    /**
+     * Extract the integer radio index from an XIQ interface name.
+     *
+     * Examples:
+     *   "wifi0"  → 0
+     *   "wifi1"  → 1
+     *   "wifi2"  → 2
+     *   ""       → -1
+     *   "ethN"   → -1   (caller can detect non-radio entries)
+     *
+     * Returns -1 when the name doesn't match the wifi<N> pattern.  The
+     * dashboard uses this to map to Zabbix per-radio item keys, which use
+     * the same wifi<N> indexing.
+     */
+    private function parseRadioIndex(string $interfaceName): int
+    {
+        if (preg_match('/^wifi(\d+)$/i', $interfaceName, $m) === 1) {
+            return (int)$m[1];
+        }
+        return -1;
+    }
+
+    /**
+     * Map an XIQ frequency value to the user-facing band label.
+     *
+     * Handles the three observed wire formats:
+     *   • Enum string:   "2.4G" / "5G" / "6G"        (closeout-confirmed)
+     *   • Display string: "2.4GHz" / "5GHz" / "6GHz" (some builds)
+     *   • Numeric MHz:   2400 / 5000 / 5800 / 6000   (rare, defensive)
+     *
+     * Output is always "2.4GHz" / "5GHz" / "6GHz" or empty string when the
+     * input is unrecognised.
+     */
+    private function normaliseBandLabel(mixed $frequency): string
+    {
+        if ($frequency === null || $frequency === '') {
+            return '';
+        }
+
+        // Numeric: treat as MHz of the band centre
+        if (is_numeric($frequency)) {
+            $mhz = (int)$frequency;
+            return match (true) {
+                $mhz >= 2400 && $mhz < 2500 => '2.4GHz',
+                $mhz >= 5000 && $mhz < 5900 => '5GHz',
+                $mhz >= 5900 && $mhz < 7200 => '6GHz',
+                default                     => '',
+            };
+        }
+
+        $s = strtoupper(trim((string)$frequency));
+        // Strip "HZ" / "GHZ" suffixes for matching, then re-attach a canonical one
+        $s = preg_replace('/\s+/', '', $s);
+        $s = preg_replace('/(GHZ|HZ)$/', 'G', $s);
+
+        return match ($s) {
+            '2.4G', '24G' => '2.4GHz',
+            '5G'          => '5GHz',
+            '6G'          => '6GHz',
+            default       => '',
+        };
+    }
+
+    /**
+     * Coerce a channel-width value to an integer MHz.
+     *
+     * XIQ has been observed returning either an int (e.g. 20, 80) or a
+     * string ("20MHz", "VHT80").  Returns 0 when no integer can be parsed.
+     */
+    private function parseChannelWidth(mixed $v): int
+    {
+        if (is_int($v)) {
+            return $v;
+        }
+        if (is_numeric($v)) {
+            return (int)$v;
+        }
+        if (is_string($v) && preg_match('/(\d+)/', $v, $m) === 1) {
+            return (int)$m[1];
+        }
+        return 0;
+    }
+
+    /**
+     * Normalise a XIQ timestamp to unix seconds.
+     *
+     * XIQ documents `int64 (unix ms)` for several timestamp fields but the
+     * OpenAPI spec is inconsistent and field-by-field validation is impractical.
+     * The pragmatic test is: anything > 9,999,999,999 is milliseconds (any
+     * unix-seconds value above that maps to year 2286+).  Mirrors the JS
+     * preprocessing in Extreme_XIQ_APs.yaml `xiq.ap.lastconnect`.
+     *
+     * @param  mixed  $v  int, numeric string, or null/garbage.
+     * @return int        Unix seconds.  Returns 0 for unparseable input.
+     */
+    private function normaliseUnixTime(mixed $v): int
+    {
+        if ($v === null || $v === '' || $v === false) {
+            return 0;
+        }
+        $n = is_numeric($v) ? (int)$v : 0;
+        return match (true) {
+            $n <= 0            => 0,
+            $n > 9_999_999_999 => intdiv($n, 1000),  // ms → s
+            default            => $n,
+        };
     }
 
     // ═════════════════════════════════════════════════════════════════════════
