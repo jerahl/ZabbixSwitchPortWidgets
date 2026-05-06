@@ -22,9 +22,20 @@ namespace Modules\APDetail\Includes;
  *     (pf_url / pf_user / pf_pass / verify_ssl).
  *   - 401 → re-auth → retry is now internal to request(); the legacy
  *     client left that to callers.
- *   - Scope is intentionally narrow: login() + searchNodes() + the static
- *     nodeSearchBody() builder. locationlogSearch() and radiusAuditLog()
- *     are added in their own M1 tasks (see AP Dashboard Project Plan v2).
+ *
+ * Current scope (incremental — see AP Dashboard Project Plan v2):
+ *   - login()              — session auth
+ *   - searchNodes()        — POST /api/v1/nodes/search (Clients tab)
+ *   - locationlogSearch()  — POST /api/v1/locationlogs/search +
+ *                            bucketed client-count series for the
+ *                            Live Telemetry "Clients Connected" sparkline
+ *                            (resolves M0 open question Q6)
+ *   - nodeSearchBody()     — static body builder for nodes/search
+ *   - locationlogSearchBody() / bucketClientCounts() — static helpers
+ *     for the locationlog flow, exposed for unit testing and reuse by
+ *     M3 SSID Broadcast (which consumes the same raw rows).
+ *
+ * Pending in later M1 tasks: radiusAuditLog().
  *
  * Security: credentials must be those of a dedicated read-only PF
  * webservices user. Never the admin account — the token grants every
@@ -196,10 +207,281 @@ final class PFClient {
     }
 
     /**
+     * POST /api/v1/locationlogs/search → bucketed client-count time series.
+     *
+     * Drives the "Clients Connected" sparkline on the Live Telemetry
+     * strip (Overview tab). Resolves M0 Open Question Q6: PF locationlog
+     * gives genuine historical client-count shape that XIQ cannot.
+     *
+     * Filter: switch_ip = $switchIp AND start_time >= $from. PF datetimes
+     * are written as 'Y-m-d H:i:s' in PF's local TZ — passed Unix
+     * timestamps are formatted with date() so the comparison is apples
+     * to apples on the PF server side. (If PF and the Zabbix host run
+     * in different TZs, that's a deployment problem, not a query bug.)
+     *
+     * Active session sentinel: PF writes end_time = '0000-00-00 00:00:00'
+     * for sessions that haven't closed yet (NOT NULL — that's a PF
+     * gotcha). bucketClientCounts() handles the sentinel; raw caller
+     * code that introspects $sessions must too.
+     *
+     * Result:
+     *   - 'series'   — [{ts:int, count:int}] bucketed sparkline data,
+     *                  one entry per bucket, ts at bucket midpoint
+     *   - 'sessions' — raw locationlog rows (mac, ssid, start_time,
+     *                  end_time, role) for callers that want to do
+     *                  their own grouping (e.g. M3 SSID Broadcast)
+     *
+     * Cached for 60 seconds in APCu, keyed by base_url+username+filter
+     * args. The cache is a no-op if APCu isn't loaded — for a 60-second
+     * window, falling back to filesystem caching costs more than the
+     * refetch it would save.
+     *
+     * Pagination: PF caps /locationlogs/search at 1000 rows per call.
+     * Per the M0 capacity math, 1000 rows is far above the realistic
+     * ceiling for a single AP across an 8h window (a busy school AP
+     * tops out ~80 unique clients/day). If the response carries
+     * nextCursor, that's surfaced via 'truncated' so a caller can warn
+     * but the call is not retried — TODO if a real deployment hits it.
+     *
+     * @param  string $switchIp  AP Mgt0 IP, e.g. '172.16.97.59'
+     * @param  int    $from      Unix ts — window start (inclusive)
+     * @param  int    $to        Unix ts — window end   (exclusive)
+     * @param  int    $buckets   Bucket count (default 24); caller picks
+     *                           a value matching the _timeperiod span
+     * @return array{
+     *     ok:bool, http_code:int, error:?string,
+     *     series:array<int, array{ts:int, count:int}>,
+     *     sessions:array<int, array<string,mixed>>,
+     *     truncated:bool
+     * }
+     */
+    public function locationlogSearch(string $switchIp, int $from, int $to, int $buckets = 24): array {
+        $empty = [
+            'ok'        => false,
+            'http_code' => 0,
+            'error'     => null,
+            'series'    => [],
+            'sessions'  => [],
+            'truncated' => false,
+        ];
+
+        if ($from >= $to) {
+            return ['error' => 'invalid window: from >= to'] + $empty;
+        }
+        if ($buckets < 1) {
+            return ['error' => 'invalid bucket count'] + $empty;
+        }
+
+        $cache_key = $this->cacheKey('locationlog', $switchIp, (string) $from, (string) $to, (string) $buckets);
+        $cached = $this->cacheGet($cache_key);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $body = self::locationlogSearchBody($switchIp, $from);
+        $r    = $this->request(path: '/api/v1/locationlogs/search', method: 'POST', body: $body);
+
+        if (!$r['ok']) {
+            // Don't cache failures — let the next render try again.
+            return [
+                'ok'        => false,
+                'http_code' => $r['http_code'],
+                'error'     => $r['error'],
+                'series'    => [],
+                'sessions'  => [],
+                'truncated' => false,
+            ];
+        }
+
+        $sessions  = is_array($r['data']['items'] ?? null) ? $r['data']['items'] : [];
+        $truncated = !empty($r['data']['nextCursor']);
+        $series    = self::bucketClientCounts($sessions, $from, $to, $buckets);
+
+        $result = [
+            'ok'        => true,
+            'http_code' => $r['http_code'],
+            'error'     => null,
+            'series'    => $series,
+            'sessions'  => $sessions,
+            'truncated' => $truncated,
+        ];
+
+        $this->cacheSet($cache_key, $result, 60);
+        return $result;
+    }
+
+    /**
+     * Build a /locationlogs/search request body filtered to one AP +
+     * a start-time floor. Field list is kept minimal (mac, ssid,
+     * start_time, end_time, role) per the task spec — adding fields
+     * here costs PF query time even if the caller doesn't read them.
+     *
+     * Sort 'start_time ASC' so the bucket loop walks sessions in
+     * chronological order; not strictly required by the algorithm
+     * (it's order-independent), but it makes the raw $sessions
+     * payload easier for downstream callers to reason about.
+     *
+     * @return array<string,mixed>
+     */
+    public static function locationlogSearchBody(string $switchIp, int $from): array {
+        return [
+            'cursor' => 0,
+            'limit'  => 1000,
+            'sort'   => ['start_time ASC'],
+            'fields' => ['mac', 'ssid', 'start_time', 'end_time', 'role'],
+            'query'  => [
+                'op'     => 'and',
+                'values' => [
+                    [
+                        'op'    => 'equals',
+                        'field' => 'switch_ip',
+                        'value' => $switchIp,
+                    ],
+                    [
+                        'op'    => 'greater_than_or_equals',
+                        'field' => 'start_time',
+                        'value' => date('Y-m-d H:i:s', $from),
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Bucket a list of locationlog session rows into a client-count
+     * time series. Counts DISTINCT MACs with sessions active at each
+     * bucket midpoint — a roaming client whose two sessions overlap
+     * counts once, not twice.
+     *
+     * Session active at time T iff:
+     *     start_time <= T  AND  (end_time = open-sentinel OR end_time >= T)
+     *
+     * Open sessions ('0000-00-00 00:00:00') are treated as active up
+     * to time() — not PHP_INT_MAX. If the caller passes a $to that's
+     * slightly in the future (e.g. rounded to the next minute), open
+     * sessions correctly stop being counted past now() rather than
+     * continuing forever into a future we don't have data for yet.
+     *
+     * O(N × B) — for typical AP traffic (N≈100 sessions, B=24 buckets)
+     * that's 2400 comparisons, well inside one widget render budget.
+     * Public + static so it can be unit-tested in isolation and reused
+     * by other callers needing the same bucket math against
+     * session-shaped data.
+     *
+     * @param  array<int, array<string,mixed>> $sessions  Raw locationlog rows.
+     * @param  int $from     Unix ts — window start (inclusive).
+     * @param  int $to       Unix ts — window end   (exclusive).
+     * @param  int $buckets  Number of bucket points to emit.
+     * @return array<int, array{ts:int, count:int}>
+     */
+    public static function bucketClientCounts(array $sessions, int $from, int $to, int $buckets = 24): array {
+        if ($buckets < 1 || $from >= $to) {
+            return [];
+        }
+        $step = intdiv($to - $from, $buckets);
+        if ($step < 1) {
+            // Window too narrow for the requested resolution. Caller
+            // should pass fewer buckets; returning [] is the honest
+            // answer rather than producing identical adjacent points.
+            return [];
+        }
+
+        $now = time();
+
+        // Pre-parse so strtotime() runs once per session, not once per
+        // (session × bucket).
+        $parsed = [];
+        foreach ($sessions as $s) {
+            $start_raw = (string) ($s['start_time'] ?? '');
+            if ($start_raw === '') {
+                continue;
+            }
+            $start = strtotime($start_raw);
+            if ($start === false) {
+                continue;
+            }
+
+            $end_raw = (string) ($s['end_time'] ?? '');
+            $end = match (true) {
+                $end_raw === ''                       => $now,
+                $end_raw === '0000-00-00 00:00:00'    => $now,
+                default                               => (strtotime($end_raw) ?: $now),
+            };
+
+            $parsed[] = [
+                'mac'   => strtolower((string) ($s['mac'] ?? '')),
+                'start' => $start,
+                'end'   => $end,
+            ];
+        }
+
+        $series = [];
+        for ($i = 0; $i < $buckets; $i++) {
+            $t = $from + ($i * $step) + intdiv($step, 2);
+
+            // Distinct MACs only — multiple overlapping sessions for
+            // the same MAC count once. (This is why the M0 sketch's
+            // session-count loop differs from this client-count loop.)
+            $macs = [];
+            foreach ($parsed as $p) {
+                if ($p['start'] <= $t && $p['end'] >= $t) {
+                    $macs[$p['mac']] = true;
+                }
+            }
+            $series[] = ['ts' => $t, 'count' => count($macs)];
+        }
+        return $series;
+    }
+
+    // ── Cache helpers ──────────────────────────────────────────────────
+    //
+    // Thin APCu wrapper. Silently no-ops when APCu isn't loaded or is
+    // disabled — the project envelope says "APCu preferred, filesystem
+    // fallback" but that's specifically for the long-lived XIQ OAuth
+    // token. For 60-second locationlog caches, filesystem I/O costs
+    // more than the refetch it would save, so just skip caching in
+    // that case.
+
+    /**
+     * Build a stable cache key including base_url + username so that
+     * two PFClient instances pointing at different PF servers, or
+     * different webservices accounts on the same server, cannot
+     * collide in the shared APCu store.
+     */
+    private function cacheKey(string ...$parts): string {
+        $material = array_merge(
+            ['pf_pfclient_v1', $this->base_url, $this->username],
+            $parts,
+        );
+        return 'pf:' . md5(implode('|', $material));
+    }
+
+    private static function apcuAvailable(): bool {
+        return function_exists('apcu_fetch')
+            && function_exists('apcu_enabled')
+            && apcu_enabled();
+    }
+
+    private function cacheGet(string $key): ?array {
+        if (!self::apcuAvailable()) {
+            return null;
+        }
+        $hit = apcu_fetch($key, $ok);
+        return $ok && is_array($hit) ? $hit : null;
+    }
+
+    private function cacheSet(string $key, array $value, int $ttl): void {
+        if (!self::apcuAvailable()) {
+            return;
+        }
+        apcu_store($key, $value, $ttl);
+    }
+
+    /**
      * Authenticated request with transparent re-auth on 401. All authed
-     * callers (searchNodes() now; locationlogSearch() / radiusAuditLog()
-     * later in M1) funnel through here so the token-refresh logic lives
-     * in exactly one place.
+     * callers (searchNodes(), locationlogSearch(), and the future
+     * radiusAuditLog()) funnel through here so the token-refresh logic
+     * lives in exactly one place.
      *
      * Behaviour:
      *   1. If no cached token, login() first.
