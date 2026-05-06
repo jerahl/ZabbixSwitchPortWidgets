@@ -112,6 +112,17 @@ final class XIQClient
      */
     private const MAX_SSID_FAN_OUT = 16;
 
+    /**
+     * Page size for /clients/active.
+     *
+     * AP305C theoretical max is ~250 associated clients; school deployments
+     * observed in M0 are 50–100 per AP.  500 is comfortably above any
+     * single-AP real-world load.  When `total_count` exceeds this in a
+     * response, getClients() logs a truncation warning so we can detect a
+     * deployment that needs multi-page support.
+     */
+    private const CLIENTS_PAGE_LIMIT = 500;
+
     /** Filesystem cache directory (APCu fallback). */
     private const FS_CACHE_DIR = '/tmp/zabbix_xiq_cache';
 
@@ -852,41 +863,130 @@ final class XIQClient
     // ── Client list ──────────────────────────────────────────────────────────
 
     /**
-     * Fetch active clients associated with a device.
+     * Fetch active wireless clients associated with one device, normalised.
      *
      * Endpoint: GET /clients/active
      *
-     * G4: Filter param is 'deviceIds' (camelCase, plural array).  Sending
-     *     'device_id' (snake_case) silently returns fleet-wide results.
+     * G4 — Filter param is `deviceIds` (camelCase, plural, accepts a single
+     *      ID).  Sending `device_id` (snake_case) silently returns
+     *      fleet-wide results.
      *
-     * G5: Default view emits only 12 fields.  Always pass views=FULL to get
-     *     rssi, snr, channel, mac_protocol, connection_duration, locations[].
+     * G5 — Default `views` emits only 12 fields.  Always pass `views=FULL`
+     *      to get rssi, snr, mac_protocol, client_health, radio_health,
+     *      connection_duration, locations[].
      *
-     * Returns array of client objects.  Key fields for the Connected Clients
-     * table: mac_address, hostname, user_name, ssid, rssi, data_rate, band,
-     * connection_duration, radio_index, os_type.
+     * G11 — Source of truth for the Connected Clients table.  PF
+     *      locationlog's "active" sentinel is sticky and produces stale
+     *      rows; never substitute it for this call.  PF data is for
+     *      enrichment only (user, role, VLAN, posture, OS) — joined on
+     *      MAC by the view layer.
      *
-     * Not cached — called per page load on the Clients tab.
+     * Pagination: response is enveloped as
+     * `{data: [...], total_count: N, page: P, page_size: S}`.  This
+     * implementation requests a single page of {@see self::CLIENTS_PAGE_LIMIT}
+     * records — large enough to cover any realistic single-AP load
+     * (AP305C max ~250 clients; school deployments observed ~50–100).  If
+     * a deployment ever exceeds this, the PHP error log will note the
+     * truncation and the caller can decide whether to add multi-page
+     * support.
      *
-     * @param  int  $xiqDeviceId
-     * @return array<int,array<string,mixed>>
+     * Not cached — called per page load on the Clients tab.  Live state.
+     *
+     * Band derivation: there is no top-level `band` field on /clients/active.
+     * The band is encoded in `mac_protocol` ("802.11ax-5g", "802.11n-2.4g")
+     * and parsed by {@see self::normaliseClient()}.  Per G10 we never derive
+     * band from radio_index.
+     *
+     * MAC handling: XIQ returns colon-less MACs (G3).  We expose both
+     * `mac` (with colons, for display) and `mac_raw` (uppercase, no colons,
+     * the canonical join key for matching against PF nodes/search results
+     * after the view layer normalises both sides to the same form).
+     *
+     * @param  int  $xiqDeviceId  XIQ internal device ID.
+     *
+     * @return array<int, array{
+     *     mac:               string,
+     *     mac_raw:           string,
+     *     hostname:          string,
+     *     ip:                string,
+     *     username:          string,
+     *     user_profile:      string,
+     *     ssid:              string,
+     *     vlan:              int,
+     *     channel:           int,
+     *     protocol:          string,
+     *     band:              string,
+     *     rssi:              int,
+     *     snr:               int,
+     *     client_health:     int,
+     *     radio_health:      int,
+     *     connected_seconds: int,
+     *     bssid:             string,
+     *     interface_name:    string,
+     *     radio_index:       int,
+     *     os_type:           string,
+     *     os_version:        string,
+     *     location_path:     string,
+     *     raw:               array<string,mixed>,
+     * }>
+     *
      * @throws XIQException
      */
     public function getClients(int $xiqDeviceId): array
     {
-        // G4: param name MUST be 'deviceIds' (camelCase plural)
-        // G5: always request FULL view
+        if ($xiqDeviceId <= 0) {
+            throw new XIQException(
+                "XIQClient::getClients() requires a positive device ID, got {$xiqDeviceId}"
+            );
+        }
+
+        // G4: 'deviceIds' (camelCase plural).  G5: views=FULL.
+        // Pagination: 'page' + 'limit' per the closeout endpoint card —
+        // 'pageSize' would be silently ignored by XIQ.
         $data = $this->httpGet(
             path:   '/clients/active',
             params: [
                 'deviceIds' => $xiqDeviceId,
                 'views'     => 'FULL',
                 'page'      => 1,
-                'pageSize'  => 500,  // large enough for a single AP; AP305C max ~250 clients
+                'limit'     => self::CLIENTS_PAGE_LIMIT,
             ],
         );
 
-        return $data['data'] ?? (array_is_list($data) ? $data : []);
+        // Envelope: {data: [...], total_count: N, page: P, page_size: S}.
+        // Defensively unwrap, accept bare list as well.
+        $clients = $data['data'] ?? (array_is_list($data) ? $data : []);
+        if (!is_array($clients)) {
+            return [];
+        }
+
+        // Truncation watch: log when total_count exceeds the page we asked
+        // for so it's visible if a school AP starts hitting the limit.
+        $totalCount = (int)($data['total_count'] ?? count($clients));
+        if ($totalCount > self::CLIENTS_PAGE_LIMIT) {
+            error_log(sprintf(
+                'XIQClient::getClients(%d) — %d clients reported, only %d returned. '
+                . 'Multi-page fetch may be needed.',
+                $xiqDeviceId,
+                $totalCount,
+                count($clients),
+            ));
+        }
+
+        $normalised = [];
+        foreach ($clients as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            // Skip entries with no MAC — they can't be joined to PF or
+            // displayed meaningfully.
+            if (empty($entry['mac_address']) && empty($entry['mac'])) {
+                continue;
+            }
+            $normalised[] = $this->normaliseClient($entry);
+        }
+
+        return $normalised;
     }
 
     // ── Location ─────────────────────────────────────────────────────────────
@@ -1295,19 +1395,24 @@ final class XIQClient
      * Extract the integer radio index from an XIQ interface name.
      *
      * Examples:
-     *   "wifi0"  → 0
-     *   "wifi1"  → 1
-     *   "wifi2"  → 2
-     *   ""       → -1
-     *   "ethN"   → -1   (caller can detect non-radio entries)
+     *   "wifi0"    → 0
+     *   "wifi1"    → 1
+     *   "wifi2"    → 2
+     *   "wifi0.3"  → 0   (SSID sub-interface form, used by /clients/active)
+     *   "wifi1.7"  → 1
+     *   ""         → -1
+     *   "ethN"     → -1  (caller can detect non-radio entries)
+     *   "wifi0xy"  → -1  (digit must terminate at end-of-string or a dot)
      *
-     * Returns -1 when the name doesn't match the wifi<N> pattern.  The
-     * dashboard uses this to map to Zabbix per-radio item keys, which use
-     * the same wifi<N> indexing.
+     * Returns -1 when the name doesn't match the wifi<N> or wifi<N>.<M>
+     * pattern.  The dashboard uses this to map to Zabbix per-radio item
+     * keys, which use the same wifi<N> indexing.
      */
     private function parseRadioIndex(string $interfaceName): int
     {
-        if (preg_match('/^wifi(\d+)$/i', $interfaceName, $m) === 1) {
+        // Anchor at start, capture digits, require either end-of-string or
+        // a dot.  Rejects "wifi0extra" while accepting "wifi0" and "wifi0.3".
+        if (preg_match('/^wifi(\d+)(?:\.|$)/i', $interfaceName, $m) === 1) {
             return (int)$m[1];
         }
         return -1;
@@ -1372,6 +1477,140 @@ final class XIQClient
             return (int)$m[1];
         }
         return 0;
+    }
+
+    /**
+     * Map one entry from /clients/active onto the dashboard's stable
+     * per-client shape.
+     *
+     * Closeout-confirmed (M0 v5) field names this normaliser reads, with
+     * sensible aliases for fields that varied across pre-closeout doc
+     * iterations:
+     *   • mac_address              — 12-char hex no delimiters (G3)
+     *   • hostname / ip_address    — display columns (PF can override
+     *                                hostname for inventory; that join is
+     *                                done in the view layer)
+     *   • username / user_profile_name — XIQ-side user identity + role
+     *   • ssid / vlan / channel    — network columns
+     *   • mac_protocol             — e.g. "802.11ax-5g" — used for both
+     *                                the protocol display and band
+     *                                derivation (no top-level `band` field)
+     *   • rssi / snr / client_health / radio_health
+     *   • connection_duration (ms) — converted to seconds here
+     *   • bssid / interface_name   — radio attribution; BSSID is colon-less,
+     *                                interface_name is "wifi<N>.<M>"
+     *   • os_type / os_version
+     *   • locations[]              — array of hierarchy nodes; we join
+     *                                their names with " / " for the
+     *                                sidecar location block
+     *
+     * Per G10, band is NEVER derived from radio_index.  XIQ encodes the
+     * band in `mac_protocol` (e.g. "-5g" suffix); see
+     * {@see self::parseBandFromProtocol()}.
+     *
+     * @param  array<string,mixed>  $r
+     * @return array<string,mixed>
+     */
+    private function normaliseClient(array $r): array
+    {
+        // ── MAC handling (G3 — XIQ returns colon-less hex) ────────────────
+        // Expose both forms: `mac` colon-formatted for display, `mac_raw`
+        // uppercase no-delimiter for joining to PF after the view layer
+        // normalises both sides to the same form.
+        $macRaw = strtoupper((string)($r['mac_address'] ?? $r['mac'] ?? ''));
+        $mac    = $macRaw !== '' ? self::macInsertColons($macRaw) : '';
+
+        $bssidRaw = strtoupper((string)($r['bssid'] ?? ''));
+        $bssid    = $bssidRaw !== '' ? self::macInsertColons($bssidRaw) : '';
+
+        // ── Radio attribution ─────────────────────────────────────────────
+        $ifName     = (string)($r['interface_name'] ?? '');
+        $radioIndex = $this->parseRadioIndex($ifName);   // handles "wifi1.3"
+
+        // ── Protocol + band (G10 — band from protocol, not from index) ────
+        $protocol = (string)($r['mac_protocol'] ?? $r['protocol'] ?? '');
+        $band     = $this->parseBandFromProtocol($protocol);
+
+        // ── Connection duration: closeout sample is ms (e.g. 31482410). ──
+        // We do NOT use normaliseUnixTime() here — that helper auto-detects
+        // ms via a > 9.99B threshold which is wrong for durations that
+        // legitimately stay under that value.  Per-endpoint XIQ docs say
+        // ms unconditionally, so we divide unconditionally.
+        $durationMs   = (int)($r['connection_duration'] ?? 0);
+        $connectedSec = $durationMs > 0 ? intdiv($durationMs, 1000) : 0;
+
+        // ── Location hierarchy → display path ─────────────────────────────
+        // Closeout sample: "TCS / Tuscaloosa / Bryant High School / 1st Floor"
+        $locations = is_array($r['locations'] ?? null) ? $r['locations'] : [];
+        $pathParts = [];
+        foreach ($locations as $loc) {
+            if (is_array($loc) && !empty($loc['name'])) {
+                $pathParts[] = (string)$loc['name'];
+            }
+        }
+        $locationPath = implode(' / ', $pathParts);
+
+        // ── Numeric metrics ──────────────────────────────────────────────
+        // RSSI is a signed int (typically -30 to -90).  Don't clobber the
+        // sign by casting null/empty to 0; keep 0 reserved for unknown.
+        $rssi = isset($r['rssi']) && is_numeric($r['rssi']) ? (int)$r['rssi'] : 0;
+        $snr  = isset($r['snr'])  && is_numeric($r['snr'])  ? (int)$r['snr']  : 0;
+
+        return [
+            'mac'               => $mac,
+            'mac_raw'           => $macRaw,
+            'hostname'          => (string)($r['hostname']        ?? ''),
+            'ip'                => (string)($r['ip_address']      ?? $r['ip']         ?? ''),
+            'username'          => (string)($r['username']        ?? $r['user_name']  ?? ''),
+            'user_profile'      => (string)($r['user_profile_name'] ?? $r['user_profile'] ?? ''),
+            'ssid'              => (string)($r['ssid']            ?? ''),
+            'vlan'              => (int)   ($r['vlan']            ?? 0),
+            'channel'           => (int)   ($r['channel']         ?? 0),
+            'protocol'          => $protocol,
+            'band'              => $band,
+            'rssi'              => $rssi,
+            'snr'               => $snr,
+            'client_health'     => (int)   ($r['client_health']   ?? 0),
+            'radio_health'      => (int)   ($r['radio_health']    ?? 0),
+            'connected_seconds' => $connectedSec,
+            'bssid'             => $bssid,
+            'interface_name'    => $ifName,
+            'radio_index'       => $radioIndex,
+            'os_type'           => (string)($r['os_type']         ?? ''),
+            'os_version'        => (string)($r['os_version']      ?? ''),
+            'location_path'     => $locationPath,
+            'raw'               => $r,
+        ];
+    }
+
+    /**
+     * Derive the user-facing band label from XIQ's `mac_protocol` enum.
+     *
+     * XIQ encodes the band as a suffix on the protocol string:
+     *   "802.11ax-5g"   → "5GHz"
+     *   "802.11ax-2.4g" → "2.4GHz"
+     *   "802.11ax-6g"   → "6GHz"
+     *   "802.11n-2.4g"  → "2.4GHz"
+     *
+     * Returns "" when the protocol string can't be parsed.  This is
+     * separate from {@see self::normaliseBandLabel()}, which handles the
+     * /interfaces/wifi `frequency` field (different wire format).
+     */
+    private function parseBandFromProtocol(string $protocol): string
+    {
+        if ($protocol === '') {
+            return '';
+        }
+        // Primary: closeout-confirmed "-Ng" or "-N.Mg" suffix
+        if (preg_match('/-(2\.4|5|6)g\b/i', $protocol, $m) === 1) {
+            return $m[1] . 'GHz';
+        }
+        // Defensive: some builds may use a "<N> GHz" form somewhere in the
+        // string.  Match it as a fallback.
+        if (preg_match('/(2\.4|5|6)\s*ghz/i', $protocol, $m) === 1) {
+            return $m[1] . 'GHz';
+        }
+        return '';
     }
 
     /**
