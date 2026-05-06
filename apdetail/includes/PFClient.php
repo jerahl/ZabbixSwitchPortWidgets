@@ -30,12 +30,13 @@ namespace Modules\APDetail\Includes;
  *                            bucketed client-count series for the
  *                            Live Telemetry "Clients Connected" sparkline
  *                            (resolves M0 open question Q6)
+ *   - radiusAuditLog()     — GET /api/v1/radius_audit_log + grouped
+ *                            failures-by-MAC for the Auth Failures
+ *                            table (Clients tab)
  *   - nodeSearchBody()     — static body builder for nodes/search
  *   - locationlogSearchBody() / bucketClientCounts() — static helpers
  *     for the locationlog flow, exposed for unit testing and reuse by
  *     M3 SSID Broadcast (which consumes the same raw rows).
- *
- * Pending in later M1 tasks: radiusAuditLog().
  *
  * Security: credentials must be those of a dedicated read-only PF
  * webservices user. Never the admin account — the token grants every
@@ -433,6 +434,170 @@ final class PFClient {
         return $series;
     }
 
+    /**
+     * GET /api/v1/radius_audit_log → grouped auth-failure rows.
+     *
+     * Drives the Auth Failures table on the Clients tab. Returns
+     * recent RADIUS Access-Reject events for this AP, collapsed by
+     * client MAC so the table shows unique offenders with an
+     * attempt counter — operationally what's useful is "iPad X
+     * failed 14 times in the last hour", not 14 individual rows
+     * for the same iPad.
+     *
+     * Filters:
+     *   - called_station_id: <AP MAC>   (PF GET-filter does prefix
+     *     match — wireless Called-Station-Id is BSSID:SSID, so a MAC
+     *     prefix catches all SSIDs broadcast by this AP)
+     *   - auth_status: Reject           (we only want failures)
+     *
+     * Each result row:
+     *   - timestamp      most recent failure for this MAC (ISO string)
+     *   - mac            client MAC, lowercased
+     *   - ssid           parsed from called_station_id
+     *   - reason         falls through reason → auth_status → reply
+     *   - user_name      RADIUS User-Name, useful when set
+     *   - attempt_count  rejects in the result set for this MAC
+     *
+     * No caching (per task spec) — the Auth Failures table refreshes
+     * live with the dashboard, and stale auth data would mislead an
+     * operator triaging a current outage.
+     *
+     * Validation gate: the exact GET filter syntax + the field where
+     * PF stores the reject reason are flagged TBD in M0 ("Validate
+     * PacketFence switch_ip filter + radius_audit_log"). Once that
+     * task closes against live BHS-56-Hallway, this implementation
+     * may need to switch to POST /api/v1/radius_audit_log/search if
+     * the GET filter doesn't behave as the M0 doc anticipates. The
+     * envelope return shape stays the same either way.
+     *
+     * @param  string $apMac  AP MAC. Pass through to PF as-is — caller
+     *                        owns format choice. Format that PF expects
+     *                        is pending live validation; the M0 doc
+     *                        example uses colon-separated uppercase
+     *                        (e.g. '74:26:AC:2C:A4:90').
+     * @param  int    $limit  Max raw audit rows to fetch (pre-grouping).
+     *                        100 covers a busy AP for ~1 hour of bad
+     *                        802.1X retries comfortably.
+     * @return array{
+     *     ok:bool, http_code:int, error:?string,
+     *     failures:array<int, array{
+     *         timestamp:string, mac:string, ssid:string,
+     *         reason:string, user_name:string, attempt_count:int
+     *     }>
+     * }
+     */
+    public function radiusAuditLog(string $apMac, int $limit = 100): array {
+        // Bound limit defensively — PF's hard cap is per-deployment.
+        $limit = max(1, min($limit, 1000));
+
+        // Fields list keeps the response payload small. Multiple
+        // candidate fields requested for `reason` because PF schema
+        // varies between versions — the projector falls through.
+        $fields = 'mac,called_station_id,user_name,auth_status,reason,reply,created_at';
+
+        $path = '/api/v1/radius_audit_log'
+            . '?filter='  . rawurlencode('called_station_id:' . $apMac)
+            . '&filter='  . rawurlencode('auth_status:Reject')
+            . '&sort='    . rawurlencode('created_at DESC')
+            . '&fields='  . rawurlencode($fields)
+            . '&limit='   . $limit;
+
+        $r = $this->request(path: $path, method: 'GET', body: null);
+
+        if (!$r['ok']) {
+            return [
+                'ok'        => false,
+                'http_code' => $r['http_code'],
+                'error'     => $r['error'],
+                'failures'  => [],
+            ];
+        }
+
+        $rows     = is_array($r['data']['items'] ?? null) ? $r['data']['items'] : [];
+        $failures = self::groupAuthFailures($rows);
+
+        return [
+            'ok'        => true,
+            'http_code' => $r['http_code'],
+            'error'     => null,
+            'failures'  => $failures,
+        ];
+    }
+
+    /**
+     * Collapse raw audit rows into one row per unique client MAC
+     * with an attempt counter. Assumes input is sorted DESC by
+     * created_at — the first occurrence of each MAC is therefore
+     * the most recent failure, and we keep its timestamp / SSID /
+     * reason as representative values.
+     *
+     * Private static: the grouping logic is intrinsic to the auth
+     * failures use case and not reusable elsewhere — unlike
+     * bucketClientCounts() which generalises to any session-shaped
+     * data.
+     *
+     * @param  array<int, array<string,mixed>> $rows
+     * @return array<int, array{
+     *     timestamp:string, mac:string, ssid:string,
+     *     reason:string, user_name:string, attempt_count:int
+     * }>
+     */
+    private static function groupAuthFailures(array $rows): array {
+        $by_mac = [];
+        foreach ($rows as $row) {
+            $mac = strtolower((string) ($row['mac'] ?? ''));
+            if ($mac === '') {
+                continue;
+            }
+
+            if (isset($by_mac[$mac])) {
+                // Already have a more-recent representative row;
+                // just bump the counter.
+                $by_mac[$mac]['attempt_count']++;
+                continue;
+            }
+
+            // Reason field varies across PF versions — fall through
+            // the most-likely candidates. M0 live validation will
+            // determine the real one and let us prune.
+            $reason = (string) (
+                $row['reason']
+                ?? $row['reply']
+                ?? $row['auth_status']
+                ?? ''
+            );
+
+            $by_mac[$mac] = [
+                'timestamp'     => (string) ($row['created_at'] ?? ''),
+                'mac'           => $mac,
+                'ssid'          => self::parseSsidFromCalledStationId(
+                    (string) ($row['called_station_id'] ?? '')
+                ),
+                'reason'        => $reason,
+                'user_name'     => (string) ($row['user_name'] ?? ''),
+                'attempt_count' => 1,
+            ];
+        }
+        return array_values($by_mac);
+    }
+
+    /**
+     * Pull the SSID out of a wireless RADIUS Called-Station-Id.
+     *
+     * Format from APs running 802.11: <BSSID>:<SSID>, where BSSID is
+     * the radio MAC as 6 colon-separated octets. So everything after
+     * the 6th colon is the SSID. Using implode(':') on the slice
+     * preserves SSIDs that legitimately contain colons (rare but
+     * valid). Returns '' for non-wireless rows or unrecognized format.
+     */
+    private static function parseSsidFromCalledStationId(string $cs_id): string {
+        if ($cs_id === '') {
+            return '';
+        }
+        $parts = explode(':', $cs_id);
+        return count($parts) > 6 ? implode(':', array_slice($parts, 6)) : '';
+    }
+
     // ── Cache helpers ──────────────────────────────────────────────────
     //
     // Thin APCu wrapper. Silently no-ops when APCu isn't loaded or is
@@ -478,10 +643,10 @@ final class PFClient {
     }
 
     /**
-     * Authenticated request with transparent re-auth on 401. All authed
-     * callers (searchNodes(), locationlogSearch(), and the future
-     * radiusAuditLog()) funnel through here so the token-refresh logic
-     * lives in exactly one place.
+     * Authenticated request with transparent re-auth on 401. All
+     * authed callers (searchNodes, locationlogSearch, radiusAuditLog)
+     * funnel through here so the token-refresh logic lives in
+     * exactly one place.
      *
      * Behaviour:
      *   1. If no cached token, login() first.
