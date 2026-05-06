@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP Dashboard — Project Plan v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --zbx:      #4d7cc7;
+  --zbx2:     #0d1f3c;
+  --zbx3:     #1a3a6e;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --pf:       #9b59b6;
+  --pf2:      #1f0d2a;
+  --pf3:      #3a1a4a;
+  --m0:       #7c6ff7;
+  --m1:       #0ea5e9;
+  --m2:       #22c55e;
+  --m3:       #f59e0b;
+  --m4:       #ef4444;
+  --m5:       #a855f7;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+/* ── Header ── */
+.header { border-bottom: 1px solid var(--line); padding: 28px 40px 22px; display: flex; align-items: flex-start; gap: 32px; }
+.header-left { flex: 1; }
+.brand { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); margin-bottom: 8px; }
+h1 { font-size: 22px; font-weight: 600; color: var(--fg); letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 4px; }
+.stat-row { font-family: var(--mono); font-size: 11px; color: var(--fg2); display: flex; gap: 10px; }
+.stat-val { color: var(--fg); font-weight: 600; }
+#progress-wrap { width: 200px; height: 4px; background: var(--line); border-radius: 2px; margin-top: 4px; }
+#progress-bar { height: 100%; border-radius: 2px; background: var(--ok); transition: width .5s ease; }
+
+/* ── Change notice ── */
+.change-banner { margin: 20px 40px; border: 1px solid var(--warn3); background: var(--warn2); border-radius: 6px; padding: 14px 18px; font-size: 13px; color: var(--fg2); }
+.change-banner strong { color: var(--warn); }
+.change-banner ul { padding-left: 20px; margin-top: 8px; line-height: 2; }
+.change-banner li { font-size: 12.5px; }
+
+/* ── Timeline ── */
+.timeline-wrap { padding: 18px 40px; border-bottom: 1px solid var(--line2); }
+.tl-label { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); margin-bottom: 8px; }
+.tl-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; gap: 2px; }
+.tl-seg { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 9px; font-weight: 600; color: rgba(255,255,255,.8); letter-spacing: .05em; }
+.tl-seg.done-seg { opacity: .5; position: relative; }
+.tl-seg.done-seg::after { content: '✓'; margin-left: 4px; }
+.tl-weeks { display: flex; margin-top: 4px; }
+.tl-wk { flex: 1; font-family: var(--mono); font-size: 9px; color: var(--fg3); text-align: center; }
+
+/* ── Legend ── */
+.legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 14px 40px; border-bottom: 1px solid var(--line2); align-items: center; }
+.leg-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--fg2); }
+.leg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.t-reuse  { background: #0d2a3c; border: 1px solid #1a4a6e; }
+.t-adapt  { background: #1f2a0d; border: 1px solid #3a4a1a; }
+.t-xiq    { background: #0d2a1a; border: 1px solid #1a4a2a; }
+.t-new    { background: #2a1f0d; border: 1px solid #4a3a1a; }
+.t-minor  { background: #2a0d2a; border: 1px solid #4a1a4a; }
+.t-native { background: #1f0d2a; border: 1px solid #3a1a4a; }
+.t-done   { background: #0d2a1a; border: 1px solid var(--ok3); }
+
+/* ── Main content ── */
+.main { padding: 24px 40px 60px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Milestone ── */
+.milestone { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.milestone.ms-complete { border-color: var(--ok3); }
+.milestone.ms-partial  { border-color: var(--warn3); }
+.ms-head { display: flex; align-items: center; gap: 0; padding: 13px 18px; cursor: pointer; user-select: none; background: var(--bg2); transition: background .1s; }
+.ms-head:hover { background: var(--bg3); }
+.ms-head.open { }
+.ms-accent { width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0; margin-right: 14px; }
+.ms-info { flex: 1; }
+.ms-title { font-size: 14px; font-weight: 600; color: var(--fg); line-height: 1.2; display: flex; align-items: center; gap: 10px; }
+.ms-badge { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 1px 7px; border-radius: 10px; }
+.ms-badge.done { background: var(--ok2); color: var(--ok); border: 1px solid var(--ok3); }
+.ms-badge.partial { background: var(--warn2); color: var(--warn); border: 1px solid var(--warn3); }
+.ms-badge.active { background: #0d1f3c; color: #7dd3fc; border: 1px solid #1a3a6e; }
+.ms-badge.blocked { background: var(--err2); color: var(--err); border: 1px solid var(--err3); }
+.ms-meta { font-size: 12px; color: var(--fg2); margin-top: 2px; }
+.ms-right { display: flex; align-items: center; gap: 10px; }
+.ms-pill { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; color: rgba(255,255,255,.85); }
+.ms-count { font-family: var(--mono); font-size: 11px; color: var(--fg3); }
+.ms-chevron { font-size: 10px; color: var(--fg3); transition: transform .2s; width: 12px; text-align: center; }
+.ms-chevron.open { transform: rotate(90deg); }
+.ms-progress { height: 3px; background: var(--line2); border-top: 1px solid var(--line); }
+.ms-progress-bar { height: 100%; border-radius: 0; transition: width .3s ease; }
+
+/* ── Tasks ── */
+.tasks { display: none; }
+.tasks.open { display: block; }
+
+.change-note { padding: 10px 18px; background: var(--warn2); border-bottom: 1px solid var(--warn3); font-size: 12px; color: var(--warn); font-family: var(--mono); }
+.finding-note { padding: 10px 18px; background: var(--ok2); border-bottom: 1px solid var(--ok3); font-size: 12px; color: var(--ok); font-family: var(--mono); }
+.correction-note { padding: 10px 18px; background: var(--err2); border-bottom: 1px solid var(--err3); font-size: 12px; color: #fca5a5; font-family: var(--mono); }
+
+.task { display: grid; grid-template-columns: 18px 1fr auto auto; gap: 0 12px; align-items: start; padding: 11px 18px; border-bottom: 1px solid var(--line2); transition: background .1s; }
+.task:last-child { border-bottom: none; }
+.task:hover { background: rgba(255,255,255,.02); }
+
+.task-check { width: 15px; height: 15px; border-radius: 3px; border: 1.5px solid var(--fg3); margin-top: 2px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all .15s; color: #fff; font-size: 9px; }
+.task-check:hover { border-color: var(--fg2); }
+.task-check.done { border-color: var(--ok); background: var(--ok); }
+.task-check.done::after { content: '✓'; }
+.task-check.partial { border-color: var(--warn); background: var(--warn2); }
+.task-check.partial::after { content: '~'; color: var(--warn); font-size: 11px; line-height: 1; }
+
+.task-body { min-width: 0; }
+.task-name { font-size: 13px; font-weight: 500; color: var(--fg); line-height: 1.35; }
+.task-name.done { text-decoration: line-through; color: var(--fg3); }
+.task-dep { font-size: 11.5px; color: var(--fg2); margin-top: 4px; line-height: 1.55; }
+
+.finding { display: inline-block; margin-top: 6px; padding: 6px 10px; background: var(--ok2); border: 1px solid var(--ok3); border-radius: 4px; font-size: 11px; color: #86efac; }
+.correction { display: inline-block; margin-top: 6px; padding: 6px 10px; background: var(--err2); border: 1px solid var(--err3); border-radius: 4px; font-size: 11px; color: #fca5a5; }
+.design-change { display: inline-block; margin-top: 6px; padding: 6px 10px; background: var(--warn2); border: 1px solid var(--warn3); border-radius: 4px; font-size: 11px; color: #fcd34d; }
+
+code { font-family: var(--mono); font-size: 10.5px; background: var(--bg3); color: var(--fg); padding: 0 5px; border-radius: 3px; border: 1px solid var(--line); }
+.ep { font-family: var(--mono); font-size: 10.5px; background: #0d2a1a; color: #4ade80; padding: 1px 7px; border-radius: 3px; border: 1px solid #1a4a2a; display: inline-block; margin: 1px 0; white-space: nowrap; }
+
+/* ── Tags ── */
+.tag { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.t-reuse  { background: #0d2a3c; color: #7dd3fc; border: 1px solid #1a4a6e; }
+.t-adapt  { background: #1f2a0d; color: #a3e635; border: 1px solid #3a4a1a; }
+.t-xiq    { background: #0d2a1a; color: #34d399; border: 1px solid #1a4a2a; }
+.t-new    { background: #2a1f0d; color: #fcd34d; border: 1px solid #4a3a1a; }
+.t-minor  { background: #2a0d2a; color: #e879f9; border: 1px solid #4a1a4a; }
+.t-native { background: #1f0d2a; color: #c084fc; border: 1px solid #3a1a4a; }
+.t-pf     { background: var(--pf2); color: #d8b4fe; border: 1px solid var(--pf3); }
+
+.effort { font-family: var(--mono); font-size: 10px; color: var(--fg3); white-space: nowrap; align-self: start; margin-top: 2px; }
+
+/* ── Status section ── */
+.status-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 20px 40px 0; }
+.status-card { border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; background: var(--bg2); }
+.status-card.sc-done { border-color: var(--ok3); background: var(--ok2); }
+.status-card.sc-partial { border-color: var(--warn3); background: var(--warn2); }
+.status-card.sc-next { border-color: var(--zbx3); background: var(--zbx2); }
+.status-card-label { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.sc-done .status-card-label { color: var(--ok); }
+.sc-partial .status-card-label { color: var(--warn); }
+.sc-next .status-card-label { color: #7dd3fc; }
+.status-card-title { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 6px; }
+.status-card-body { font-size: 12px; color: var(--fg2); line-height: 1.6; }
+.status-card-body ul { padding-left: 14px; }
+.status-card-body li { margin-bottom: 2px; }
+
+@media (max-width: 800px) {
+  .header { flex-direction: column; padding: 20px; }
+  .main { padding: 16px 20px; }
+  .status-grid { grid-template-columns: 1fr; margin: 16px 20px 0; }
+  .timeline-wrap, .legend { padding: 14px 20px; }
+}
+@media print {
+  .task-check { border-color: #aaa; }
+  .task-check.done { background: #4caf50; border-color: #4caf50; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="brand">Zabbix · TCS — Custom Widget Development · Plan v2</div>
+    <h1>AP Dashboard Project Plan</h1>
+    <div class="subtitle">Zabbix 7.x · ExtremeCloud IQ · PacketFence 15 · Bryant High School pilot · Updated with M0 findings</div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-row"><span>Tasks complete</span><span class="stat-val" id="done-count">— / —</span></div>
+    <div class="stat-row"><span>Timeline</span><span class="stat-val">~13 weeks</span></div>
+    <div class="stat-row"><span>Milestones</span><span class="stat-val">6 (M0–M5)</span></div>
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+  </div>
+</div>
+
+<!-- Change notice -->
+<div class="change-banner">
+  <strong>What changed from Plan v1:</strong> M0 research produced four deliverables that revise the subsequent implementation plan. Key corrections are annotated inline on each affected task below.
+  <ul>
+    <li><strong>XIQ endpoint paths are wrong throughout.</strong> The planned <code>/xapi/v1/</code> prefix and <code>/monitor/</code> tier do not exist. Correct paths documented in M0 XIQ Wireless API Reference.</li>
+    <li><strong>HOST-RESOURCES-MIB and POWER-ETHERNET-MIB are absent on AP305C.</strong> Temperature and PoE rings removed from health ring design. CPU and Memory source shifts to XIQ (point-in-time).</li>
+    <li><strong>PF locationlog fills the client-count sparkline.</strong> Open question Q6 is resolved — no WIRELESS-MIB SNMP extensions needed.</li>
+    <li><strong>XIQ client data is a global filtered query</strong>, not a per-device sub-endpoint.</li>
+    <li><strong>M1 expanded 2→3 weeks</strong> to absorb endpoint path corrections and additional PF historical API work.</li>
+    <li><strong>M0 scaffold task still pending.</strong> All API documentation is complete; widget file skeleton not yet created.</li>
+  </ul>
+</div>
+
+<!-- Status cards -->
+<div class="status-grid">
+  <div class="status-card sc-partial">
+    <div class="status-card-label">M0 — In Progress</div>
+    <div class="status-card-title">Foundation</div>
+    <div class="status-card-body">
+      <strong style="color:#86efac">Done:</strong>
+      <ul>
+        <li>XIQ Wireless &amp; Radio API Reference</li>
+        <li>XIQ Device Config API Reference</li>
+        <li>AP SNMP Walk Analysis (4 walks)</li>
+        <li>PacketFence Historical API Reference</li>
+      </ul>
+      <strong style="color:#fcd34d">Remaining:</strong>
+      <ul>
+        <li>Widget scaffold (apdetail/ skeleton)</li>
+        <li>3 live XIQ endpoint validations</li>
+        <li>PF live validation (BHS-56-Hallway)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="status-card sc-next">
+    <div class="status-card-label">M1 — Next · Critical Path</div>
+    <div class="status-card-title">XIQ Integration Library</div>
+    <div class="status-card-body">Blocks M2, M3, M4. Weeks 3–5. Expanded to 3 weeks to absorb endpoint corrections and PF historical client-count work. Start after M0 scaffold and live XIQ validation.</div>
+  </div>
+  <div class="status-card">
+    <div class="status-card-label">M2–M5 — Queued</div>
+    <div class="status-card-title">Widget Build-Out</div>
+    <div class="status-card-body">Design changes from M0 flow into M2: health rings reduced to CPU + Memory only; Clients Connected sparkline sourced from PF locationlog. All other milestones proceed as planned.</div>
+  </div>
+</div>
+
+<!-- Timeline -->
+<div class="timeline-wrap" style="margin-top:20px">
+  <div class="tl-label">Schedule — 13 weeks (M0 extended ½ week for live validation)</div>
+  <div class="tl-bar">
+    <div class="tl-seg done-seg" style="background:var(--m0);width:15%">M0</div>
+    <div class="tl-seg" style="background:var(--m1);width:24%">M1 — XIQ Lib</div>
+    <div class="tl-seg" style="background:var(--m2);width:23%">M2 — Overview</div>
+    <div class="tl-seg" style="background:var(--m3);width:15%">M3</div>
+    <div class="tl-seg" style="background:var(--m4);width:15%">M4</div>
+    <div class="tl-seg" style="background:var(--m5);width:8%">M5</div>
+  </div>
+  <div class="tl-weeks">
+    <div class="tl-wk">W1</div><div class="tl-wk">W2</div><div class="tl-wk">W3</div>
+    <div class="tl-wk">W4</div><div class="tl-wk">W5</div><div class="tl-wk">W6</div>
+    <div class="tl-wk">W7</div><div class="tl-wk">W8</div><div class="tl-wk">W9</div>
+    <div class="tl-wk">W10</div><div class="tl-wk">W11</div><div class="tl-wk">W12</div><div class="tl-wk">W13</div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot t-reuse"></div>Direct reuse</div>
+  <div class="leg-item"><div class="leg-dot t-adapt"></div>Adapt existing pattern</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#0d2a1a;border:1px solid #1a4a2a"></div>XIQ API</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--pf2);border:1px solid var(--pf3)"></div>PacketFence</div>
+  <div class="leg-item"><div class="leg-dot t-new"></div>Net-new</div>
+  <div class="leg-item"><div class="leg-dot t-minor"></div>Minor addition</div>
+  <div class="leg-item"><div class="leg-dot t-native"></div>Native Zabbix widget</div>
+  <div class="leg-item" style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--fg3)">S &lt;1d · M 1–3d · L 3–7d · XL &gt;1w</div>
+</div>
+
+<div class="main">
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M0
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone ms-partial" id="m0">
+  <div class="ms-head open" onclick="toggle(this,'m0c')">
+    <div class="ms-accent" style="background:var(--m0)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M0 — Foundation
+        <span class="ms-badge partial">Partial — 4/7 done</span>
+      </div>
+      <div class="ms-meta">Weeks 1–2 · scaffolding + API documentation · gates all subsequent milestones</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m0-count"></span>
+      <span class="ms-pill" style="background:var(--m0)">2 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m0-bar" style="background:var(--m0)"></div></div>
+  <div class="tasks open" id="m0-tasks">
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m0c')" title="Mark done"></div>
+      <div class="task-body">
+        <div class="task-name">Scaffold AP widget module directories</div>
+        <div class="task-dep">Copy <code>switchports/</code> skeleton — <code>manifest.json</code>, <code>Widget.php</code>, <code>WidgetForm.php</code>, <code>WidgetView.php</code>, <code>class.widget.js</code>, <code>widget.css</code> — into a new <code>apdetail/</code> module directory. Create <code>includes/XIQClient.php</code> and <code>includes/PFClient.php</code> as empty class stubs so M1 has a home to write into.</div>
+      </div>
+      <span class="tag t-reuse">Reuse</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check done" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name done">Document XIQ API calls — radio &amp; wireless metrics</div>
+        <div class="task-dep">
+          <span class="ep">GET /devices/{id}/wifi-interfaces/stats</span> — per-radio channel utilization, noise floor, TX power, channel, channel width, retry rate.<br>
+          <span class="ep">GET /clients</span> (global filter, not per-device) — associated clients with RSSI, data rate, band, SSID, connected duration.<br>
+          <span class="ep">GET /devices/{id}/wifi-interfaces/stats</span> — uplink stats (confirmed present).<br>
+          <div class="correction">⚠ Endpoint paths corrected: no <code>/xapi/v1/</code> prefix; no <code>/monitor/</code> tier. Documented in M0 XIQ Wireless API Reference.</div>
+          <div class="finding">✓ XIQ is point-in-time only — no historical time-series. Channel util / noise floor = current-value badges, not sparklines.</div>
+          <div class="finding">✓ Client data is a global query filtered by device_id — not a sub-endpoint of /devices/{id}.</div>
+          <div class="finding">✓ Rate limit: 7,500 calls/hr shared across TCS VIQ account. SolarWinds NPM confirmed consuming quota.</div>
+        </div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check done" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name done">Document XIQ API calls — device config &amp; identity</div>
+        <div class="task-dep">
+          <span class="ep">GET /devices/{id}</span> — model, serial, firmware+build, config type, Mgt0 IP, MAC, NTP, last config push, network policy ID.<br>
+          <span class="ep">GET /network-policies/{id}</span> — policy name, list of assigned SSID IDs.<br>
+          <span class="ep">GET /ssids/{id}</span> — VLAN, auth method, encryption, band steering, enabled bands (one call per SSID).<br>
+          <span class="ep">GET /locations/{id}</span> — building name, floor, coordinates, installation metadata.<br>
+          Full field-to-UI row mapping produced in M0 XIQ Device Config API Reference.
+        </div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check done" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name done">SNMP Walk Analysis — four MIB subtrees</div>
+        <div class="task-dep">
+          IF-MIB (partial), HOST-RESOURCES-MIB (absent), POWER-ETHERNET-MIB (absent), enterprises.26928 (Extreme private MIB — limited). Executed against MLK-A205 (AP305C, IQ Engine 10.7r5b) — same hardware/firmware as BHS pilot fleet.
+          <div class="correction">⚠ HOST-RESOURCES-MIB absent → no CPU or memory via SNMP. Temperature ring: no source. PoE ring: AP is PoE consumer, not PSE — absent.</div>
+          <div class="design-change">→ Design change: Health rings reduced from 4 to 2. CPU and Memory now sourced from XIQ (point-in-time snapshots). Temperature and PoE rings removed. ifHighSpeed returns 0 — use ifHCOctets rate for traffic, not speed negotiation.</div>
+          <div class="finding">✓ SNMP scope is final. No further walks needed before M1 template authoring.</div>
+        </div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check done" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name done">PacketFence Historical Data API Reference</div>
+        <div class="task-dep">
+          Documented <code>locationlog</code> table schema, <span class="ep">POST /api/v1/locationlogs/search</span> query structure, <span class="ep">GET /api/v1/radius_audit_log</span>, and <span class="ep">GET /api/v1/ip4log/history/{mac}</span>. Active session sentinel: <code>end_time = '0000-00-00 00:00:00'</code>. Session bucket algorithm for client-count sparkline documented.
+          <div class="finding">✓ Open question Q6 resolved: PF locationlog provides historical client-count time-series. Clients Connected sparkline = full history curve from PF. No WIRELESS-MIB SNMP extensions needed.</div>
+          <div class="design-change">→ Design change: Live Telemetry "Clients Connected" panel is now a real sparkline (PF locationlog), not a flat current-value badge.</div>
+          <div class="design-change">→ Validate locationlog cleanup window on TCS PF 15 before M2 (<code>GET /api/v1/config/maintenance/locationlog_cleanup</code>). Cap _timeperiod selector to configured retention window.</div>
+        </div>
+      </div>
+      <span class="tag t-pf">PacketFence</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name">Confirm Zabbix-only item scope (finalize template)</div>
+        <div class="task-dep">
+          Confirmed Zabbix-only: ICMP latency, ICMP packet loss, LLDP neighbor, PoE draw (template addition — confirmed XIQ does not expose), uplink interface link state, system uptime, CPU/memory history (XIQ point-in-time only — Zabbix needed for trend alerting).<br>
+          No new SNMP items required. Template item list is final per SNMP Walk Analysis Section 9.
+        </div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m0c')"></div>
+      <div class="task-body">
+        <div class="task-name">Live AP validation — XIQ endpoints + PF filter (BHS-56-Hallway)</div>
+        <div class="task-dep">
+          Three XIQ items still marked TBD pending live response:<br>
+          1. Validate <span class="ep">GET /devices/{id}/wifi-interfaces/stats</span> field names against live BHS-56-Hallway response — confirm exact JSON keys (channel_util, noise_floor, tx_power, retry_rate units + encoding).<br>
+          2. Validate <code>channel_width</code> encoding — SNMP walk returned value 160 for col 3; cross-reference XIQ wifi-data field to confirm 160MHz or enum int.<br>
+          3. Validate whether XIQ <code>/devices/{id}/wifi-interfaces/stats</code> covers wired interface in/out — determines if Zabbix IF-MIB is the sole source for the Wired tab.<br><br>
+          PacketFence validation:<br>
+          4. Confirm <span class="ep">POST /api/v1/nodes/search</span> with <code>switch_ip = 172.16.97.59</code> returns live wireless clients.<br>
+          5. Confirm <span class="ep">GET /api/v1/radius_audit_log</span> filtered by <code>called_station_id</code> = AP MAC returns auth failure records with expected fields (timestamp, MAC, SSID, reason, attempt count).<br>
+          6. Check current <code>locationlog_cleanup_window</code> value on TCS PF 15.
+        </div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M1
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone" id="m1">
+  <div class="ms-head open" onclick="toggle(this,'m1c')">
+    <div class="ms-accent" style="background:var(--m1)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M1 — ExtremeCloud IQ Integration Library
+        <span class="ms-badge blocked">Blocked on M0</span>
+      </div>
+      <div class="ms-meta">Weeks 3–5 · critical path · blocks M2, M3, M4 · expanded from 2→3 weeks post-M0</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m1-count"></span>
+      <span class="ms-pill" style="background:var(--m1)">3 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m1-bar" style="background:var(--m1)"></div></div>
+  <div class="tasks open" id="m1-tasks">
+
+    <div class="change-note">⚠ M1 expanded from 2 to 3 weeks. Absorbs: endpoint path corrections fleet-wide; PF historical API implementation (locationlog sparkline); additional XIQ rate-limit handling.</div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQClient.php — OAuth2 bearer token + APCu cache</div>
+        <div class="task-dep">Shared library at <code>apdetail/includes/XIQClient.php</code>. Namespace: <code>Modules\APDetail\XIQClient</code>. Token endpoint: <code>POST https://api.extremecloudiq.com/oauth2/token</code>. APCu cache keyed by client ID; filesystem fallback. Proactive refresh before expiry. On 401: clear cache, re-auth once, retry; surface error to view if second attempt fails. Parse <code>RateLimit-Remaining</code> header on every response — surface widget-level warning if &lt;500. Credentials from Zabbix global macros <code>{$XIQ_CLIENT_ID}</code> / <code>{$XIQ_CLIENT_SECRET}</code>.</div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ: device identity &amp; config (<code>/devices/{id}</code>)</div>
+        <div class="task-dep">Implement <code>XIQClient::getDevice(int $id): array</code>. Returns model, serial, firmware+build string (<code>software_version</code> — confirm single field vs two), config type, Mgt0 IP, MAC, NTP, last config push timestamp, network policy ID. 5-min APCu cache — config-class data; not per-page-load.</div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ: network policy + SSID list (<code>/network-policies/{id}</code>, <code>/ssids/{id}</code>)</div>
+        <div class="task-dep">Implement <code>XIQClient::getNetworkPolicy(int $id)</code> → policy name + SSID ID array. Implement <code>XIQClient::getSsid(int $id)</code> → VLAN, auth method, encryption, band steering, enabled bands. Fan out one <code>getSsid()</code> call per SSID ID using <code>curl_multi</code>. 5-min cache per SSID ID. These are the slowest calls by volume — fan-out pattern is critical.</div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ: per-radio WiFi stats (<code>/devices/{id}/wifi-interfaces/stats</code>)</div>
+        <div class="task-dep">Implement <code>XIQClient::getWifiStats(int $id): array</code>. Returns per-radio: channel, channel width (confirm encoding), TX power, channel utilization (%), noise floor (dBm), retry rate, client count. Map radio index to 2.4 GHz / 5 GHz band labels. No cache — called per page load for live telemetry. Point-in-time only — drives current-value badges for ch_util and noise on the Live Telemetry strip.
+          <div class="correction">⚠ Endpoint path corrected from plan v1. No <code>/xapi/v1/monitor/</code> prefix. Exact field names TBD pending live validation — placeholder keys documented in M0 XIQ Wireless Reference.</div>
+        </div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ: associated client list (global <code>/clients</code> query)</div>
+        <div class="task-dep">Implement <code>XIQClient::getClients(int $deviceId): array</code>. Global query endpoint filtered by device_id parameter — NOT a sub-endpoint of /devices/{id}. Returns per client: MAC, hostname, SSID, RSSI, data rate, band, connected duration, radio index. No cache — called per page load on Clients tab.
+          <div class="correction">⚠ Endpoint pattern corrected from plan v1. Client data is a global query, not per-device endpoint. Confirm filter parameter name against live API spec during M0 live validation.</div>
+        </div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ: location + floor plan metadata (<code>/locations/{id}</code>)</div>
+        <div class="task-dep">Implement <code>XIQClient::getLocation(int $id)</code> → building name, floor, coordinates, installation metadata. Attempt <code>GET /locations/{id}/floor-plan</code> — if usable format returned, note for M5 device sidecar; otherwise flag fallback to static SVG per building in Zabbix host inventory. 5-min cache.</div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">PFClient.php — session auth + node search (reuse existing pattern)</div>
+        <div class="task-dep">Formalize shared <code>apdetail/includes/PFClient.php</code> extracted from existing <code>packetfence/</code> widget. Namespace: <code>Modules\APDetail\PFClient</code>. Reuse <code>POST /api/v1/login</code> → Bearer token pattern verbatim. Implement <code>PFClient::searchNodes(array $query)</code> wrapping <code>POST /api/v1/nodes/search</code>. Credentials as widget config fields (PF read-only webservices user, not admin).</div>
+      </div>
+      <span class="tag t-reuse">Reuse</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">PFClient: locationlog search — client-count sparkline</div>
+        <div class="task-dep">Implement <code>PFClient::locationlogSearch(string $switchIp, int $from, int $to): array</code> via <span class="ep">POST /api/v1/locationlogs/search</span>. Query fields: <code>mac, ssid, start_time, end_time, role</code>. Filter: <code>switch_ip = AP Mgt0 IP</code> + <code>start_time ≥ window start</code>. Active session sentinel: <code>end_time = '0000-00-00 00:00:00'</code>. PHP bucket algorithm: group into N time buckets matching the <code>_timeperiod</code> broadcast; count distinct MACs with active sessions per bucket. Returns sparkline data array. 60-second APCu cache.
+          <div class="finding">✓ This is the implementation of the M0 PF Historical API finding. Resolves Open Question Q6.</div>
+        </div>
+      </div>
+      <span class="tag t-pf">PacketFence</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">PFClient: radius_audit_log — auth failures</div>
+        <div class="task-dep">Implement <code>PFClient::radiusAuditLog(string $apMac, int $limit = 100): array</code> via <span class="ep">GET /api/v1/radius_audit_log</span> filtered by <code>called_station_id</code> = AP MAC. Returns: timestamp, client MAC, SSID, failure reason, attempt count. No cache — live on Auth Failures table load. Requires PF live validation from M0 before implementing.</div>
+      </div>
+      <span class="tag t-pf">PacketFence</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m1c')"></div>
+      <div class="task-body">
+        <div class="task-name">Validate PacketFence switch_ip filter + radius_audit_log</div>
+        <div class="task-dep">Confirm live PF 15 returns wireless clients via <span class="ep">POST /api/v1/nodes/search</span> with <code>switch_ip = 172.16.97.59</code> against BHS-56-Hallway. This is the gate condition for the Clients tab and all PF integration work. If M0 live validation didn't catch this, block M1 PFClient work until confirmed.</div>
+      </div>
+      <span class="tag t-pf">PacketFence</span>
+      <span class="effort">S</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M2
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone" id="m2">
+  <div class="ms-head open" onclick="toggle(this,'m2c')">
+    <div class="ms-accent" style="background:var(--m2)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M2 — AP Overview Widget
+        <span class="ms-badge blocked">Blocked on M1</span>
+      </div>
+      <div class="ms-meta">Weeks 6–8 · requires M0 + M1 · all panels on Overview tab</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m2-count"></span>
+      <span class="ms-pill" style="background:var(--m2)">3 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m2-bar" style="background:var(--m2)"></div></div>
+  <div class="tasks open" id="m2-tasks">
+
+    <div class="change-note">⚠ Design changes from M0: Health rings reduced to CPU + Memory only (Temperature + PoE removed — no SNMP source). CPU/Memory are point-in-time from XIQ — rings show current %, no trend sparkline.</div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Widget scaffold + <code>_hostid</code> broadcast receive</div>
+        <div class="task-dep"><code>manifest.json</code> <code>in: _hostids</code>, WidgetForm host field, JS EventHub subscription — identical to Switch Port Detail receive pattern. Wire to Host Navigator on the dashboard. Namespace: <code>Modules\APDetail</code>. Tab navigation shell with <code>sessionStorage</code> for <code>ap.activeTab</code>.</div>
+      </div>
+      <span class="tag t-reuse">Reuse</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Device Health rings — CPU + Memory (revised: 2 rings, not 4)</div>
+        <div class="task-dep">CPU and Memory sourced from XIQ <code>/devices/{id}</code> or <code>/devices/{id}/wifi-interfaces/stats</code> (confirm which field exposes CPU/memory — check M0 device config reference). Point-in-time percentage — SVG donut ring with current % value. Rings labelled "CPU" and "Memory". Uptime sourced from Zabbix <code>system.uptime</code> item displayed as a KV alongside the rings. No Temperature ring. No PoE ring.
+          <div class="design-change">→ Changed from 4 rings (CPU/Mem/Temp/PoE) to 2 rings (CPU/Mem). Per SNMP Walk Analysis — HOST-RESOURCES-MIB and POWER-ETHERNET-MIB are absent on AP305C.</div>
+        </div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Live Telemetry sparkline strip</div>
+        <div class="task-dep">
+          Full sparklines from Zabbix <code>history.get</code>: Uplink In, Uplink Out, Latency, Packet Loss — adapt portdetail sparkline renderer directly.<br>
+          Full sparkline from PF locationlog: Clients Connected (bucket algorithm from <code>PFClient::locationlogSearch()</code>).<br>
+          Current-value badges (no sparkline): Channel Util 2.4 GHz, Channel Util 5 GHz, Noise Floor 2.4 GHz, Noise Floor 5 GHz — sourced from XIQ <code>getWifiStats()</code>. Label each badge with a "live" indicator and tooltip "Historical data not available from XIQ".
+          <div class="design-change">→ Clients Connected is now a real sparkline (PF locationlog). Channel util + noise remain current-value badges — no WIRELESS-MIB SNMP additions.</div>
+        </div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">L</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">System Info KV panel</div>
+        <div class="task-dep">AP Name, Model (XIQ), Serial (XIQ <code>serial_number</code> — Zabbix <code>entPhysicalSerialNum</code> SNMP fallback), IQ Engine firmware+build (XIQ <code>software_version</code> — Zabbix <code>sysDescr</code> SNMP fallback), Config type, NTP server, Last config push timestamp. All XIQ <code>/devices/{id}</code> fields. Source badge per row (XIQ / ZBX).</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Network Info KV panel</div>
+        <div class="task-dep">Device Status from Zabbix <code>host.get available</code> (1=MANAGED, 2=UNMANAGED). Mgt0 IPv4 + subnet from Zabbix <code>hostinterface.get</code> (XIQ <code>ip_address</code> lacks prefix length). Mgt0 IPv6, Default Gateway, DNS from Zabbix SNMP items. Network Policy Name from XIQ <code>getNetworkPolicy()</code>. LLDP Neighbor (uplink switch + port) from Zabbix SNMP LLDP-MIB item. Same merge + source badge pattern as System Info.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Connectivity Issues panel</div>
+        <div class="task-dep">Computed from Zabbix items: ICMP latency &gt;10ms = warning, &gt;50ms = critical; packet loss &gt;1% = warning, &gt;5% = critical; interface state down = critical. Show issue count badge on Overview tab header. Empty state = "No connectivity issues".</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m2c')"></div>
+      <div class="task-body">
+        <div class="task-name">Recent Events feed + tab navigation shell</div>
+        <div class="task-dep">Zabbix <code>event.get</code> filtered to host, last 50 events, with severity + message + timestamp. Tab switching with <code>sessionStorage</code> persistence for active tab (<code>ap.activeTab</code>) and selected time range (<code>ap.timeRange</code>). PF events merged in M5 — placeholder "Show all events →" link to Events tab. Tab list: Overview, Wireless, Wired, Clients, Events, Alerts, Graphs, Latest Data.</div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">M</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M3
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone" id="m3">
+  <div class="ms-head open" onclick="toggle(this,'m3c')">
+    <div class="ms-accent" style="background:var(--m3)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M3 — Wireless + Wired Tabs
+        <span class="ms-badge blocked">Blocked on M1</span>
+      </div>
+      <div class="ms-meta">Weeks 9–10 · requires M1 · parallel with M4</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m3-count"></span>
+      <span class="ms-pill" style="background:var(--m3)">2 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m3-bar" style="background:var(--m3)"></div></div>
+  <div class="tasks open" id="m3-tasks">
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m3c')"></div>
+      <div class="task-body">
+        <div class="task-name">Radio cards — 2.4 GHz + 5 GHz</div>
+        <div class="task-dep">All radio data from XIQ <code>getWifiStats()</code>: channel, channel width (confirm encoding — value 160 flagged in SNMP walk), TX power, channel utilization, noise floor, retry rate, associated client count. Two radio cards side-by-side. Point-in-time values with live badge. No SNMP template extension needed.
+          <div class="design-change">→ channel_width encoding TBD — see M0 live validation item 2. Implement with enum map and display "Unknown" if unrecognized value until confirmed.</div>
+        </div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m3c')"></div>
+      <div class="task-body">
+        <div class="task-name">SSID Broadcast table</div>
+        <div class="task-dep">SSID list, VLAN, auth method, encryption, enabled bands from XIQ <code>getNetworkPolicy()</code> + <code>getSsid()</code> (cached from M1 library). Client count per SSID from XIQ <code>getClients()</code> grouped by SSID name. NAC role column from PF connection profile lookup — join SSID name to PF realm/profile via <code>PFClient::searchNodes()</code> SSID group. Enabled/disabled indicator per SSID.</div>
+      </div>
+      <span class="tag t-xiq">XIQ API</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m3c')"></div>
+      <div class="task-body">
+        <div class="task-name">Wired Interfaces table</div>
+        <div class="task-dep">eth0/eth1 state, in/out (from Zabbix <code>ifHCOctets</code> — not ifHighSpeed which returns 0), errors, LLDP neighbor from Zabbix IF-MIB items. If M0 live validation confirms XIQ <code>/devices/{id}/wifi-interfaces/stats</code> covers wired interface stats, use that instead and note source. PoE status from Zabbix PoE template item (<code>snmp.interfaces.poe.dstatus[{#SNMPINDEX}]</code>). Adapt faceplate batch item fetch: same keys, 2 rows instead of 48.
+          <div class="correction">⚠ ifHighSpeed returns 0 on AP305C per SNMP walk. Use <code>net.if.speed[ifHighSpeed.N]</code> item only if it has a valid cached value; display "—" otherwise. Traffic rate from <code>ifHCOctets</code> deltas.</div>
+        </div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m3c')"></div>
+      <div class="task-body">
+        <div class="task-name">PoE Power Budget bar</div>
+        <div class="task-dep">Current PoE draw from Zabbix <code>snmp.interfaces.poe.dstatus[{#SNMPINDEX}]</code> item (existing local template addition). Class budget derived from PoE class OID value. Horizontal progress bar: current W / class max W + class label (e.g. "Class 4 · 802.3at"). Note: the AP is a PoE <em>consumer</em> — this shows how much PoE the AP draws from the upstream switch port, not how much it supplies.</div>
+      </div>
+      <span class="tag t-minor">Minor add</span>
+      <span class="effort">S</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M4
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone" id="m4">
+  <div class="ms-head open" onclick="toggle(this,'m4c')">
+    <div class="ms-accent" style="background:var(--m4)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M4 — Clients Tab
+        <span class="ms-badge blocked">Blocked on M1</span>
+      </div>
+      <div class="ms-meta">Weeks 9–10 · requires M1 · parallel with M3</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m4-count"></span>
+      <span class="ms-pill" style="background:var(--m4)">2 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m4-bar" style="background:var(--m4)"></div></div>
+  <div class="tasks open" id="m4-tasks">
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m4c')"></div>
+      <div class="task-body">
+        <div class="task-name">Connected Clients table — PF + XIQ join</div>
+        <div class="task-dep">Base record from PF <span class="ep">POST /api/v1/nodes/search</span> with <code>switch_ip = AP Mgt0 IP</code>: MAC, hostname, user, role, VLAN, SSID, posture, OS. Enriched with RSSI, data rate, band, connected duration from XIQ <code>getClients()</code> joined on MAC. No SNMP association table walk needed. Adapt existing PF widget node enrichment PHP — same auth client, new join step.</div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">L</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m4c')"></div>
+      <div class="task-body">
+        <div class="task-name">Role/posture filter pills + RSSI bar</div>
+        <div class="task-dep">Filter pills: All / Issues (non-compliant posture) / Students / Faculty / Guests — JS client-side filtering on already-fetched node list, no additional API calls. Four-bar RSSI indicator: ≥ −55 dBm = 4 bars (excellent), ≥ −65 = 3 (good), ≥ −75 = 2 (fair), below = 1 (poor). Persist selected filter in <code>sessionStorage</code> across dashboard refreshes.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m4c')"></div>
+      <div class="task-body">
+        <div class="task-name">Auth Failures table</div>
+        <div class="task-dep">PF <code>PFClient::radiusAuditLog()</code> — <span class="ep">GET /api/v1/radius_audit_log</span> filtered by <code>called_station_id</code> = AP MAC address. Columns: timestamp, client MAC, SSID, failure reason, attempt count. Same PHP HTTP client pattern as PF node search — new endpoint, same session/auth. Requires M0 live PF validation before implementing.</div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m4c')"></div>
+      <div class="task-body">
+        <div class="task-name">Per-client drill-down (optional — time permitting)</div>
+        <div class="task-dep">On row click: fetch <span class="ep">GET /api/v1/node/{mac}/locationlogs</span> from PF to show session history for the selected client. Slide-in panel or modal. No cache — operator-triggered live call. If M4 runs over schedule, defer to M5 polish phase.</div>
+      </div>
+      <span class="tag t-pf">PacketFence</span>
+      <span class="effort">M</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     M5
+════════════════════════════════════════════════════════════════════ -->
+<div class="milestone" id="m5">
+  <div class="ms-head open" onclick="toggle(this,'m5c')">
+    <div class="ms-accent" style="background:var(--m5)"></div>
+    <div class="ms-info">
+      <div class="ms-title">M5 — Events, Alerts, Polish + Testing
+        <span class="ms-badge blocked">Blocked on M2–M4</span>
+      </div>
+      <div class="ms-meta">Weeks 11–13 · requires M2, M3, M4 · extended 1 week for testing</div>
+    </div>
+    <div class="ms-right">
+      <span class="ms-count" id="m5-count"></span>
+      <span class="ms-pill" style="background:var(--m5)">3 wk</span>
+      <span class="ms-chevron open">▶</span>
+    </div>
+  </div>
+  <div class="ms-progress"><div class="ms-progress-bar" id="m5-bar" style="background:var(--m5)"></div></div>
+  <div class="tasks open" id="m5-tasks">
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">Unified Event feed — Zabbix + PacketFence merge</div>
+        <div class="task-dep">Fetch Zabbix <code>event.get</code> and PF <span class="ep">GET /api/v1/audit_log</span> in parallel via <code>curl_multi</code>. Normalize to common shape: <code>{ ts, source ('ZBX'|'PF'), severity, msg, obj }</code>. Merge + sort descending by <code>ts</code>. Source badge per row. Back-fills Recent Events panel on Overview tab. Also populates the Events tab.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">Alerts tab — Active Triggers + NAC Violations</div>
+        <div class="task-dep">Active Triggers: reuse native Zabbix Problems widget configuration — no custom code. NAC Violations: aggregate security event fields from PF node search results already fetched for Clients tab — no additional API call. Display count badge on Alerts tab header. Zero-violations empty state.</div>
+      </div>
+      <span class="tag t-adapt">Adapt</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">Graphs + Latest Data tabs — native widget passthrough</div>
+        <div class="task-dep">Graphs tab: broadcast <code>_itemids</code> to drive a native Zabbix Graph (classic) widget — no custom rendering. Latest Data tab: link to native Zabbix Latest Data filtered to the AP host — no custom rendering. Both tabs use the existing Zabbix widget broadcast mechanism; no PHP or JS logic in the AP widget itself.</div>
+      </div>
+      <span class="tag t-native">Native ZBX</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">apsidecar widget — AP illustration + floor plan + actions</div>
+        <div class="task-dep">Separate widget <code>apsidecar/</code>. AP305C SVG illustration. Floor plan: use XIQ location floor plan if available format, otherwise static SVG asset per building (stored as Zabbix host inventory field). Location block: building name, floor, coordinates from XIQ <code>getLocation()</code>. Reboot / SSH action buttons (with confirmation dialog). Lowest priority — implement last.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">L</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">XIQ rate-limit monitoring + graceful degradation</div>
+        <div class="task-dep">Surface widget-level warning banner when XIQ <code>RateLimit-Remaining</code> header drops below 500. Graceful degradation: if XIQ is unreachable, show cached data with stale timestamp badge; if no cache, show empty-state cards (not error page). If PF is unreachable, show empty state on Clients + Auth Failures tables with "PacketFence unavailable" message. No tab should crash or leave empty white space.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">Dashboard wiring — Host Navigator + widget references</div>
+        <div class="task-dep">Wire Host Navigator → <code>_hostid</code> broadcast → <code>apdetail</code> widget. Confirm all widget instances assigned unique <code>reference</code> values (delete + re-add any instances after manifest.json changes). Wire <code>_itemids</code> broadcast from apdetail to native Graph widget. Confirm <code>_timeperiod</code> from dashboard time range selector reaches the Live Telemetry sparklines.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">S</span>
+    </div>
+
+    <div class="task">
+      <div class="task-check" onclick="check(this,'m5c')"></div>
+      <div class="task-body">
+        <div class="task-name">End-to-end test + multi-AP validation</div>
+        <div class="task-dep">Full dashboard load on live BHS-56-Hallway (AP305C). Switch Host Navigator to APs at CHS and NRS — confirm all panels repopulate cleanly. Test: XIQ unreachable (graceful degradation), PF unreachable (empty state messaging), all filter pill states, dashboard auto-refresh, sessionStorage tab persistence. Validate XIQ rate-limit quota under multi-operator concurrent dashboard load. Sign off on BHS pilot before fleet rollout.</div>
+      </div>
+      <span class="tag t-new">Net-new</span>
+      <span class="effort">M</span>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<script>
+const milestones = ['m0','m1','m2','m3','m4','m5'];
+
+// Pre-mark M0 documentation tasks as done (4 of 7 tasks)
+const doneTasks = ['m0-t1','m0-t2','m0-t3','m0-t4'];
+
+function toggle(head, ms) {
+  const tasks = document.getElementById(ms + '-tasks');
+  const chevron = head.querySelector('.ms-chevron');
+  const open = tasks.classList.toggle('open');
+  head.classList.toggle('open', open);
+  chevron.classList.toggle('open', open);
+}
+
+function check(box, ms) {
+  box.classList.toggle('done');
+  const name = box.nextElementSibling.querySelector('.task-name');
+  name.classList.toggle('done', box.classList.contains('done'));
+  updateCounts();
+}
+
+function updateCounts() {
+  let totalDone = 0, total = 0;
+  milestones.forEach(ms => {
+    const checks = document.querySelectorAll('#' + ms + '-tasks .task-check');
+    const done   = document.querySelectorAll('#' + ms + '-tasks .task-check.done');
+    const pct = checks.length ? (done.length / checks.length) * 100 : 0;
+    document.getElementById(ms + '-bar').style.width = pct + '%';
+    document.getElementById(ms + '-count').textContent = done.length + ' / ' + checks.length;
+    totalDone += done.length;
+    total     += checks.length;
+  });
+  document.getElementById('done-count').textContent = totalDone + ' / ' + total;
+  document.getElementById('progress-bar').style.width = (total ? (totalDone / total) * 100 : 0) + '%';
+}
+
+// Init
+document.querySelectorAll('.ms-head').forEach(h => h.classList.add('open'));
+updateCounts();
+</script>
+</body>
+</html>

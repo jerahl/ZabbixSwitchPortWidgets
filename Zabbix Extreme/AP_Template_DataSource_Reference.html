@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AP Dashboard — Zabbix Template &amp; Data Source Reference</title>
+<style>
+  :root {
+    --bg:    #0d1117;
+    --bg2:   #161b22;
+    --bg3:   #1c2128;
+    --line:  #30363d;
+    --fg:    #e6edf3;
+    --fg2:   #8b949e;
+    --fg3:   #484f58;
+
+    --zbx:   #f97316; --zbx2: #1a120a; --zbx3: #7c3010;
+    --xiq:   #10b981; --xiq2: #071a12; --xiq3: #065f46;
+    --pf:    #a855f7; --pf2:  #13071a; --pf3:  #6b21a8;
+    --ok:    #22c55e; --ok2:  #0d2918; --ok3:  #15803d;
+    --warn:  #f59e0b; --warn2:#1a1506; --warn3:#92400e;
+    --err:   #ef4444; --err2: #1a0808; --err3: #991b1b;
+    --info:  #38bdf8; --info2:#071622; --info3:#0369a1;
+
+    --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--line);
+    padding: 28px 40px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .brand { font-family: var(--mono); font-size: 10px; color: var(--fg3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+  h1 { font-size: 22px; font-weight: 700; color: var(--fg); margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--fg2); }
+  .header-meta { font-family: var(--mono); font-size: 11px; color: var(--fg2); line-height: 2; text-align: right; }
+  .header-meta span { color: var(--fg); }
+
+  .main { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+
+  section { margin-bottom: 48px; }
+  h2 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--fg2);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .sec-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid;
+    flex-shrink: 0;
+  }
+
+  h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--fg2); margin: 20px 0 10px; }
+
+  /* ── Tables ── */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl thead tr { background: var(--bg3); }
+  .tbl th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--fg3);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .tbl td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .tbl tbody tr:hover { background: rgba(255,255,255,.025); }
+  .tbl tbody tr:last-child td { border-bottom: none; }
+  .tbl-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--bg3);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #7dd3fc;
+  }
+
+  /* ── Source badges ── */
+  .src { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .05em; padding: 2px 7px; border-radius: 4px; border: 1px solid; }
+  .src-zbx { color: var(--zbx); background: var(--zbx2); border-color: var(--zbx3); }
+  .src-xiq { color: var(--xiq); background: var(--xiq2); border-color: var(--xiq3); }
+  .src-pf  { color: var(--pf);  background: var(--pf2);  border-color: var(--pf3);  }
+  .src-none{ color: var(--fg3); background: var(--bg3);  border-color: var(--line);  }
+
+  /* ── Status pills ── */
+  .pill { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 2px 8px; border-radius: 99px; border: 1px solid; }
+  .pill-ok   { color: var(--ok);   background: var(--ok2);   border-color: var(--ok3);   }
+  .pill-warn { color: var(--warn); background: var(--warn2); border-color: var(--warn3); }
+  .pill-err  { color: var(--err);  background: var(--err2);  border-color: var(--err3);  }
+  .pill-new  { color: var(--info); background: var(--info2); border-color: var(--info3); }
+  .pill-omit { color: var(--fg3);  background: var(--bg3);   border-color: var(--line);  }
+
+  /* ── History indicator ── */
+  .hist-yes { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--ok); }
+  .hist-no  { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--fg3); }
+
+  /* ── Callouts ── */
+  .callout { border-radius: 6px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; border-left: 3px solid; }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .callout.ok   { background: var(--ok2);   border-color: var(--ok);   color: #bbf7d0; }
+  .callout.warn { background: var(--warn2); border-color: var(--warn); color: #fde68a; }
+  .callout.err  { background: var(--err2);  border-color: var(--err);  color: #fecaca; }
+  .callout.info { background: var(--info2); border-color: var(--info); color: #bae6fd; }
+  .callout.zbx  { background: var(--zbx2); border-color: var(--zbx);  color: #fed7aa; }
+  .callout.xiq  { background: var(--xiq2); border-color: var(--xiq);  color: #a7f3d0; }
+  .callout.pf   { background: var(--pf2);  border-color: var(--pf);   color: #e9d5ff; }
+
+  /* ── Discovery group ── */
+  .disc-group { background: rgba(56,189,248,.04); border: 1px solid var(--info3); border-radius: 6px; padding: 14px 16px; margin-bottom: 12px; }
+  .disc-group-head { font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--info); margin-bottom: 8px; }
+
+  /* ── Dashboard map grid ── */
+  .dash-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .dash-card { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .dash-card-head { padding: 10px 14px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+  .dash-card-body { padding: 10px 14px; font-size: 12px; color: var(--fg2); }
+  .dash-card-body li { list-style: none; padding: 3px 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .dash-card-body li:last-child { border-bottom: none; }
+  .dc-zbx .dash-card-head { background: var(--zbx2); color: var(--zbx); }
+  .dc-xiq .dash-card-head { background: var(--xiq2); color: var(--xiq); }
+  .dc-pf  .dash-card-head { background: var(--pf2);  color: var(--pf);  }
+  .dc-join .dash-card-head { background: var(--bg3); color: var(--fg2); }
+
+  /* ── Template action list ── */
+  .action-list { display: flex; flex-direction: column; gap: 10px; }
+  .action { border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
+  .action-num { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--fg3); padding-top: 2px; }
+  .action-title { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 3px; }
+  .action-body { font-size: 12px; color: var(--fg2); }
+  .action-status { padding-top: 2px; }
+
+  /* ── Item type chip ── */
+  .itype { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--fg2); background: var(--bg3); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+
+  /* ── sparkline legend ── */
+  .spark-yes { color: var(--ok); font-family: var(--mono); font-size: 11px; }
+  .spark-cur { color: var(--warn); font-family: var(--mono); font-size: 11px; }
+  .spark-no  { color: var(--fg3); font-family: var(--mono); font-size: 11px; }
+
+  .note { font-size: 12px; color: var(--fg2); font-style: italic; }
+
+  pre {
+    background: var(--bg3);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: #cbd5e1;
+    overflow-x: auto;
+    line-height: 1.7;
+  }
+  .cm { color: var(--fg3); }
+  .k  { color: #c084fc; }
+  .s  { color: #86efac; }
+  .n  { color: #7dd3fc; }
+  .num{ color: #fb923c; }
+  .v  { color: #f8d6a3; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">AP Dashboard · Template &amp; Data Architecture</div>
+    <h1>Zabbix Template &amp; Data Source Reference</h1>
+    <div class="subtitle">Definitive source-of-truth map · every dashboard element · Zabbix vs XIQ vs PacketFence</div>
+  </div>
+  <div class="header-meta">
+    <div>Pilot AP <span>BHS-56-Hallway · 172.16.97.59</span></div>
+    <div>Zabbix host id <span>10847</span></div>
+    <div>XIQ device id <span>70849781384129</span></div>
+    <div>Hardware <span>Extreme Networks AP305C · IQ Engine 10.7rx</span></div>
+    <div>Template base <span>Extreme AP via SNMPv3 (local fork)</span></div>
+    <div>SNMP walk AP <span>MLK-A205 · same HW/FW · confirmed equivalent</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ─────────────── §1 Summary ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--bg3);color:var(--fg2);border-color:var(--line)">→</span> Architecture in One Page</h2>
+
+  <div class="callout ok">
+    <strong>M0 validation complete — all data sources confirmed</strong>
+    SNMP scope is final (Section 2). Template items are fully specified (Section 3). XIQ endpoint contracts live-validated against BHS-56-Hallway (M0 Closeout, v5 clean). PacketFence APIs confirmed on TCS PF 15. The table below is the single source of truth for M1 template authoring.
+  </div>
+
+  <div class="callout warn">
+    <strong>The existing "Extreme AP" Zabbix template is missing these items</strong>
+    CPU and memory use enterprise OIDs (.26928) not standard HOST-RESOURCES-MIB (which is absent on this hardware). Noise floor requires a master item + two dependents. Radio channel/TX power require LLD discovery against the .26928 radio table. Interface counters must use ifHCOctets, NOT ifHighSpeed (which returns 0). All of these must be added to the local template fork before M2 begins.
+  </div>
+
+  <p style="color:var(--fg2);font-size:13px;margin-bottom:20px">Three systems contribute data. The columns below list what each system owns:</p>
+
+  <div class="dash-grid">
+    <div class="dash-card dc-zbx">
+      <div class="dash-card-head">Zabbix SNMP — with history</div>
+      <div class="dash-card-body">
+        <ul>
+          <li><span class="src src-zbx">ZBX</span> CPU utilization % (enterprise OID)</li>
+          <li><span class="src src-zbx">ZBX</span> Memory utilization % (enterprise OID)</li>
+          <li><span class="src src-zbx">ZBX</span> Noise floor per radio (derived dependents)</li>
+          <li><span class="src src-zbx">ZBX</span> TX power per radio (LLD)</li>
+          <li><span class="src src-zbx">ZBX</span> Radio channel (LLD)</li>
+          <li><span class="src src-zbx">ZBX</span> Uplink in/out (ifHCOctets.10)</li>
+          <li><span class="src src-zbx">ZBX</span> Radio error counters (ifInErrors.12/13)</li>
+          <li><span class="src src-zbx">ZBX</span> ICMP latency + packet loss</li>
+          <li><span class="src src-zbx">ZBX</span> Interface state eth0 (ifOperStatus.10)</li>
+          <li><span class="src src-zbx">ZBX</span> System uptime (sysUpTimeInstance)</li>
+          <li><span class="src src-zbx">ZBX</span> Serial number, firmware version</li>
+          <li><span class="src src-zbx">ZBX</span> SSID names (enterprise LLD)</li>
+          <li><span class="src src-zbx">ZBX</span> PoE status (local template addition)</li>
+          <li><span class="src src-zbx">ZBX</span> LLDP neighbor (switch uplink ID)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="dash-card dc-xiq">
+      <div class="dash-card-head">ExtremeCloud IQ — live snapshots + time-series</div>
+      <div class="dash-card-body">
+        <ul>
+          <li><span class="src src-xiq">XIQ</span> Channel utilization per radio <em>(sparkline)</em></li>
+          <li><span class="src src-xiq">XIQ</span> Noise floor per radio <em>(snapshot badge)</em></li>
+          <li><span class="src src-xiq">XIQ</span> TX power per radio <em>(snapshot)</em></li>
+          <li><span class="src src-xiq">XIQ</span> TX retry rate per radio</li>
+          <li><span class="src src-xiq">XIQ</span> Total channel utilization</li>
+          <li><span class="src src-xiq">XIQ</span> Per-radio client count <em>(sparkline)</em></li>
+          <li><span class="src src-xiq">XIQ</span> AP-total client count <em>(sparkline)</em></li>
+          <li><span class="src src-xiq">XIQ</span> Connected clients (RSSI, rate, band, SSID)</li>
+          <li><span class="src src-xiq">XIQ</span> Model, MAC, config type, config mismatch flag</li>
+          <li><span class="src src-xiq">XIQ</span> Network policy name, SSID list + security</li>
+          <li><span class="src src-xiq">XIQ</span> SSID enabled/disabled per radio</li>
+          <li><span class="src src-xiq">XIQ</span> Connectivity issues feed</li>
+          <li><span class="src src-xiq">XIQ</span> Device alarm events</li>
+          <li><span class="src src-xiq">XIQ</span> Location / floor plan</li>
+        </ul>
+      </div>
+    </div>
+    <div class="dash-card dc-pf">
+      <div class="dash-card-head">PacketFence — live + historical</div>
+      <div class="dash-card-body">
+        <ul>
+          <li><span class="src src-pf">PF</span> Client enrich: user, role, VLAN, posture, OS</li>
+          <li><span class="src src-pf">PF</span> Client history: client-count sparkline <em>(locationlog)</em></li>
+          <li><span class="src src-pf">PF</span> Auth failure log (SSID, MAC, reason, count)</li>
+          <li><span class="src src-pf">PF</span> Active NAC violations per client</li>
+          <li><span class="src src-pf">PF</span> IP address per client (ip4log)</li>
+          <li><span class="src src-pf">PF</span> Autoregistration status per client</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── §2 SNMP scope ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--zbx2);color:var(--zbx);border-color:var(--zbx3)">2</span> SNMP Scope — Confirmed &amp; Absent</h2>
+
+  <div class="callout zbx">
+    <strong>Enterprise MIB: .1.3.6.1.4.1.26928 (Aerohive/Extreme)</strong>
+    This MIB is present and fully accessible. It is the primary source for CPU, memory, RF config, noise floor, SSID names, serial, and firmware. No MIB file is available — all OIDs used as raw numeric strings in Zabbix items.
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    <div class="callout ok" style="margin-bottom:0">
+      <strong>Present MIBs</strong>
+      MIB-II IF-MIB (.1.3.6.1.2.1.2) — full uplink interface data<br>
+      Standard SNMP sysUpTime / sysDescr<br>
+      Aerohive enterprise .26928 — all branches accessible
+    </div>
+    <div class="callout err" style="margin-bottom:0">
+      <strong>Absent MIBs</strong>
+      HOST-RESOURCES-MIB (.1.3.6.1.2.1.25) — "No Such Object"<br>
+      POWER-ETHERNET-MIB (.1.3.6.1.2.1.105) — AP is PoE consumer<br>
+      ENTITY-SENSOR-MIB — not present (temperature unavailable)<br>
+      WIRELESS-MIB — not exposed on IQ Engine 10.7rx<br>
+      <strong>ifHighSpeed returns 0</strong> — use ifHCOctets rate instead
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Raw OID / Key pattern</th>
+          <th>Value type</th>
+          <th>History</th>
+          <th>Dashboard uses</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>CPU Utilization</strong></td>
+          <td><code>.1.3.6.1.4.1.26928.1.2.4.0</code></td>
+          <td>INTEGER %</td>
+          <td class="hist-yes">YES</td>
+          <td>Health ring · CPU sparkline</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Memory Utilization</strong></td>
+          <td><code>.1.3.6.1.4.1.26928.1.2.10.0</code></td>
+          <td>INTEGER %</td>
+          <td class="hist-yes">YES</td>
+          <td>Health ring · Memory sparkline</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Noise Floor string (master)</strong></td>
+          <td><code>.1.3.6.1.4.1.26928.1.3.1.0</code></td>
+          <td>STRING — both radios combined</td>
+          <td class="hist-yes">YES</td>
+          <td>Master item only — feeds 2 dependents</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr style="background:rgba(34,197,94,.04)">
+          <td><strong>Noise Floor wifi0 (dBm)</strong></td>
+          <td>Dependent of master → JS regex extracts radio 0 integer</td>
+          <td>INTEGER dBm (signed)</td>
+          <td class="hist-yes">YES</td>
+          <td>Radio card badge · noise sparkline</td>
+          <td><span class="pill pill-new">Add to template</span></td>
+        </tr>
+        <tr style="background:rgba(34,197,94,.04)">
+          <td><strong>Noise Floor wifi1 (dBm)</strong></td>
+          <td>Dependent of master → JS regex extracts radio 1 integer</td>
+          <td>INTEGER dBm (signed)</td>
+          <td class="hist-yes">YES</td>
+          <td>Radio card badge · noise sparkline</td>
+          <td><span class="pill pill-new">Add to template</span></td>
+        </tr>
+        <tr>
+          <td><strong>Serial Number</strong></td>
+          <td><code>.1.3.6.1.4.1.26928.1.2.5.0</code></td>
+          <td>STRING</td>
+          <td class="hist-no">No</td>
+          <td>System Info KV</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Firmware Version</strong></td>
+          <td><code>.1.3.6.1.4.1.26928.1.2.12.0</code></td>
+          <td>STRING</td>
+          <td class="hist-no">No</td>
+          <td>System Info KV</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>System Uptime</strong></td>
+          <td><code>sysUpTimeInstance</code> (standard)</td>
+          <td>Ticks</td>
+          <td class="hist-yes">YES</td>
+          <td>System Info KV</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr style="background:rgba(34,197,94,.04)">
+          <td><strong>Uplink In (bps)</strong></td>
+          <td><code>ifHCInOctets.10</code> — <strong>NOT ifHighSpeed</strong></td>
+          <td>Counter64 → bps rate</td>
+          <td class="hist-yes">YES</td>
+          <td>Live Telemetry sparkline · Wired tab</td>
+          <td><span class="pill pill-warn">Fix key — ifHighSpeed returns 0</span></td>
+        </tr>
+        <tr style="background:rgba(34,197,94,.04)">
+          <td><strong>Uplink Out (bps)</strong></td>
+          <td><code>ifHCOutOctets.10</code> — <strong>NOT ifHighSpeed</strong></td>
+          <td>Counter64 → bps rate</td>
+          <td class="hist-yes">YES</td>
+          <td>Live Telemetry sparkline · Wired tab</td>
+          <td><span class="pill pill-warn">Fix key — ifHighSpeed returns 0</span></td>
+        </tr>
+        <tr>
+          <td><strong>Interface State eth0</strong></td>
+          <td><code>ifOperStatus.10</code></td>
+          <td>INTEGER (1=up, 2=down)</td>
+          <td class="hist-yes">YES</td>
+          <td>Wired tab + alerting trigger</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Link Speed eth0</strong></td>
+          <td><code>ifSpeed.10</code></td>
+          <td>Gauge32 — returns 1Gbps correctly</td>
+          <td class="hist-no">No</td>
+          <td>Wired tab label</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Radio Errors wifi0</strong></td>
+          <td><code>ifInErrors.12</code></td>
+          <td>Counter32</td>
+          <td class="hist-yes">YES</td>
+          <td>Radio health signal</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>Radio Errors wifi1</strong></td>
+          <td><code>ifInErrors.13</code></td>
+          <td>Counter32</td>
+          <td class="hist-yes">YES</td>
+          <td>Radio health signal</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>ICMP Latency</strong></td>
+          <td><code>icmppingsec[{HOST.IP}]</code></td>
+          <td>Float seconds</td>
+          <td class="hist-yes">YES</td>
+          <td>Live Telemetry sparkline · alerting</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>ICMP Packet Loss</strong></td>
+          <td><code>icmppingloss[{HOST.IP}]</code></td>
+          <td>Float %</td>
+          <td class="hist-yes">YES</td>
+          <td>Live Telemetry sparkline · alerting</td>
+          <td><span class="pill pill-ok">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td><strong>PoE Status (local addition)</strong></td>
+          <td><code>snmp.interfaces.poe.dstatus[{#SNMPINDEX}]</code></td>
+          <td>INTEGER (class/draw)</td>
+          <td class="hist-yes">YES</td>
+          <td>Wired tab PoE budget bar</td>
+          <td><span class="pill pill-ok">Existing local addition</span></td>
+        </tr>
+        <tr>
+          <td><strong>LLDP Neighbor</strong></td>
+          <td>LLDP-MIB walk → switch hostname + port</td>
+          <td>STRING</td>
+          <td class="hist-no">No</td>
+          <td>Wired tab · switch uplink ID</td>
+          <td><span class="pill pill-ok">Confirmed present</span></td>
+        </tr>
+        <tr style="opacity:.5">
+          <td>Temperature</td>
+          <td>—</td>
+          <td>No source</td>
+          <td class="hist-no">—</td>
+          <td><em>Remove from design</em></td>
+          <td><span class="pill pill-err">Absent — all sources</span></td>
+        </tr>
+        <tr style="opacity:.5">
+          <td>PoE Draw (watts)</td>
+          <td>—</td>
+          <td>No source</td>
+          <td class="hist-no">—</td>
+          <td><em>Remove from design</em></td>
+          <td><span class="pill pill-err">Absent — all sources</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─────────────── §3 LLD items ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--zbx2);color:var(--zbx);border-color:var(--zbx3)">3</span> LLD Discovery Rules — Template Items Requiring Prototypes</h2>
+
+  <div class="callout warn">
+    <strong>Discovery key decision:</strong> These use Zabbix SNMP LLD rules walking the .26928 enterprise table. The discovery rule OID walk must enumerate radio ifIndices (12, 13) and SSID subinterface ifIndices (17–23). SNMP index = ifIndex for all prototypes. Do not use a Zabbix built-in <code>net.if.discovery</code> key — that would bring in all interfaces including tunnels.
+  </div>
+
+  <div class="disc-group">
+    <div class="disc-group-head">Discovery Rule A — Radio Interfaces (wifi0, wifi1)</div>
+    <div class="tbl-wrap" style="margin-bottom:0">
+      <table class="tbl">
+        <thead>
+          <tr><th>Prototype item</th><th>OID</th><th>Macros</th><th>Poll interval</th><th>History</th><th>Item type</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Radio Channel</td>
+            <td><code>.26928.1.1.1.2.1.5.1.1.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>5 min</td>
+            <td class="hist-no">No (config)</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+          <tr>
+            <td>TX Power (dBm)</td>
+            <td><code>.26928.1.1.1.2.1.5.1.2.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>5 min</td>
+            <td class="hist-yes">YES</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+          <tr>
+            <td>Channel Width (encoded)</td>
+            <td><code>.26928.1.1.1.2.1.5.1.3.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>5 min</td>
+            <td class="hist-no">No</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+          <tr>
+            <td>Per-radio TX packets</td>
+            <td><code>.26928.1.1.1.2.1.3.1.1.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>1 min</td>
+            <td class="hist-yes">YES</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+          <tr>
+            <td>Per-radio RX packets</td>
+            <td><code>.26928.1.1.1.2.1.3.1.2.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>1 min</td>
+            <td class="hist-yes">YES</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+          <tr>
+            <td>Per-radio TX retries</td>
+            <td><code>.26928.1.1.1.2.1.3.1.5.{#SNMPINDEX}</code></td>
+            <td><code>{#IFINDEX}</code></td>
+            <td>1 min</td>
+            <td class="hist-yes">YES</td>
+            <td><span class="itype">SNMP agent</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:8px;padding:0 2px">⚠ Do NOT assume radio 0 = 2.4 GHz. The pilot AP runs dual-5G (channels 40 and 149). Label radio cards from the channel number: channels 1–14 = 2.4 GHz, ≥36 = 5 GHz. The Wireless tab must derive band from the channel value, never hardcode it.</p>
+  </div>
+
+  <div class="disc-group">
+    <div class="disc-group-head">Discovery Rule B — SSID Subinterfaces (ifIndex 17–23)</div>
+    <div class="tbl-wrap" style="margin-bottom:0">
+      <table class="tbl">
+        <thead>
+          <tr><th>Prototype item</th><th>OID column</th><th>Notes</th><th>History</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SSID Name</td>
+            <td><code>.26928.1.1.1.2.1.1.1.2.{#SNMPINDEX}</code></td>
+            <td>STRING — the broadcast SSID name</td>
+            <td class="hist-no">No (config)</td>
+          </tr>
+          <tr>
+            <td>SSID Interface Name</td>
+            <td><code>.26928.1.1.1.2.1.1.1.1.{#SNMPINDEX}</code></td>
+            <td>STRING — e.g. "wifi0.1" — maps SSID to radio</td>
+            <td class="hist-no">No (config)</td>
+          </tr>
+          <tr>
+            <td>SSID TX bytes</td>
+            <td><code>.26928.1.1.1.2.1.4.1.N.{#SNMPINDEX}</code></td>
+            <td>Per-SSID traffic counter (col index TBD — validate during M1)</td>
+            <td class="hist-yes">YES</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:8px;padding:0 2px">The SSID-to-radio mapping is derived from the interface name string (e.g. "wifi0.1" → radio wifi0). The SSID Broadcast table on the Wireless tab is primarily driven by XIQ data; the Zabbix SSID items serve as a fallback label source only.</p>
+  </div>
+</section>
+
+<!-- ─────────────── §4 Template action plan ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--warn2);color:var(--warn);border-color:var(--warn3)">4</span> Template Action Plan — What Needs to Change Before M2</h2>
+
+  <div class="action-list">
+
+    <div class="action" style="border-color:var(--err3)">
+      <div class="action-num">1</div>
+      <div>
+        <div class="action-title">Add CPU &amp; Memory scalar items (enterprise OID)</div>
+        <div class="action-body">
+          The standard Extreme AP template likely uses HOST-RESOURCES-MIB for CPU/mem — which is absent on AP305C. Replace or add items using the confirmed enterprise OIDs.<br><br>
+          <strong>CPU:</strong> <code>SNMP agent · OID .1.3.6.1.4.1.26928.1.2.4.0 · key: extremeap.cpu.util · type: float · units: % · poll: 1 min · history: 90d</code><br>
+          <strong>Memory:</strong> <code>SNMP agent · OID .1.3.6.1.4.1.26928.1.2.10.0 · key: extremeap.mem.util · type: float · units: % · poll: 1 min · history: 90d</code><br><br>
+          Add triggers: CPU &gt;80% for 5 min → Average; Memory &gt;85% for 5 min → Average.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-err">Missing</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--err3)">
+      <div class="action-num">2</div>
+      <div>
+        <div class="action-title">Add Noise Floor master item + two dependent items</div>
+        <div class="action-body">
+          The noise floor string OID returns both radios in one combined string. Requires one master SNMP item and two dependent items with JS preprocessing to extract each radio's dBm value as a signed integer.<br><br>
+          <strong>Master:</strong> <code>SNMP agent · OID .1.3.6.1.4.1.26928.1.3.1.0 · key: extremeap.noise.raw · type: text · poll: 1 min · do not store history</code><br>
+          <strong>Dependent wifi0:</strong> <code>key: extremeap.noise.wifi0 · type: float · units: dBm · history: 90d</code><br>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--fg2)">Preprocessing: JavaScript → parse string, return radio-0 integer value</span><br>
+          <strong>Dependent wifi1:</strong> <code>key: extremeap.noise.wifi1 · type: float · units: dBm · history: 90d</code><br><br>
+          Threshold triggers: noise &gt; −75 dBm → Warning; noise &gt; −65 dBm → High.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-err">Missing</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--err3)">
+      <div class="action-num">3</div>
+      <div>
+        <div class="action-title">Fix uplink traffic items — switch from ifHighSpeed to ifHCOctets</div>
+        <div class="action-body">
+          <code>ifHighSpeed</code> returns 0 on all AP305C interfaces. Any existing template items using <code>net.if.in[ifHighSpeed.N]</code> or <code>net.if.out[ifHighSpeed.N]</code> must be replaced.<br><br>
+          <strong>Uplink In:</strong> <code>SNMP agent · OID .1.3.6.1.2.1.31.1.1.1.6.10 (ifHCInOctets.10) · key: net.if.in[ifHCInOctets.10] · type: float · delta: per-second · units: bps · history: 90d · poll: 1 min</code><br>
+          <strong>Uplink Out:</strong> <code>SNMP agent · OID .1.3.6.1.2.1.31.1.1.1.10.10 (ifHCOutOctets.10) · key: net.if.out[ifHCOutOctets.10] · type: float · delta: per-second · units: bps · history: 90d · poll: 1 min</code><br><br>
+          Note: ifIndex 10 = eth0 (physical uplink). Confirm ifIndex mapping holds fleet-wide — it was consistent across both walk APs but verify during M1 onboarding of new hosts.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-err">Fix existing</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--warn3)">
+      <div class="action-num">4</div>
+      <div>
+        <div class="action-title">Add LLD rule for Radio interfaces (.26928 radio table)</div>
+        <div class="action-body">
+          Walk <code>.1.3.6.1.4.1.26928.1.1.1.2.1.5.1.1</code> to discover radio indices (returns ifIndex 12 and 13 for wifi0/wifi1). Create prototypes for: Channel, TX Power, Channel Width, per-radio error counters, per-radio retry counter.<br><br>
+          Discovery filter: accept indices where the channel value is &gt;0 (excludes any radio that's administratively down). Macro: <code>{#RADIOIDX}</code> = ifIndex, <code>{#RADIONAME}</code> = interface name string from col 1.<br><br>
+          Poll channel and TX power at 5 min (config-class, changes rarely). Poll retry/error counters at 1 min (traffic-class, needed for sparklines).
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-warn">Add LLD rule</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--warn3)">
+      <div class="action-num">5</div>
+      <div>
+        <div class="action-title">Add LLD rule for SSID subinterfaces</div>
+        <div class="action-body">
+          Walk <code>.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.2</code> (SSID name column) to discover SSID indices (returns ifIndex 17–23 for BHS-56-Hallway's 7 configured SSIDs). Create prototypes for SSID name string and interface name (which encodes which radio the SSID runs on).<br><br>
+          Primary purpose: populate the SSID name lookup table used in the PHP controller. XIQ drives the Wireless tab SSID table — this Zabbix item is the fallback when XIQ is unavailable.<br><br>
+          Discovery filter: accept all non-empty SSID name strings.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-warn">Add LLD rule</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--info3)">
+      <div class="action-num">6</div>
+      <div>
+        <div class="action-title">Add Radio interface error items for wifi0 (ifIndex 12) and wifi1 (ifIndex 13)</div>
+        <div class="action-body">
+          These are standard IF-MIB counter items for the radio interfaces. They provide a radio health signal independent of XIQ.<br><br>
+          <code>ifInErrors.12</code> → <code>net.if.errors[ifInErrors.12]</code> · Counter · delta per-second · history 90d<br>
+          <code>ifInErrors.13</code> → <code>net.if.errors[ifInErrors.13]</code> · Counter · delta per-second · history 90d<br><br>
+          Add trigger: error rate &gt;1% of packet rate for 5 min → Warning.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-new">Nice to have</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--info3)">
+      <div class="action-num">7</div>
+      <div>
+        <div class="action-title">Confirm and document LLDP item key patterns</div>
+        <div class="action-body">
+          The existing Extreme AP template should already have an LLDP walk. Confirm the item key pattern used for the switch hostname and port ID fields — the dashboard controller must know the exact key strings to query via <code>API::Item()->get()</code>.<br><br>
+          Expected keys: <code>lldp.neighbor.sysname[{#SNMPINDEX}]</code> and <code>lldp.neighbor.portid[{#SNMPINDEX}]</code> — but confirm against the actual template.<br><br>
+          No changes needed if the LLDP walk already exists. Just document the confirmed key names here.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-new">Verify existing</span></div>
+    </div>
+
+    <div class="action" style="border-color:var(--ok3)">
+      <div class="action-num">8</div>
+      <div>
+        <div class="action-title">Remove / disable standard HOST-RESOURCES-MIB items if present</div>
+        <div class="action-body">
+          The base Extreme AP template may include CPU/memory items using <code>vm.memory.size[total]</code>, <code>system.cpu.util</code> against HOST-RESOURCES-MIB paths. These will produce "No Such Object" SNMP errors on AP305C and pollute Zabbix's unsupported item list.<br><br>
+          Action: disable these items in the AP template (not delete — in case a future firmware adds the MIB). Replace with the enterprise OID items from Action 1.
+        </div>
+      </div>
+      <div class="action-status"><span class="pill pill-warn">Disable conflicting</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ─────────────── §5 Dashboard element map ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--bg3);color:var(--fg2);border-color:var(--line)">5</span> Dashboard Element → Data Source Map</h2>
+
+  <p style="color:var(--fg2);font-size:13px;margin-bottom:16px">Every panel and field on every tab, with its authoritative source and sparkline capability.</p>
+
+  <h3>Overview Tab</h3>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Panel / Field</th><th>Source</th><th>Endpoint / Key</th><th>Sparkline</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Health Ring — CPU</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>extremeap.cpu.util</code> · history.get</td>
+          <td class="spark-yes">✓ Full curve (Zabbix history)</td>
+        </tr>
+        <tr>
+          <td>Health Ring — Memory</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>extremeap.mem.util</code> · history.get</td>
+          <td class="spark-yes">✓ Full curve (Zabbix history)</td>
+        </tr>
+        <tr>
+          <td>Live Telemetry — Uplink In/Out</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>net.if.in/out[ifHCOctets.10]</code></td>
+          <td class="spark-yes">✓ Full curve</td>
+        </tr>
+        <tr>
+          <td>Live Telemetry — ICMP Latency</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>icmppingsec[{HOST.IP}]</code></td>
+          <td class="spark-yes">✓ Full curve</td>
+        </tr>
+        <tr>
+          <td>Live Telemetry — Packet Loss</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>icmppingloss[{HOST.IP}]</code></td>
+          <td class="spark-yes">✓ Full curve</td>
+        </tr>
+        <tr>
+          <td>Live Telemetry — Clients Connected (total)</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /d360/client/graph?filter=CONNECTED_CLIENTS</code></td>
+          <td class="spark-yes">✓ Full curve (XIQ d360 time-series)</td>
+        </tr>
+        <tr>
+          <td>Connectivity Issues panel</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /d360/device/issues?deviceId=X</code></td>
+          <td class="spark-no">N/A — list</td>
+        </tr>
+        <tr>
+          <td>System Info — hostname, model, MAC</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /devices/{id}</code></td>
+          <td class="spark-no">N/A — KV</td>
+        </tr>
+        <tr>
+          <td>System Info — serial, firmware</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>extremeap.serial.0</code>, <code>extremeap.firmware.0</code></td>
+          <td class="spark-no">N/A — KV</td>
+        </tr>
+        <tr>
+          <td>System Info — uptime</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>system.uptime</code></td>
+          <td class="spark-no">N/A — formatted string</td>
+        </tr>
+        <tr>
+          <td>System Info — config mismatch badge</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>config_mismatch</code> field in <code>/devices/{id}</code></td>
+          <td class="spark-no">N/A — badge</td>
+        </tr>
+        <tr>
+          <td>Network Info — policy name</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /devices/{id}/network-policy</code> → <code>name</code></td>
+          <td class="spark-no">N/A — KV</td>
+        </tr>
+        <tr>
+          <td>Network Info — LLDP / switch uplink</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>lldp.neighbor.sysname[*]</code>, <code>lldp.neighbor.portid[*]</code></td>
+          <td class="spark-no">N/A — string</td>
+        </tr>
+        <tr>
+          <td>Recent Events feed</td>
+          <td><span class="src src-zbx">ZBX</span> + <span class="src src-pf">PF</span></td>
+          <td>ZBX event.get + PF <code>GET /api/v1/audit_log</code> (merged M5)</td>
+          <td class="spark-no">N/A — timeline</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Wireless Tab</h3>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Panel / Field</th><th>Source</th><th>Endpoint / Key</th><th>Sparkline</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Radio card — channel, band</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /devices/{id}/wifi-interfaces/stats</code> (15-min window)</td>
+          <td class="spark-no">N/A — label</td>
+        </tr>
+        <tr>
+          <td>Radio card — TX power</td>
+          <td><span class="src src-xiq">XIQ</span> + <span class="src src-zbx">ZBX</span></td>
+          <td>XIQ primary; ZBX <code>extremeap.txpower.{#RADIOIDX}</code> fallback</td>
+          <td class="spark-yes">✓ ZBX history available</td>
+        </tr>
+        <tr>
+          <td>Radio card — noise floor</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>noise_floor</code> field in wifi-interfaces/stats</td>
+          <td class="spark-cur">● Current value badge only (no XIQ history)</td>
+        </tr>
+        <tr>
+          <td>Radio card — channel utilization</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /d360/wireless/interfaces-graph?channel=WIFI0|WIFI1</code></td>
+          <td class="spark-yes">✓ Full curve (XIQ d360 time-series)</td>
+        </tr>
+        <tr>
+          <td>Radio card — client count</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>client_count</code> in wifi-interfaces/stats + d360 graph</td>
+          <td class="spark-yes">✓ Full curve (d360 time-series)</td>
+        </tr>
+        <tr>
+          <td>Radio card — retry rate</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>tx_retry_frame</code> in wifi-interfaces/stats</td>
+          <td class="spark-cur">● Current value badge (derived from tx_retry_frame/tx_byte_count)</td>
+        </tr>
+        <tr>
+          <td>SSID Broadcast table</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /devices/{id}/ssid/status</code> JOIN <code>/network-policies/{id}/ssids</code></td>
+          <td class="spark-no">N/A — table</td>
+        </tr>
+        <tr>
+          <td>SSID — client count per SSID</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td>Group <code>/clients/active</code> response by SSID</td>
+          <td class="spark-no">N/A — count</td>
+        </tr>
+        <tr>
+          <td>SSID — NAC role per SSID</td>
+          <td><span class="src src-pf">PF</span></td>
+          <td>Group <code>/api/v1/nodes/search</code> response by SSID name</td>
+          <td class="spark-no">N/A — label</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Wired Tab</h3>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Panel / Field</th><th>Source</th><th>Endpoint / Key</th><th>Sparkline</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>eth0 interface state (up/down)</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>net.if.status[ifOperStatus.10]</code></td>
+          <td class="spark-no">N/A — status badge</td>
+        </tr>
+        <tr>
+          <td>eth0 link speed</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>ifSpeed.10</code> — confirmed 1 Gbps</td>
+          <td class="spark-no">N/A — label</td>
+        </tr>
+        <tr>
+          <td>eth0 in/out traffic</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>net.if.in/out[ifHCOctets.10]</code></td>
+          <td class="spark-yes">✓ Full curve</td>
+        </tr>
+        <tr>
+          <td>Radio interface error counters</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>net.if.errors[ifInErrors.12]</code>, <code>[ifInErrors.13]</code></td>
+          <td class="spark-yes">✓ Full curve</td>
+        </tr>
+        <tr>
+          <td>PoE status / class</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td><code>snmp.interfaces.poe.dstatus[{#SNMPINDEX}]</code></td>
+          <td class="spark-no">N/A — class badge</td>
+        </tr>
+        <tr>
+          <td>LLDP switch uplink</td>
+          <td><span class="src src-zbx">ZBX</span></td>
+          <td>LLDP-MIB item keys (confirm from template)</td>
+          <td class="spark-no">N/A — string</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Clients Tab</h3>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Column / Panel</th><th>Source</th><th>Join logic</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>MAC, hostname, SSID, band, RSSI, data rate, duration</td>
+          <td><span class="src src-xiq">XIQ</span></td>
+          <td><code>GET /clients/active?deviceIds=X&amp;views=FULL</code> — source of truth (G11)</td>
+        </tr>
+        <tr>
+          <td>User, role, VLAN, posture, OS, autoregistration</td>
+          <td><span class="src src-pf">PF</span></td>
+          <td><code>POST /api/v1/nodes/search</code> — batch op:or MAC lookup (G12) · JOIN on MAC</td>
+        </tr>
+        <tr>
+          <td>IP address</td>
+          <td><span class="src src-pf">PF</span></td>
+          <td><code>GET /api/v1/ip4log/history/{mac}</code> — most recent active entry</td>
+        </tr>
+        <tr>
+          <td>Active NAC violations</td>
+          <td><span class="src src-pf">PF</span></td>
+          <td><code>security_events</code> field from nodes/search response</td>
+        </tr>
+        <tr>
+          <td>Auth Failures table</td>
+          <td><span class="src src-pf">PF</span></td>
+          <td><code>GET /api/v1/radius_audit_log</code> filtered by <code>called_station_id</code> = AP BSSID MAC</td>
+        </tr>
+        <tr>
+          <td>Filter pills (All / Issues / Students / Faculty / Guests)</td>
+          <td><span class="src src-none">JS</span></td>
+          <td>Client-side filter on joined result set — no additional API calls</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>G11 — XIQ vs PF client count mismatch</strong>
+    Use XIQ <code>/clients/active</code> as the source of truth for the Connected Clients table. PF <code>locationlog</code> active sentinel (<code>end_time='0000-00-00 00:00:00'</code>) is sticky — it doesn't always clear on clean disassociate. PF-only "active" sessions without a corresponding XIQ entry = stale. Do not surface them as currently connected. Use PF for enrichment only.
+  </div>
+</section>
+
+<!-- ─────────────── §6 Template YAML skeleton ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--zbx2);color:var(--zbx);border-color:var(--zbx3)">6</span> Template Item Key Cheat-Sheet — PHP Controller Reference</h2>
+
+  <p style="color:var(--fg2);font-size:13px;margin-bottom:14px">These are the exact item key patterns the <code>WidgetView.php</code> controller must pass to <code>API::Item()->get()</code>. Use these strings verbatim in the filter array.</p>
+
+  <pre>
+<span class="cm">// Scalar items — single value, no discovery index</span>
+<span class="v">$scalar_keys</span> = [
+    <span class="s">'extremeap.cpu.util'</span>,          <span class="cm">// CPU % · OID .26928.1.2.4.0</span>
+    <span class="s">'extremeap.mem.util'</span>,          <span class="cm">// Memory % · OID .26928.1.2.10.0</span>
+    <span class="s">'extremeap.noise.wifi0'</span>,       <span class="cm">// Noise floor radio 0 (dBm) — dependent item</span>
+    <span class="s">'extremeap.noise.wifi1'</span>,       <span class="cm">// Noise floor radio 1 (dBm) — dependent item</span>
+    <span class="s">'extremeap.serial.0'</span>,          <span class="cm">// Serial number string</span>
+    <span class="s">'extremeap.firmware.0'</span>,        <span class="cm">// Firmware version string</span>
+    <span class="s">'system.uptime'</span>,               <span class="cm">// Uptime ticks</span>
+    <span class="s">'net.if.in[ifHCInOctets.10]'</span>,  <span class="cm">// Uplink in bps (NOT ifHighSpeed)</span>
+    <span class="s">'net.if.out[ifHCOutOctets.10]'</span>,<span class="cm">// Uplink out bps</span>
+    <span class="s">'net.if.status[ifOperStatus.10]'</span>,<span class="cm">// eth0 oper state</span>
+    <span class="s">'icmppingsec[{HOST.IP}]'</span>,      <span class="cm">// ICMP latency (macro resolved by Zabbix)</span>
+    <span class="s">'icmppingloss[{HOST.IP}]'</span>,     <span class="cm">// ICMP packet loss</span>
+];
+
+<span class="cm">// LLD prototype items — match with search['key_'] LIKE pattern</span>
+<span class="v">$lld_patterns</span> = [
+    <span class="s">'extremeap.channel.*'</span>,         <span class="cm">// Radio channel — all discovered radios</span>
+    <span class="s">'extremeap.txpower.*'</span>,          <span class="cm">// TX power dBm — all discovered radios</span>
+    <span class="s">'extremeap.ssid.name.*'</span>,        <span class="cm">// SSID name — all discovered SSIDs</span>
+    <span class="s">'net.if.errors[ifInErrors.*]'</span>,  <span class="cm">// Radio error counters</span>
+    <span class="s">'lldp.neighbor.sysname.*'</span>,      <span class="cm">// LLDP neighbor switch name</span>
+    <span class="s">'lldp.neighbor.portid.*'</span>,       <span class="cm">// LLDP neighbor port ID</span>
+    <span class="s">'snmp.interfaces.poe.dstatus.*'</span>,<span class="cm">// PoE draw/class</span>
+];
+  </pre>
+
+  <div class="callout info">
+    <strong>Macro resolution note</strong>
+    The <code>icmppingsec</code> and <code>icmppingloss</code> keys contain the <code>{HOST.IP}</code> macro as part of the item key as-stored in Zabbix. Use the <code>search['key_']</code> LIKE filter with <code>icmppingsec%</code> and <code>icmppingloss%</code> rather than exact-match, because the macro is resolved to the literal IP in the stored item key (e.g. <code>icmppingsec[172.16.97.59]</code>).
+  </div>
+</section>
+
+<!-- ─────────────── §7 XIQ call budget ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--xiq2);color:var(--xiq);border-color:var(--xiq3)">7</span> XIQ API Call Budget Per Widget Load</h2>
+
+  <div class="callout xiq">
+    <strong>Rate limit: 7,500 calls/hour shared across all TCS VIQ consumers (including SolarWinds NPM)</strong>
+    Monitor RateLimit-Remaining on every response. Surface a widget-level warning if remaining &lt; 500. The call budget below must not grow above ~12 calls per widget load — leaving headroom for other consumers.
+  </div>
+
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>#</th><th>Endpoint</th><th>Cache TTL</th><th>Tab</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>GET /devices/{id}</code></td><td>5 min</td><td>Overview, All</td><td>Model, MAC, config mismatch, network policy ref</td></tr>
+        <tr><td>2</td><td><code>GET /devices/{id}/network-policy</code></td><td>5 min</td><td>Overview, Wireless</td><td>Policy name + policy ID</td></tr>
+        <tr><td>3</td><td><code>GET /network-policies/{policyId}/ssids</code></td><td>5 min</td><td>Wireless</td><td>SSID name, security type, ID list</td></tr>
+        <tr><td>4</td><td><code>GET /devices/{id}/ssid/status</code></td><td>1 min</td><td>Wireless</td><td>Per-SSID enabled/disabled per radio · JOIN on SSID id (G7)</td></tr>
+        <tr><td>5</td><td><code>GET /devices/{id}/wifi-interfaces/stats</code> (15-min window)</td><td>1 min</td><td>Wireless</td><td>Per-radio: channel, util, noise, TX power, client count, retries. <strong>Use 15-min window</strong> — 5 min returns empty (G6)</td></tr>
+        <tr><td>6</td><td><code>GET /d360/wireless/interfaces-graph?channel=WIFI0</code></td><td>1 min</td><td>Overview</td><td>Channel-util + client-count sparkline radio 0. Sort by timestamp (G9)</td></tr>
+        <tr><td>7</td><td><code>GET /d360/wireless/interfaces-graph?channel=WIFI1</code></td><td>1 min</td><td>Overview</td><td>Channel-util + client-count sparkline radio 1</td></tr>
+        <tr><td>8</td><td><code>GET /d360/client/graph?filter=CONNECTED_CLIENTS</code></td><td>1 min</td><td>Overview</td><td>AP-total client-count sparkline</td></tr>
+        <tr><td>9</td><td><code>GET /clients/active?deviceIds=X&amp;views=FULL</code></td><td>30 s</td><td>Clients</td><td>Connected client list. XIQ is source of truth (G11)</td></tr>
+        <tr><td>10</td><td><code>GET /d360/device/issues?deviceId=X</code></td><td>1 min</td><td>Overview</td><td>Connectivity Issues panel</td></tr>
+        <tr><td>11</td><td><code>GET /devices/{id}/alarms</code></td><td>1 min</td><td>Events</td><td>Device alarm events for Recent Events / Events tab</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Calls 5–8 use curl_multi_init for concurrent execution. Total wall time ≈ max(single call latency) not sum. Calls 1–4 are APCu-cached for 5 min — only 1 HTTP call per 5-min window per AP, regardless of dashboard refresh rate.</p>
+</section>
+
+<!-- ─────────────── §8 Open items ─────────────── -->
+<section>
+  <h2><span class="sec-badge" style="background:var(--warn2);color:var(--warn);border-color:var(--warn3)">8</span> Open Items Before M2 Can Begin</h2>
+
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr><th>Item</th><th>Action needed</th><th>Blocks</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Template items from §4 actions 1–8</td>
+          <td>Author / fix in the Extreme AP template fork. Import to Zabbix. Confirm BHS-56-Hallway starts collecting all new items without "Unsupported" errors.</td>
+          <td><strong>M2 (all tabs)</strong></td>
+        </tr>
+        <tr>
+          <td>Item key names finalized</td>
+          <td>The key strings in §6 are proposed. Once the template is authored, confirm the actual stored key names match exactly. Update the PHP controller key lists if needed.</td>
+          <td><strong>M2 PHP controller</strong></td>
+        </tr>
+        <tr>
+          <td>Channel width encoding value 160</td>
+          <td>SNMP walk returned col 3 = 160 for both radios. AP305C is physically limited to 80 MHz (802.11ac Wave 1). Confirm the true channel width (40 or 80 MHz) by reading the XIQ wifi-interfaces/stats response for the same AP. Add a decode table to the template or PHP layer.</td>
+          <td>Wireless tab radio card</td>
+        </tr>
+        <tr>
+          <td>LLDP item key pattern</td>
+          <td>Review the existing template LLDP walk item keys. Document the exact stored key strings. No new SNMP items needed — just confirm the key names.</td>
+          <td>Network Info KV, Wired tab</td>
+        </tr>
+        <tr>
+          <td>PF locationlog cleanup window</td>
+          <td><code>GET /api/v1/config/maintenance/locationlog_cleanup</code> on TCS PF 15. Cap the _timeperiod range selector in the widget to this value. If retention is &lt;7 days, the Clients Connected sparkline will show gaps at longer ranges.</td>
+          <td>Overview sparkline range</td>
+        </tr>
+        <tr>
+          <td>noise floor dependent item preprocessing JS</td>
+          <td>Write and test the JavaScript preprocessing snippet that parses the combined noise floor string and extracts the per-radio signed integer dBm value. Validate against the actual string format from the SNMP walk before authoring the template item.</td>
+          <td>Noise floor items (Action 2)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

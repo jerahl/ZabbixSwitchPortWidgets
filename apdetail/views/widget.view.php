@@ -5,19 +5,24 @@
  *
  * Variables injected by WidgetView::doAction() via CControllerResponseData:
  *
- * @var string                          $name          Widget instance title
- * @var array                           $host          Zabbix host object
+ * @var string                          $name           Widget instance title
+ * @var array                           $host           Zabbix host object
  * @var int                             $host_id
- * @var array                           $health        CPU / mem / temp / PoE
- * @var array                           $xiq_device    XIQ device identity fields
- * @var array                           $xiq_radios    Per-radio wireless metrics
- * @var array                           $xiq_clients   Associated client list
- * @var array                           $xiq_location  Building / floor metadata
- * @var array                           $pf_nodes      PF connected client records
- * @var array                           $pf_radius     PF auth failure log entries
- * @var array{from:string, to:string}   $time_period   Active dashboard time range
+ * @var string                          $ap_ip          AP management IP (from primary SNMP interface)
+ * @var string|null                     $xiq_device_id  XIQ device id from {$XIQ_DEVICE_ID} host macro
+ * @var array                           $health         CPU / Memory only — AP305C has no temp or PoE-PSE
+ * @var array                           $xiq_device     XIQ device identity fields
+ * @var array                           $xiq_radios     Per-radio wireless metrics (point-in-time)
+ * @var array                           $xiq_clients    Connected client list (XIQ active clients, source of truth)
+ * @var array                           $xiq_issues     Connectivity Issues panel data
+ * @var array                           $xiq_alarms     Recent Events secondary feed
+ * @var array                           $xiq_location   Building / floor metadata
+ * @var array                           $pf_nodes       PF connected client records (enrichment)
+ * @var array                           $pf_radius      PF auth failure log entries
+ * @var array                           $pf_locations   PF locationlog rows for client-count sparkline
+ * @var array{from:string, to:string}   $time_period    Active dashboard time range
  * @var array{debug_mode:bool}          $user
- * @var string|null                     $error         Set when no host selected
+ * @var string|null                     $error          Set when no host selected
  *
  * All data passed here is already collected and sanitised in WidgetView.php.
  * No API calls, no business logic in this file — presentation only.
@@ -36,8 +41,8 @@ if (isset($error)) : ?>
 <!-- ── AP Detail root ─────────────────────────────────────────────────────── -->
 <div class="ap-detail"
      data-hostid="<?= (int) $host_id ?>"
-     data-from="<?= htmlspecialchars($time_period['from']) ?>"
-     data-to="<?= htmlspecialchars($time_period['to']) ?>">
+     data-from="<?= htmlspecialchars((string) ($time_period['from'] ?? 'now-1h')) ?>"
+     data-to="<?= htmlspecialchars((string) ($time_period['to'] ?? 'now')) ?>">
 
     <!-- Tab bar ── rendered by class.widget.js after mount -->
     <nav class="ap-tabs" role="tablist" aria-label="AP detail tabs">
@@ -53,9 +58,13 @@ if (isset($error)) : ?>
 
     <!-- Overview tab (M2) -->
     <section class="ap-panel ap-panel--active" data-panel="overview" role="tabpanel">
-        <!-- Health rings: CPU, Memory, Temperature, PoE ──────────────── -->
+        <!-- Health rings: CPU + Memory only ──────────────────────────
+             AP305C has no HOST-RESOURCES-MIB and no POWER-ETHERNET-MIB,
+             so temperature and PoE rings are not available.  CPU and
+             Memory items come from vendor enterprises.26928 OIDs in the
+             Extreme AP template. -->
         <div class="ap-health-rings" id="ap-health-rings">
-            <?php foreach (['cpu' => 'CPU', 'mem' => 'Memory', 'temp' => 'Temp', 'poe' => 'PoE'] as $key => $label) : ?>
+            <?php foreach (['cpu' => 'CPU', 'mem' => 'Memory'] as $key => $label) : ?>
             <div class="ap-ring" data-metric="<?= $key ?>">
                 <svg class="ap-ring__svg" viewBox="0 0 64 64" aria-hidden="true">
                     <circle class="ap-ring__track" cx="32" cy="32" r="26"/>
@@ -73,12 +82,18 @@ if (isset($error)) : ?>
             <?php endforeach; ?>
         </div>
 
-        <!-- Live Telemetry sparkline strip (M2) ──────────────────────── -->
+        <!-- Live Telemetry sparkline strip (M2) ──────────────────────
+             JS populates sparkline canvases from Zabbix history.get
+             (CPU, memory, uplink in/out, latency, packet loss) and from
+             XIQ /d360/wireless/interfaces-graph + /d360/client/graph
+             (channel utilization per radio, AP-total client count).
+
+             Slot count is enumerated from $xiq_radios at render time —
+             do not hardcode 2.4/5 GHz labels (closeout G10: pilot AP
+             runs dual-5G, other deployments may differ).  Channel
+             utilization and noise floor are point-in-time only — no
+             Zabbix history (closeout PF Historical API §0). -->
         <div class="ap-telemetry" id="ap-telemetry">
-            <!-- JS populates sparkline canvases based on Zabbix history.get
-                 and XIQ wifi-data point-in-time values.
-                 Slots: uplink-in, uplink-out, latency, packet-loss,
-                        ch-util-24, ch-util-5, noise-24, noise-5 -->
             <div class="ap-telemetry__loading">Loading telemetry…</div>
         </div>
 
@@ -88,7 +103,7 @@ if (isset($error)) : ?>
             <table class="ap-kv" id="ap-sysinfo">
                 <tbody>
                 <tr><th>Hostname</th>
-                    <td><?= htmlspecialchars($host['name']) ?></td>
+                    <td><?= htmlspecialchars((string) ($host['name'] ?? '')) ?></td>
                     <td><span class="ap-source ap-source--zbx">ZBX</span></td></tr>
                 <?php if (!empty($xiq_device)) : ?>
                 <tr><th>Model</th>
@@ -157,16 +172,4 @@ if (isset($error)) : ?>
 
 </div><!-- /.ap-detail -->
 
-<?php if ($user['debug_mode']) : ?>
-<!-- Debug dump — only visible in Zabbix debug mode -->
-<details class="ap-debug">
-    <summary>Debug — raw data payload</summary>
-    <pre><?= htmlspecialchars(print_r([
-        'host'        => $host,
-        'health'      => $health,
-        'xiq_device'  => $xiq_device,
-        'xiq_radios'  => $xiq_radios,
-        'time_period' => $time_period,
-    ], true)) ?></pre>
-</details>
-<?php endif; ?>
+

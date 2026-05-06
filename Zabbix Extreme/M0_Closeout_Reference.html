@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M0 Closeout — Confirmed API Contracts for M1</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --pf:       #9b59b6;
+  --pf2:      #1f0d2a;
+  --pf3:      #3a1a4a;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --zbx:      #4d7cc7;
+  --zbx2:     #0d1f3a;
+  --zbx3:     #1a3a6a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 48px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.brand { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); margin-bottom: 8px; }
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--fg2); }
+.header-meta span { color: var(--fg); font-weight: 600; }
+
+.runstats { display: flex; gap: 12px; margin-top: 14px; }
+.runstats .pill {
+  font-family: var(--mono); font-size: 11px; padding: 4px 10px;
+  border-radius: 4px; border: 1px solid var(--line);
+}
+.runstats .pill.ok   { background: var(--ok2);   border-color: var(--ok3);   color: #86efac; }
+.runstats .pill.warn { background: var(--warn2); border-color: var(--warn3); color: #fcd34d; }
+.runstats .pill.err  { background: var(--err2);  border-color: var(--err3);  color: #fca5a5; }
+.runstats .pill.info { background: var(--zbx2);  border-color: var(--zbx3);  color: #7dd3fc; }
+
+.main { padding: 32px 48px 64px; max-width: 1100px; }
+section { margin-bottom: 44px; }
+
+h2 {
+  font-size: 15px; font-weight: 600; color: var(--fg);
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+  margin-bottom: 18px; display: flex; align-items: center; gap: 10px;
+}
+.sec-num {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px; letter-spacing: .06em;
+  background: var(--zbx2); color: #7dd3fc; border: 1px solid var(--zbx3);
+}
+.sec-num.pf  { background: var(--pf2);  color: #d8b4fe; border-color: var(--pf3); }
+.sec-num.xiq { background: var(--xiq2); color: #86efac; border-color: var(--xiq3); }
+.sec-num.warn{ background: var(--warn2);color: #fcd34d; border-color: var(--warn3); }
+
+h3 { font-size: 13px; font-weight: 600; color: var(--fg); margin: 22px 0 10px; }
+h4 { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--fg2); text-transform: uppercase; letter-spacing: .08em; margin: 16px 0 8px; }
+p  { color: var(--fg2); font-size: 13.5px; margin-bottom: 10px; }
+p:last-child { margin-bottom: 0; }
+p code, li code { font-family: var(--mono); font-size: 12px; color: #c9d1d9; background: var(--bg3); padding: 1px 5px; border-radius: 3px; }
+
+.callout { padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6; margin: 14px 0; }
+.callout strong { font-weight: 600; }
+.callout.ok   { background: var(--ok2);   border-left: 3px solid var(--ok);   color: #86efac; }
+.callout.warn { background: var(--warn2); border-left: 3px solid var(--warn); color: #fcd34d; }
+.callout.info { background: var(--zbx2);  border-left: 3px solid var(--zbx);  color: #7dd3fc; }
+.callout.pf   { background: var(--pf2);   border-left: 3px solid var(--pf);   color: #d8b4fe; }
+.callout.gotcha { background: var(--err2); border-left: 3px solid var(--err); color: #fca5a5; }
+.callout code { font-family: var(--mono); font-size: 12px; background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; }
+
+.endpoint { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; overflow: hidden; background: var(--bg2); }
+.ep-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.method { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px; letter-spacing: .06em; }
+.method.get  { background: var(--ok2);  color: #4ade80; border: 1px solid var(--ok3); }
+.method.post { background: var(--zbx2); color: #60a5fa; border: 1px solid var(--zbx3); }
+.ep-path { font-family: var(--mono); font-size: 12px; color: var(--fg); flex: 1; }
+.ep-tag { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 3px; letter-spacing: .07em; text-transform: uppercase; }
+.ep-tag.confirmed { background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.ep-tag.gotcha    { background: var(--err2);border: 1px solid var(--err3);color: #fca5a5; }
+.ep-body { padding: 14px 18px; background: var(--bg); }
+.ep-desc { font-size: 13px; color: var(--fg2); margin-bottom: 12px; }
+
+table.field-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 6px 0 10px; }
+.field-table th { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.field-table td { padding: 7px 10px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.field-table tr:last-child td { border-bottom: none; }
+.field-name { font-family: var(--mono); font-size: 11.5px; color: #c084fc; white-space: nowrap; }
+.field-name.xiq { color: #86efac; }
+.field-name.zbx { color: #7dd3fc; }
+.field-type { font-family: var(--mono); font-size: 10px; color: var(--fg3); white-space: nowrap; }
+.field-desc { color: var(--fg2); font-size: 12.5px; }
+
+table.decision { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.decision th { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.decision td { padding: 9px 12px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.decision td:first-child { font-family: var(--mono); font-size: 11.5px; color: var(--fg); white-space: nowrap; }
+.decision td:nth-child(2) { font-family: var(--mono); font-size: 11px; }
+
+pre {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 16px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  overflow-x: auto; color: #c9d1d9; margin: 10px 0;
+}
+pre .cm  { color: var(--fg3); font-style: italic; }
+pre .k   { color: #ff7b72; }
+pre .key { color: #79c0ff; }
+pre .s   { color: #a5d6ff; }
+pre .v   { color: #ffa657; }
+pre .num { color: #d2a8ff; }
+pre .p   { color: #c9d1d9; }
+pre .t   { color: #56d4dd; }
+pre .ok  { color: #86efac; }
+pre .err { color: #fca5a5; }
+
+.badge { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px; white-space: nowrap; display: inline-block; }
+.b-go    { background: var(--ok2);  border: 1px solid var(--ok3);  color: #86efac; }
+.b-pf    { background: var(--pf2);  border: 1px solid var(--pf3);  color: #d8b4fe; }
+.b-xiq   { background: var(--xiq2); border: 1px solid var(--xiq3); color: #86efac; }
+.b-zbx   { background: var(--zbx2); border: 1px solid var(--zbx3); color: #7dd3fc; }
+.b-gotcha{ background: var(--err2); border: 1px solid var(--err3); color: #fca5a5; }
+.b-snap  { background: var(--ok2);  border: 1px solid var(--ok3);  color: #86efac; }
+.b-history{ background: var(--pf2); border: 1px solid var(--pf3);  color: #d8b4fe; }
+
+ul, ol { padding-left: 22px; color: var(--fg2); font-size: 13.5px; }
+ul li, ol li { margin: 4px 0; }
+ul li code, ol li code { font-family: var(--mono); font-size: 11.5px; color: #c9d1d9; background: var(--bg3); padding: 1px 5px; border-radius: 3px; }
+
+.toc { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; margin-bottom: 32px; }
+.toc h4 { margin: 0 0 10px; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--fg3); }
+.toc ol { list-style: decimal; padding-left: 24px; column-count: 2; column-gap: 24px; font-size: 13px; }
+.toc a { color: var(--fg); text-decoration: none; }
+.toc a:hover { color: var(--zbx); text-decoration: underline; }
+
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <div class="brand">M0 · validation · closeout</div>
+    <h1>Confirmed API Contracts &amp; Decisions for M1</h1>
+    <p class="subtitle">Live-validated against BHS-56-Hallway (172.16.97.59) · Tuscaloosa City Schools · Bryant High School</p>
+    <div class="runstats">
+      <span class="pill info">v3+v4+v5</span>
+      <span class="pill ok">v5: 0 failures</span>
+      <span class="pill ok">XIQClient: 11/11 GO</span>
+      <span class="pill ok">PFClient: 5/5 GO</span>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div>AP host id <span>10847</span></div>
+    <div>XIQ device id <span>70849781384129</span></div>
+    <div>XIQ policy id <span>70849780614834 (TCS)</span></div>
+    <div>AP eth0 MAC <span>74:26:AC:2C:A4:90</span></div>
+    <div>AP wireless base <span>BC:F3:10:04:C0:40</span></div>
+    <div>PF version <span>15</span></div>
+    <div>XIQ build <span>25.9.2-10</span></div>
+  </div>
+</header>
+
+<main class="main">
+
+<!-- ─────────────── TOC ─────────────── -->
+<div class="toc">
+  <h4>Sections</h4>
+  <ol>
+    <li><a href="#summary">Closeout summary</a></li>
+    <li><a href="#gotchas">Critical implementation gotchas</a></li>
+    <li><a href="#xiq">XIQ confirmed endpoint contracts</a></li>
+    <li><a href="#pf">PacketFence confirmed endpoint contracts</a></li>
+    <li><a href="#joins">Cross-source join recipes</a></li>
+    <li><a href="#m1methods">M1 method signatures (XIQClient + PFClient)</a></li>
+    <li><a href="#decisions">Final decision table</a></li>
+    <li><a href="#nextsteps">M1 launch order</a></li>
+  </ol>
+</div>
+
+<!-- ────────────────────────────────────────── §1  ───────────────────────────────────────── -->
+<section id="summary">
+  <h2><span class="sec-num">1</span> Closeout summary</h2>
+
+  <p>
+    Five iterations of live validation against a single pilot AP have produced a complete contract surface
+    for M1 implementation. v3 confirmed the basic auth + device shapes. v4 introduced the OpenAPI spec
+    (<code>api-1.json</code>, 510 paths, build 25.9.2-10) which collapsed remaining XIQ unknowns by
+    inspection. v5 closed the last three failures and the two TBD-v5 items.
+  </p>
+
+  <div class="callout ok">
+    <strong>Status: M1 unblocked.</strong> Every method on the XIQClient and PFClient libraries has a
+    confirmed-working endpoint with a known response shape and known field names. M2 (Overview) and M3
+    (Wireless) can begin in parallel once the two client libraries are scaffolded.
+  </div>
+
+  <h3>What was actually validated</h3>
+  <table class="field-table">
+    <thead><tr><th>Validation</th><th>Result</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td class="field-name xiq">XIQ OAuth2</td><td class="field-desc">PASS</td><td class="field-desc">890-char bearer token, valid for all subsequent calls</td></tr>
+      <tr><td class="field-name xiq">XIQ device lookup</td><td class="field-desc">PASS via full-scan</td><td class="field-desc">/devices ignores query params; must paginate. Found page 92 of 137 (v3)</td></tr>
+      <tr><td class="field-name xiq">XIQ radio stats</td><td class="field-desc">PASS</td><td class="field-desc">2 radios returned, both 5 GHz (dual-5G mode), full XiqDeviceWifiInterface schema</td></tr>
+      <tr><td class="field-name xiq">XIQ wireless time-series</td><td class="field-desc">PASS</td><td class="field-desc">7 samples per radio over 1 hour, util/clients per timestamp</td></tr>
+      <tr><td class="field-name xiq">XIQ active clients</td><td class="field-desc">PASS</td><td class="field-desc">deviceIds filter works (camelCase plural), views=FULL emits 50+ fields</td></tr>
+      <tr><td class="field-name xiq">XIQ D360 client grid</td><td class="field-desc">PASS</td><td class="field-desc">54 records in 1h window with rssi/snr/issue counts/frequency/auth/encryption</td></tr>
+      <tr><td class="field-name xiq">XIQ device issues</td><td class="field-desc">PASS</td><td class="field-desc">8 keys: authentication_failures, association_failures, ip_address_issues, packet-loss-per-band, total_clients</td></tr>
+      <tr><td class="field-name xiq">XIQ network policy</td><td class="field-desc">PASS</td><td class="field-desc">name="TCS"; SSID list via separate /network-policies/{id}/ssids call</td></tr>
+      <tr><td class="field-name xiq">XIQ SSID broadcast status</td><td class="field-desc">PASS</td><td class="field-desc">3 SSIDs configured, all on wifi0+wifi1; map keyed by SSID id (not name)</td></tr>
+      <tr><td class="field-name pf">PF active sessions</td><td class="field-desc">PASS</td><td class="field-desc">9 MACs returned via locationlogs/search switch_ip + end_time sentinel</td></tr>
+      <tr><td class="field-name pf">PF nodes batch lookup</td><td class="field-desc">PASS</td><td class="field-desc">All 9 MACs enriched via op:or-of-equals; 5 reg + 4 unreg</td></tr>
+      <tr><td class="field-name pf">PF radius audit (Accepts)</td><td class="field-desc">PASS</td><td class="field-desc">41 records via switch_ip_address filter — but only Accept records</td></tr>
+      <tr><td class="field-name pf">PF time-range operator</td><td class="field-desc">PASS</td><td class="field-desc">3 operators work: greater_than, greater_than_equals, not_equals</td></tr>
+      <tr><td class="field-name pf">PF Reject reason field</td><td class="field-desc">PASS</td><td class="field-desc">Field name is literally <code>reason</code>; verbose RADIUS module output</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ────────────────────────────────────────── §2  ───────────────────────────────────────── -->
+<section id="gotchas">
+  <h2><span class="sec-num warn">2</span> Critical implementation gotchas</h2>
+
+  <p>
+    These are the things that surprised us during validation and will bite during implementation if not
+    handled. Each was found empirically; assume that anyone reading project docs without seeing the
+    validation transcripts will not know about them.
+  </p>
+
+  <!-- Gotcha 1 -->
+  <div class="callout gotcha">
+    <strong>G1 — PF Rejects do not populate <code>switch_ip_address</code>.</strong>
+    On <code>radius_audit_logs</code>, Accept records have <code>switch_ip_address = "172.16.97.59"</code>
+    but Reject records have <code>switch_ip_address = "N/A"</code> (literal string) and the AP IP appears
+    in <code>nas_ip_address</code> instead. <strong>The Auth Failures table query must <code>op:or</code>
+    both fields</strong>; v4's single-field filter returned 41 records with 0 Rejects despite Rejects
+    existing on this AP.
+  </div>
+
+<pre>
+<span class="cm">// CORRECT — captures Accepts AND Rejects for one AP</span>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"or"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip_address"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"nas_ip_address"</span><span class="p">,</span>    <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre>
+
+  <!-- Gotcha 2 -->
+  <div class="callout gotcha">
+    <strong>G2 — PF time-range operator is <code>greater_than_equals</code> (no "or", with trailing s).</strong>
+    The project's earlier <code>M0_PacketFence_Historical_API.html</code> doc shows
+    <code>greater_than_or_equals</code> — this is wrong and PF 15 returns 422 for it. Three operators
+    work in v5 testing: <code>greater_than</code>, <code>greater_than_equals</code>, <code>not_equals</code>.
+    <code>between</code> rejects the value-shape <code>[from, to]</code>; <code>gte</code>/<code>gt</code>/<code>after</code>
+    all 422.
+  </div>
+
+  <!-- Gotcha 3 -->
+  <div class="callout gotcha">
+    <strong>G3 — Each AP has TWO MACs.</strong>
+    <code>74:26:AC:2C:A4:90</code> is the eth0 management MAC (used by Zabbix SNMP, used as PF
+    <code>switch_mac</code> for the AP's wired uplink record). <code>BC:F3:10:04:C0:40</code> is the
+    wireless base MAC reported by XIQ <code>/devices/{id}.mac_address</code>; per-radio BSSIDs derive from
+    it (<code>…C054</code>, <code>…C064</code>) with per-SSID variants (<code>…C056</code>,
+    <code>…C066</code>). Always filter PF logs by <code>switch_ip_address</code> not by MAC prefix —
+    sidesteps the dual-MAC problem and works for both Accept and Reject (with G1 applied).
+  </div>
+
+  <!-- Gotcha 4 -->
+  <div class="callout gotcha">
+    <strong>G4 — XIQ <code>/clients/active</code> <code>deviceIds</code> param is camelCase plural; sending
+    <code>device_id</code> silently returns fleet-wide.</strong> XIQ ignores unknown query params without
+    error. v3+v4 lost an entire iteration to this. The same camelCase-plural pattern applies to
+    <code>locationIds</code>, <code>vlans</code>, <code>userProfileNames</code>, <code>ssids</code>,
+    <code>clientOsNames</code>, <code>userNames</code>, <code>clientConnectionTypes</code>.
+  </div>
+
+  <!-- Gotcha 5 -->
+  <div class="callout gotcha">
+    <strong>G5 — XIQ <code>/clients/active</code> default <code>views</code> emits only 12 fields.</strong>
+    The full <code>XiqClient</code> schema has 50+ fields including rssi, snr, channel, mac_protocol,
+    client_health, radio_health, connection_duration, locations[]. To get them, append
+    <code>views=FULL</code>. Enum: <code>BASIC | FULL | STATUS | DETAIL | LOCATION | METRICS | IOT | THREAD</code>.
+  </div>
+
+  <!-- Gotcha 6 -->
+  <div class="callout gotcha">
+    <strong>G6 — XIQ radio stats require <code>startTime</code> and <code>endTime</code> even though the
+    OpenAPI spec marks them optional.</strong> The snapshot form returns 400 "Required request parameter
+    'startTime' for method parameter type long is not present". A 5-minute window also returns
+    <code>[]</code> (empty) — XIQ buckets at ~10-minute intervals so a window shorter than the bucket
+    misses data. <strong>Use a 15-minute window for "current" radio values.</strong>
+  </div>
+
+  <!-- Gotcha 7 -->
+  <div class="callout gotcha">
+    <strong>G7 — XIQ <code>/devices/{id}/ssid/status</code> returns a map keyed by SSID id, not name.</strong>
+    To populate the SSID Broadcast table you must JOIN this map against
+    <code>/network-policies/{policyId}/ssids</code> (which gives id → name + security). Both calls are
+    cheap and ~5-min cacheable.
+  </div>
+
+  <!-- Gotcha 8 -->
+  <div class="callout gotcha">
+    <strong>G8 — XIQ <code>/d360/wireless/interfaces-graph</code> <code>channel=</code> param is a radio
+    selector despite its description.</strong> Description says "channel utilization type" but the enum
+    is <code>['WIFI0','WIFI1','WIFI2']</code>. The actual metric selector is the optional
+    <code>source=</code> with enum <code>['CHANNEL_UTILIZATION','CONNECTED_CLIENTS']</code> (default = both).
+    Issue one call per radio.
+  </div>
+
+  <!-- Gotcha 9 -->
+  <div class="callout gotcha">
+    <strong>G9 — XIQ time-series timestamps are NOT chronologically ordered in the response.</strong>
+    Sort by <code>timestamp</code> ascending in PHP before passing to the JS sparkline renderer.
+    See <code>xiq_wireless_graph_wifi0.json</code>: 7 samples in random temporal order.
+  </div>
+
+  <!-- Gotcha 10 -->
+  <div class="callout gotcha">
+    <strong>G10 — The pilot AP runs dual-5G mode, not 2.4 GHz + 5 GHz.</strong> Both wifi0 (channel 40)
+    and wifi1 (channel 149) report <code>frequency: "5G"</code> with the same
+    <code>radio_profile_name: "TCS-NEW-5GHZ"</code>. The Wireless tab must enumerate radio cards from
+    the API response — never hardcode card count or band labels. Other AP_305C deployments may run
+    2.4 + 5 + 5 (tri-radio).
+  </div>
+
+  <!-- Gotcha 11 -->
+  <div class="callout gotcha">
+    <strong>G11 — XIQ "currently connected" ≠ PF "active session".</strong> XIQ
+    <code>/clients/active</code> returned 3 clients on this AP; PF locationlog returned 9 active
+    (<code>end_time='0000-…'</code>). PF's active sentinel is sticky and doesn't always clear when a
+    client drops without a clean disassociate. <strong>Use XIQ as the source of truth for the
+    Connected Clients table</strong>; PF supplies enrichment per MAC. Don't show PF-only "active"
+    sessions as currently connected — they're stale.
+  </div>
+
+  <!-- Gotcha 12 -->
+  <div class="callout gotcha">
+    <strong>G12 — PF <code>nodes/search</code> doesn't accept <code>op:in</code>.</strong> Use
+    <code>op:or</code> wrapping N <code>op:equals</code> clauses for batch MAC lookup. The per-batch
+    cost is one HTTP call regardless of MAC count, and PF accepts hundreds of OR-clauses per query
+    based on observed limits (request size, not clause count, is the constraint).
+  </div>
+
+  <!-- Gotcha 13 -->
+  <div class="callout warn">
+    <strong>G13 — The PF <code>reason</code> field on Reject records is verbose RADIUS module output.</strong>
+    Sample: <code>"chrooted_mschap: Program returned code (3) and output 'NT Error: code: 3221225578,
+    message: …value provided as the current password is not correct…'"</code>. The Auth Failures table
+    should display a short summary (extract eap_type + a regex-pulled summary like "wrong password" /
+    "user not found" / "EAP timeout") with the full reason on hover/expand.
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────── §3  ───────────────────────────────────────── -->
+<section id="xiq">
+  <h2><span class="sec-num xiq">3</span> XIQ confirmed endpoint contracts</h2>
+
+  <p>
+    All endpoints below confirmed live on <code>api.extremecloudiq.com</code> against this AP.
+    The OpenAPI spec lists <code>cloudapi.extremecloudiq.com/xiq/v1</code> as canonical but
+    <code>api.extremecloudiq.com</code> is the working public alias.
+  </p>
+
+  <h3>Authentication</h3>
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/login</span>
+      <span class="ep-tag confirmed">v3+v4+v5</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">
+        Bearer-token auth. Body <code>{username, password}</code>. Returns 200 with
+        <code>access_token</code> (~890 chars, JWT). Token is valid for the duration of the credentialed
+        user's session — refresh on 401.
+      </div>
+    </div>
+  </div>
+
+  <h3>Device identity &amp; metadata</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}</span>
+      <span class="ep-tag confirmed">snapshot</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-device facts. <strong>No filter on <code>/devices</code> works</strong> —
+      lookup must use the device id directly, stored in a Zabbix host tag at onboarding.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">id</td><td class="field-type">int64</td><td class="field-desc">Cache key for all subsequent calls</td></tr>
+          <tr><td class="field-name xiq">hostname</td><td class="field-type">string</td><td class="field-desc">Cross-check against Zabbix host visible name</td></tr>
+          <tr><td class="field-name xiq">mac_address</td><td class="field-type">string (no delimiters)</td><td class="field-desc">Wireless base MAC. Format with <code>XIQClient::macInsertColons()</code>. ≠ eth0 MAC (G3)</td></tr>
+          <tr><td class="field-name xiq">serial_number</td><td class="field-type">string</td><td class="field-desc">System Info row · Overview tab</td></tr>
+          <tr><td class="field-name xiq">product_type</td><td class="field-type">string</td><td class="field-desc">"AP_305C" — System Info row</td></tr>
+          <tr><td class="field-name xiq">software_version</td><td class="field-type">string</td><td class="field-desc">"10.7.5.2" — System Info row + version-drift badge</td></tr>
+          <tr><td class="field-name xiq">device_admin_state</td><td class="field-type">string</td><td class="field-desc">"MANAGED" expected; alert if not</td></tr>
+          <tr><td class="field-name xiq">connected</td><td class="field-type">boolean</td><td class="field-desc">Overview header connection LED</td></tr>
+          <tr><td class="field-name xiq">config_mismatch</td><td class="field-type">boolean</td><td class="field-desc">Overview header badge if true</td></tr>
+          <tr><td class="field-name xiq">system_up_time</td><td class="field-type">int64 (epoch ms)</td><td class="field-desc">Boot timestamp. Use Zabbix <code>system.uptime</code> as primary uptime source</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/network-policy</span>
+      <span class="ep-tag confirmed">snapshot</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-device assigned policy. Returns <code>{id, name, type, predefined,
+      create_time, update_time, org_id, description}</code>. <strong>Does NOT include the SSID list</strong>
+      — fetch separately via <code>/network-policies/{id}/ssids</code>. Sample: <code>name="TCS"</code>.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/network-policies/{id}/ssids</span>
+      <span class="ep-tag confirmed">snapshot</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">SSIDs attached to a network policy. Pagination via <code>page</code> +
+      <code>limit</code> (max 100). For TCS policy: 3 SSIDs.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Sample</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">id</td><td class="field-type">70849780830896</td><td class="field-desc">Join key for ssid/status (G7)</td></tr>
+          <tr><td class="field-name xiq">name</td><td class="field-type">"TCS-Wireless"</td><td class="field-desc">Display name in SSID Broadcast table</td></tr>
+          <tr><td class="field-name xiq">broadcast_name</td><td class="field-type">"TCS-Wireless"</td><td class="field-desc">SSID as seen by clients (may differ from internal name)</td></tr>
+          <tr><td class="field-name xiq">access_security.security_type</td><td class="field-type">"802DOT1X" / "PPSK" / "OPEN"</td><td class="field-desc">Security column · map to display labels</td></tr>
+          <tr><td class="field-name xiq">access_security.encryption_method</td><td class="field-type">"CCMP"</td><td class="field-desc">Encryption column</td></tr>
+          <tr><td class="field-name xiq">default_user_profile</td><td class="field-type">int</td><td class="field-desc">Default user-profile/role id (resolved separately if needed)</td></tr>
+        </tbody>
+      </table>
+      <p>TCS policy has three SSIDs: <code>TCS-Wireless</code> (802.1X), <code>TCS-VIPGuest</code> (PPSK), <code>TCS-Guest-Registration</code> (OPEN, captive portal).</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/ssid/status</span>
+      <span class="ep-tag confirmed">snapshot</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Returns <code>{ "&lt;ssid_id&gt;": {wifi0_enabled, wifi1_enabled} }</code>.
+      Map keyed by SSID id (G7) — JOIN with <code>/network-policies/{id}/ssids</code> for names. Sample
+      result on this AP: all 3 SSIDs broadcasting on both wifi0 and wifi1.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/location</span>
+      <span class="ep-tag confirmed">snapshot</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Building / floor / coordinates. Format: <code>BUILDING|FLOOR</code> in
+      <code>location_unique_name</code>. The richer location hierarchy is also embedded in
+      <code>/clients/active.locations[]</code> for each client (TCS / Tuscaloosa / Bryant High School / 1st Floor).</div>
+    </div>
+  </div>
+
+  <h3>Radio &amp; wireless</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/interfaces/wifi?startTime=&amp;endTime=</span>
+      <span class="ep-tag confirmed">snapshot</span>
+      <span class="ep-tag gotcha">G6</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-radio aggregated stats. Returns array of XiqDeviceWifiInterface.
+      <strong>Use a 15-minute window for "current" values</strong> — 5-min returns empty (G6).</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Sample (wifi0 / wifi1)</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">interface_name</td><td class="field-type">"wifi0" / "wifi1"</td><td class="field-desc">Radio card label</td></tr>
+          <tr><td class="field-name xiq">frequency</td><td class="field-type">"5G"</td><td class="field-desc">Band label (this AP: dual-5G; G10)</td></tr>
+          <tr><td class="field-name xiq">channel</td><td class="field-type">40 / 149</td><td class="field-desc">Channel number</td></tr>
+          <tr><td class="field-name xiq">channel_width</td><td class="field-type">20 (MHz)</td><td class="field-desc">Channel width MHz</td></tr>
+          <tr><td class="field-name xiq">channel_util</td><td class="field-type">8</td><td class="field-desc">% utilization · radio card metric</td></tr>
+          <tr><td class="field-name xiq">noise_floor</td><td class="field-type">-95 / -96 (dBm)</td><td class="field-desc">Noise floor · radio card metric</td></tr>
+          <tr><td class="field-name xiq">power</td><td class="field-type">13 (dBm)</td><td class="field-desc">TX power</td></tr>
+          <tr><td class="field-name xiq">client_count</td><td class="field-type">2 / 3</td><td class="field-desc">Currently associated</td></tr>
+          <tr><td class="field-name xiq">ssid_count</td><td class="field-type">3</td><td class="field-desc">SSIDs on this radio</td></tr>
+          <tr><td class="field-name xiq">mac_address</td><td class="field-type">"BCF31004C054"</td><td class="field-desc">Radio BSSID (per-radio, base from G3)</td></tr>
+          <tr><td class="field-name xiq">radio_profile_name</td><td class="field-type">"TCS-NEW-5GHZ"</td><td class="field-desc">Profile name · radio card subtext</td></tr>
+          <tr><td class="field-name xiq">tx_retry_frame</td><td class="field-type">23</td><td class="field-desc">Retry-rate calc</td></tr>
+          <tr><td class="field-name xiq">tx_byte_count / rx_byte_count</td><td class="field-type">66M / 11M</td><td class="field-desc">For tx/rx airtime ratio</td></tr>
+          <tr><td class="field-name xiq">total_utilization</td><td class="field-type">8</td><td class="field-desc">Tx + Rx + interference + retries</td></tr>
+          <tr><td class="field-name xiq">scan_avg_interference</td><td class="field-type">1</td><td class="field-desc">Background scan average</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/d360/wireless/interfaces-graph?deviceId=&amp;startTime=&amp;endTime=&amp;channel=WIFI0|WIFI1|WIFI2</span>
+      <span class="ep-tag confirmed">history</span>
+      <span class="ep-tag gotcha">G8 G9</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-radio time-series for Live Telemetry sparklines. <strong>One call per
+      radio</strong> — <code>channel</code> is a radio selector despite its description (G8). Optional
+      <code>source=CHANNEL_UTILIZATION|CONNECTED_CLIENTS</code> (default = both, samples include both keys).
+      Sort response by <code>timestamp</code> ascending before plotting (G9).</div>
+<pre>
+<span class="cm">// Sample wifi0 response (1-hour window, ~10-min buckets, UNSORTED in transit)</span>
+<span class="p">[</span>
+  <span class="p">{</span> <span class="key">"timestamp"</span><span class="p">:</span> <span class="num">1778078451440</span><span class="p">,</span> <span class="key">"channel_utilization"</span><span class="p">:</span> <span class="num">5</span><span class="p">,</span>  <span class="key">"connected_clients"</span><span class="p">:</span> <span class="num">0</span> <span class="p">},</span>
+  <span class="p">{</span> <span class="key">"timestamp"</span><span class="p">:</span> <span class="num">1778079651440</span><span class="p">,</span> <span class="key">"channel_utilization"</span><span class="p">:</span> <span class="num">0</span><span class="p">,</span>  <span class="key">"connected_clients"</span><span class="p">:</span> <span class="num">0</span> <span class="p">},</span>
+  <span class="p">{</span> <span class="key">"timestamp"</span><span class="p">:</span> <span class="num">1778077251440</span><span class="p">,</span> <span class="key">"channel_utilization"</span><span class="p">:</span> <span class="num">15</span><span class="p">,</span> <span class="key">"connected_clients"</span><span class="p">:</span> <span class="num">0</span> <span class="p">},</span>
+  <span class="p">…</span>
+<span class="p">]</span>
+</pre>
+    </div>
+  </div>
+
+  <h3>Clients</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/clients/active?deviceIds=&amp;views=FULL&amp;page=&amp;limit=</span>
+      <span class="ep-tag confirmed">snapshot</span>
+      <span class="ep-tag gotcha">G4 G5</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc"><strong>Source of truth for Connected Clients table</strong> (G11). Filter:
+      <code>deviceIds</code> (camelCase plural — G4). Use <code>views=FULL</code> for rich field set
+      (G5). Pilot result: 3 currently-connected clients.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Sample</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">mac_address</td><td class="field-type">"524AD8C66DA8"</td><td class="field-desc">Join key (no delimiters; format with macInsertColons)</td></tr>
+          <tr><td class="field-name xiq">hostname</td><td class="field-type">"MacBookAir"</td><td class="field-desc">Connected Clients column</td></tr>
+          <tr><td class="field-name xiq">ip_address</td><td class="field-type">"10.128.25.3"</td><td class="field-desc">Connected Clients column</td></tr>
+          <tr><td class="field-name xiq">username / user_profile_name</td><td class="field-type">"jdonaldson" / "Students"</td><td class="field-desc">User column · role pill</td></tr>
+          <tr><td class="field-name xiq">ssid / vlan</td><td class="field-type">"TCS-Wireless" / 228</td><td class="field-desc">Network columns</td></tr>
+          <tr><td class="field-name xiq">channel / mac_protocol</td><td class="field-type">149 / "802.11ax-5g"</td><td class="field-desc">Radio columns</td></tr>
+          <tr><td class="field-name xiq">rssi / snr</td><td class="field-type">-44 / 52</td><td class="field-desc">Signal strength bars (project plan thresholds)</td></tr>
+          <tr><td class="field-name xiq">client_health / radio_health</td><td class="field-type">100 / 100</td><td class="field-desc">Health badge per client</td></tr>
+          <tr><td class="field-name xiq">connection_duration</td><td class="field-type">31482410 (ms)</td><td class="field-desc">Duration column · format as h/m</td></tr>
+          <tr><td class="field-name xiq">bssid / interface_name</td><td class="field-type">"BCF31004C066" / "wifi1.3"</td><td class="field-desc">Which radio + which SSID-on-radio</td></tr>
+          <tr><td class="field-name xiq">os_type / os_version</td><td class="field-type">"Windows 10/11"</td><td class="field-desc">OS column</td></tr>
+          <tr><td class="field-name xiq">locations[]</td><td class="field-type">array</td><td class="field-desc">TCS / Tuscaloosa / BHS / 1st Floor — sidecar location block</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/d360/client/grid?deviceId=&amp;startTime=&amp;endTime=&amp;page=&amp;limit=</span>
+      <span class="ep-tag confirmed">history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Window-aggregated client view (54 records in 1h vs 3 currently-connected).
+      <strong>Drives the Issues filter pill on the Clients tab</strong> via the <code>*_issues</code>
+      counters. Field naming uses <code>client_</code> prefix (e.g., <code>client_mac</code>,
+      <code>client_hostname</code>) — different from <code>/clients/active</code>.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">association_issues</td><td class="field-desc">int64 — non-zero → Issues pill</td></tr>
+          <tr><td class="field-name xiq">authentication_issues</td><td class="field-desc">int64 — non-zero → Issues pill</td></tr>
+          <tr><td class="field-name xiq">ip_address_issues</td><td class="field-desc">int64 — non-zero → Issues pill</td></tr>
+          <tr><td class="field-name xiq">roaming_issues</td><td class="field-desc">int64 — non-zero → Issues pill</td></tr>
+          <tr><td class="field-name xiq">channel_utilization_score</td><td class="field-desc">% · per-client RF context</td></tr>
+          <tr><td class="field-name xiq">frequency</td><td class="field-desc">"5 GHz" string · vs <code>radio_type</code> int code on /clients/active</td></tr>
+          <tr><td class="field-name xiq">authentication / encryption</td><td class="field-desc">String labels ("WPA2/WPA3-802.1X" / "AES")</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/d360/client/graph?deviceId=&amp;startTime=&amp;endTime=&amp;filter=CONNECTED_CLIENTS</span>
+      <span class="ep-tag confirmed">history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Connected-client count time-series for Live Telemetry. Body can be empty
+      <code>{}</code>. Returns array of <code>{timestamp, unique_clients, connected_clients,
+      poor_health_clients}</code>. Sort by timestamp ascending before plotting.</div>
+    </div>
+  </div>
+
+  <h3>Issues &amp; events</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/d360/device/issues?deviceId=&amp;startTime=&amp;endTime=</span>
+      <span class="ep-tag confirmed">history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Single object summarizing AP issue counts in the window. <strong>Drives the
+      Connectivity Issues panel on the Overview tab</strong>.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Sample</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name xiq">authentication_failures</td><td class="field-type">2</td><td class="field-desc">Auth issue count</td></tr>
+          <tr><td class="field-name xiq">association_failures</td><td class="field-type">0</td><td class="field-desc">Association issue count</td></tr>
+          <tr><td class="field-name xiq">ip_address_issues</td><td class="field-type">0</td><td class="field-desc">DHCP issue count</td></tr>
+          <tr><td class="field-name xiq">excessive_packet_loss_ap_count_2dot4g</td><td class="field-type">0</td><td class="field-desc">Per-band packet-loss flags</td></tr>
+          <tr><td class="field-name xiq">excessive_packet_loss_ap_count_5g</td><td class="field-type">0</td><td class="field-desc">Per-band packet-loss flags</td></tr>
+          <tr><td class="field-name xiq">excessive_packet_loss_ap_count_6g</td><td class="field-type">0</td><td class="field-desc">Per-band packet-loss flags</td></tr>
+          <tr><td class="field-name xiq">total_clients</td><td class="field-type">54</td><td class="field-desc">Window-total clients (matches d360/client/grid count)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method get">GET</span>
+      <span class="ep-path">/devices/{id}/alarms?startTime=&amp;endTime=&amp;page=&amp;limit=</span>
+      <span class="ep-tag confirmed">history</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Per-device alarm feed. Pagination supported. Optional secondary source for the
+      Recent Events panel — primary is the Zabbix event.get + PF audit_log merge.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────── §4  ───────────────────────────────────────── -->
+<section id="pf">
+  <h2><span class="sec-num pf">4</span> PacketFence confirmed endpoint contracts</h2>
+
+  <p>
+    PF base: <code>https://&lt;PF_HOST&gt;:9999/api/v1/</code>. Self-signed cert — disable verification
+    in PHP curl (<code>CURLOPT_SSL_VERIFYPEER=0</code>). Auth via <code>POST /login</code>; bearer token
+    valid 1 hour by default.
+  </p>
+
+  <h3>Query grammar (canonical)</h3>
+
+  <div class="callout pf">
+    <strong>Operators confirmed working in PF 15:</strong>
+    <code>and</code>, <code>or</code>, <code>equals</code>, <code>not_equals</code>,
+    <code>greater_than</code>, <code>greater_than_equals</code>, <code>starts_with</code> (some endpoints).<br>
+    <strong>Operators that 422:</strong> <code>in</code>, <code>gte</code>, <code>gt</code>,
+    <code>greater_than_or_equal</code>, <code>greater_than_or_equals</code>, <code>greater_or_equal</code>,
+    <code>after</code>, <code>between</code>.
+  </div>
+
+  <h3>Active session enumeration</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/locationlogs/search</span>
+      <span class="ep-tag confirmed">current</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Query body filters by <code>switch_ip = AP_MGT_IP</code> and
+      <code>end_time = '0000-00-00 00:00:00'</code> sentinel. Returns currently-associated MACs per the
+      AP's RADIUS history. <strong>Use as the input MAC list for the nodes/search batch lookup, not as
+      the connected-clients list directly</strong> (G11). Pilot result: 9 MACs.</div>
+<pre>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"end_time"</span><span class="p">,</span>  <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"0000-00-00 00:00:00"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="key">"limit"</span><span class="p">:</span> <span class="num">200</span><span class="p">,</span>
+  <span class="key">"fields"</span><span class="p">: [</span><span class="s">"mac"</span><span class="p">,</span> <span class="s">"ssid"</span><span class="p">,</span> <span class="s">"role"</span><span class="p">,</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="s">"end_time"</span><span class="p">]</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <h3>Historical session bucketing (sparkline)</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/locationlogs/search</span>
+      <span class="ep-tag confirmed">history</span>
+      <span class="ep-tag gotcha">G2</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Same path as above with a different query — historical window for client-count
+      sparkline bucketing. Use <code>greater_than_equals</code> (G2). Pilot 24h window: 22 sessions.
+      Bucket in PHP: 6 × 4-hour buckets, count distinct MACs whose
+      <code>[start_time, end_time]</code> overlaps each bucket (sentinel <code>'0000-…'</code>
+      means "open, treat end_time = now").</div>
+<pre>
+<span class="cm">// 24-hour window, op note: greater_than_equals  (no "or", trailing s)</span>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip"</span><span class="p">,</span>  <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span>             <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"greater_than_equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"2026-05-05 14:47:30"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="key">"limit"</span><span class="p">:</span> <span class="num">1000</span><span class="p">,</span>
+  <span class="key">"fields"</span><span class="p">: [</span><span class="s">"mac"</span><span class="p">,</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="s">"end_time"</span><span class="p">,</span> <span class="s">"role"</span><span class="p">,</span> <span class="s">"ssid"</span><span class="p">]</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <h3>Node enrichment (PF database join)</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/nodes/search</span>
+      <span class="ep-tag confirmed">snapshot</span>
+      <span class="ep-tag gotcha">G12</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc">Batch MAC lookup via <code>op:or</code> wrapping N <code>op:equals</code>
+      clauses (G12). Pilot run: 9 input MACs → 9 enriched nodes. Returns a 31-field record per node
+      including computername, pid, status, regdate, autoreg, device_class, device_manufacturer,
+      last_seen, dhcp_fingerprint, dhcp_vendor.</div>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Used in</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name pf">mac</td><td class="field-desc">Join key (lowercase, colon-form)</td></tr>
+          <tr><td class="field-name pf">computername</td><td class="field-desc">Connected Clients hostname (richer than XIQ hostname when set)</td></tr>
+          <tr><td class="field-name pf">pid</td><td class="field-desc">User SAM (e.g., <code>TCS\\ehines</code>) or device hostname for machine-auth</td></tr>
+          <tr><td class="field-name pf">status</td><td class="field-desc"><code>reg</code> | <code>unreg</code> | <code>pending</code> — drives status badge</td></tr>
+          <tr><td class="field-name pf">device_class / device_manufacturer / device_score</td><td class="field-desc">Fingerbank classification — sidecar, hover detail</td></tr>
+          <tr><td class="field-name pf">autoreg</td><td class="field-desc"><code>"yes"</code> for MAC-auth-bypass devices · pill</td></tr>
+          <tr><td class="field-name pf">last_seen / regdate / unregdate</td><td class="field-desc">Timestamps for sidecar audit trail</td></tr>
+        </tbody>
+      </table>
+<pre>
+<span class="cm">// Batch lookup of N MACs in one round-trip</span>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"or"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"mac"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"3c:21:9c:11:98:65"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"mac"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"58:6d:67:a7:89:1a"</span> <span class="p">},</span>
+      <span class="p">…</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="key">"limit"</span><span class="p">:</span> <span class="num">200</span><span class="p">,</span>
+  <span class="key">"fields"</span><span class="p">: [</span><span class="s">"mac"</span><span class="p">,</span> <span class="s">"computername"</span><span class="p">,</span> <span class="s">"pid"</span><span class="p">,</span> <span class="s">"status"</span><span class="p">,</span>
+              <span class="s">"device_class"</span><span class="p">,</span> <span class="s">"device_manufacturer"</span><span class="p">,</span> <span class="s">"autoreg"</span><span class="p">,</span> <span class="s">"last_seen"</span><span class="p">]</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <h3>RADIUS audit (Auth Failures table)</h3>
+
+  <div class="endpoint">
+    <div class="ep-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/radius_audit_logs/search</span>
+      <span class="ep-tag confirmed">history</span>
+      <span class="ep-tag gotcha">G1 G13</span>
+    </div>
+    <div class="ep-body">
+      <div class="ep-desc"><strong>Use <code>op:or</code> on both <code>switch_ip_address</code> AND
+      <code>nas_ip_address</code></strong> to capture Accepts and Rejects (G1). Returns 37-field
+      records. Default sample (10 records) is unsorted; pass <code>limit</code> high enough to capture
+      relevant window or paginate via <code>nextCursor</code>.</div>
+<pre>
+<span class="cm">// Captures BOTH Accepts (switch_ip_address populated) and Rejects (nas_ip_address populated)</span>
+<span class="p">{</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"or"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip_address"</span><span class="p">,</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"nas_ip_address"</span><span class="p">,</span>    <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">},</span>
+  <span class="key">"limit"</span><span class="p">:</span> <span class="num">100</span>
+<span class="p">}</span>
+</pre>
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="field-name pf">created_at</td><td class="field-desc">ISO 8601 with TZ offset (e.g. <code>2026-05-05T09:52:08-05:00</code>)</td></tr>
+          <tr><td class="field-name pf">auth_status</td><td class="field-desc"><code>"Accept"</code> | <code>"Reject"</code> — drives row color</td></tr>
+          <tr><td class="field-name pf">eap_type</td><td class="field-desc"><code>"MSCHAPv2"</code> · <code>"PEAP"</code> · etc.</td></tr>
+          <tr><td class="field-name pf">user_name / stripped_user_name</td><td class="field-desc">User column · stripped excludes domain prefix</td></tr>
+          <tr><td class="field-name pf">mac / calling_station_id</td><td class="field-desc">Same value, different field name</td></tr>
+          <tr><td class="field-name pf">called_station_id</td><td class="field-desc"><code>BSSID:SSID</code> format (e.g., <code>bc:f3:10:04:c0:66:TCS-Wireless</code>)</td></tr>
+          <tr><td class="field-name pf">ssid</td><td class="field-desc">Convenience extraction of called_station_id suffix</td></tr>
+          <tr><td class="field-name pf">switch_ip_address</td><td class="field-desc">AP IP for Accepts; <code>"N/A"</code> for Rejects (G1)</td></tr>
+          <tr><td class="field-name pf">nas_ip_address</td><td class="field-desc">AP IP for Rejects; populated for Accepts too but unverified</td></tr>
+          <tr><td class="field-name pf">reason</td><td class="field-desc">Verbose RADIUS module output for Rejects (G13). Summarize for display</td></tr>
+          <tr><td class="field-name pf">radius_reply / radius_request</td><td class="field-desc">Full RADIUS attributes — debug-detail only</td></tr>
+          <tr><td class="field-name pf">pf_domain</td><td class="field-desc">Domain identifier (e.g., <code>"TCSAD"</code>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────────────────────────────── §5  ───────────────────────────────────────── -->
+<section id="joins">
+  <h2><span class="sec-num">5</span> Cross-source join recipes</h2>
+
+  <h3>Connected Clients table (Clients tab)</h3>
+  <p>XIQ is the source of truth (G11); PF enriches per MAC.</p>
+<pre>
+<span class="cm">// 1. Get currently-connected clients on this AP</span>
+<span class="t">$xiq</span> = <span class="t">$xiqClient</span>->getActiveClients(<span class="t">$apXiqId</span>);
+<span class="cm">// $xiq[i] = { mac_address, hostname, ip_address, ssid, vlan, rssi, snr, … }</span>
+
+<span class="cm">// 2. Collect MACs in PF colon-form (XIQ returns no-delimiter)</span>
+<span class="t">$macs</span> = <span class="k">array_map</span>(<span class="k">fn</span>(<span class="t">$c</span>) =&gt; PFClient::macColonize(<span class="t">$c</span>[<span class="s">'mac_address'</span>]), <span class="t">$xiq</span>);
+
+<span class="cm">// 3. Batch enrich via PF nodes/search op:or-of-equals</span>
+<span class="t">$pf</span> = <span class="t">$pfClient</span>->nodesByMac(<span class="t">$macs</span>);   <span class="cm">// keyed by lowercase MAC</span>
+
+<span class="cm">// 4. Merge per-row (XIQ left, PF right)</span>
+<span class="t">$rows</span> = [];
+<span class="k">foreach</span> (<span class="t">$xiq</span> <span class="k">as</span> <span class="t">$c</span>) {
+    <span class="t">$mac</span> = PFClient::macColonize(<span class="t">$c</span>[<span class="s">'mac_address'</span>]);
+    <span class="t">$node</span> = <span class="t">$pf</span>[<span class="t">$mac</span>] ?? [];
+    <span class="t">$rows</span>[] = [
+        <span class="s">'mac'</span>      =&gt; <span class="t">$mac</span>,
+        <span class="s">'hostname'</span> =&gt; <span class="t">$node</span>[<span class="s">'computername'</span>] ?: <span class="t">$c</span>[<span class="s">'hostname'</span>] ?: <span class="s">'(unknown)'</span>,
+        <span class="s">'user'</span>     =&gt; <span class="t">$node</span>[<span class="s">'pid'</span>] ?? <span class="t">$c</span>[<span class="s">'username'</span>] ?? <span class="s">''</span>,
+        <span class="s">'role'</span>     =&gt; <span class="t">$c</span>[<span class="s">'user_profile_name'</span>],
+        <span class="s">'rssi'</span>     =&gt; <span class="t">$c</span>[<span class="s">'rssi'</span>],
+        <span class="s">'snr'</span>      =&gt; <span class="t">$c</span>[<span class="s">'snr'</span>],
+        <span class="s">'ssid'</span>     =&gt; <span class="t">$c</span>[<span class="s">'ssid'</span>],
+        <span class="s">'vlan'</span>     =&gt; <span class="t">$c</span>[<span class="s">'vlan'</span>],
+        <span class="s">'health'</span>   =&gt; <span class="t">$c</span>[<span class="s">'client_health'</span>],
+        <span class="s">'pfStatus'</span> =&gt; <span class="t">$node</span>[<span class="s">'status'</span>] ?? <span class="s">'(no PF record)'</span>,
+        <span class="s">'autoreg'</span>  =&gt; <span class="t">$node</span>[<span class="s">'autoreg'</span>] ?? <span class="s">'no'</span>,
+    ];
+}
+</pre>
+
+  <h3>SSID Broadcast table (Wireless tab)</h3>
+  <p>Two-call join keyed on SSID id.</p>
+<pre>
+<span class="t">$status</span>   = <span class="t">$xiqClient</span>->getSsidStatus(<span class="t">$apXiqId</span>);
+<span class="cm">// $status = { "70849780830896": {wifi0_enabled:true, wifi1_enabled:true}, … }</span>
+
+<span class="t">$policy</span>   = <span class="t">$xiqClient</span>->getDeviceNetworkPolicy(<span class="t">$apXiqId</span>);
+<span class="t">$ssidList</span> = <span class="t">$xiqClient</span>->getPolicySsids(<span class="t">$policy</span>[<span class="s">'id'</span>]);
+<span class="cm">// $ssidList[i] = { id, name, broadcast_name, access_security: { security_type, … } }</span>
+
+<span class="t">$rows</span> = [];
+<span class="k">foreach</span> (<span class="t">$ssidList</span> <span class="k">as</span> <span class="t">$ssid</span>) {
+    <span class="t">$st</span> = <span class="t">$status</span>[(<span class="k">string</span>)<span class="t">$ssid</span>[<span class="s">'id'</span>]] ?? [];
+    <span class="t">$rows</span>[] = [
+        <span class="s">'name'</span>      =&gt; <span class="t">$ssid</span>[<span class="s">'broadcast_name'</span>],
+        <span class="s">'security'</span>  =&gt; <span class="t">$ssid</span>[<span class="s">'access_security'</span>][<span class="s">'security_type'</span>],
+        <span class="s">'wifi0'</span>     =&gt; <span class="t">$st</span>[<span class="s">'wifi0_enabled'</span>] ?? <span class="k">false</span>,
+        <span class="s">'wifi1'</span>     =&gt; <span class="t">$st</span>[<span class="s">'wifi1_enabled'</span>] ?? <span class="k">false</span>,
+        <span class="s">'wifi2'</span>     =&gt; <span class="t">$st</span>[<span class="s">'wifi2_enabled'</span>] ?? <span class="k">false</span>,
+    ];
+}
+</pre>
+
+  <h3>Live Telemetry strip (Overview tab)</h3>
+  <p>Three concurrent calls (curl_multi_init) drive the four sparklines:</p>
+  <ul>
+    <li><code>XIQ /d360/wireless/interfaces-graph?channel=WIFI0</code> → channel-util(0) + connected-clients(0) sparklines</li>
+    <li><code>XIQ /d360/wireless/interfaces-graph?channel=WIFI1</code> → channel-util(1) + connected-clients(1) sparklines</li>
+    <li><code>XIQ /d360/client/graph?filter=CONNECTED_CLIENTS</code> → AP-total client-count sparkline</li>
+    <li><code>ZBX history.get</code> → CPU, memory, temperature, uplink in/out (existing portdetail/ pattern)</li>
+  </ul>
+  <p>Sort each XIQ array by <code>timestamp</code> ascending before passing to JS (G9).</p>
+</section>
+
+<!-- ────────────────────────────────────────── §6  ───────────────────────────────────────── -->
+<section id="m1methods">
+  <h2><span class="sec-num">6</span> M1 method signatures</h2>
+
+  <p>Both libraries live in <code>modules/apdetail/includes/</code>. PHP 8.1+, namespace
+  <code>Modules\APDetail\</code>. No external composer deps; <code>curl</code> directly.</p>
+
+  <h3>XIQClient.php</h3>
+<pre>
+<span class="k">namespace</span> Modules\APDetail;
+
+<span class="k">final class</span> <span class="t">XIQClient</span> {
+    <span class="k">public function</span> __construct(
+        <span class="k">private string</span> <span class="t">$user</span>,
+        <span class="k">private string</span> <span class="t">$pass</span>,
+        <span class="k">private string</span> <span class="t">$baseUrl</span> = <span class="s">'https://api.extremecloudiq.com'</span>,
+    ) {}
+
+    <span class="cm">// Auth — APCu-cached, refresh on 401</span>
+    <span class="k">private function</span> <span class="t">token</span>(): <span class="k">string</span>;
+    <span class="k">private function</span> <span class="t">httpGet</span>(<span class="k">string</span> <span class="t">$path</span>, <span class="k">array</span> <span class="t">$params</span> = []): <span class="k">array</span>;
+    <span class="k">private function</span> <span class="t">httpPost</span>(<span class="k">string</span> <span class="t">$path</span>, <span class="k">array</span> <span class="t">$body</span> = [], <span class="k">array</span> <span class="t">$params</span> = []): <span class="k">array</span>;
+
+    <span class="cm">// Device identity</span>
+    <span class="k">public function</span> <span class="t">getDevice</span>(<span class="k">int</span> <span class="t">$id</span>): <span class="k">array</span>;
+    <span class="k">public function</span> <span class="t">getLocation</span>(<span class="k">int</span> <span class="t">$id</span>): <span class="k">array</span>;
+
+    <span class="cm">// Network policy + SSIDs (Wireless tab + System Info row)</span>
+    <span class="k">public function</span> <span class="t">getDeviceNetworkPolicy</span>(<span class="k">int</span> <span class="t">$id</span>): <span class="k">array</span>;
+    <span class="k">public function</span> <span class="t">getPolicySsids</span>(<span class="k">int</span> <span class="t">$policyId</span>): <span class="k">array</span>;     <span class="cm">// 5-min cache</span>
+    <span class="k">public function</span> <span class="t">getSsidStatus</span>(<span class="k">int</span> <span class="t">$id</span>): <span class="k">array</span>;             <span class="cm">// id-keyed map (G7)</span>
+
+    <span class="cm">// Radio (Wireless tab cards) — ALWAYS pass time window (G6)</span>
+    <span class="k">public function</span> <span class="t">getRadioStats</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">int</span> <span class="t">$winMinutes</span> = <span class="num">15</span>): <span class="k">array</span>;
+    <span class="k">public function</span> <span class="t">getWirelessGraph</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">string</span> <span class="t">$radio</span>, <span class="k">int</span> <span class="t">$from</span>, <span class="k">int</span> <span class="t">$to</span>): <span class="k">array</span>;
+    <span class="cm">// $radio ∈ {'WIFI0','WIFI1','WIFI2'} (G8); response sorted by timestamp (G9)</span>
+
+    <span class="cm">// Clients (Clients tab + Live Telemetry)</span>
+    <span class="k">public function</span> <span class="t">getActiveClients</span>(<span class="k">int</span> <span class="t">$id</span>): <span class="k">array</span>;             <span class="cm">// views=FULL (G5), camelCase (G4)</span>
+    <span class="k">public function</span> <span class="t">getClientGrid</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">int</span> <span class="t">$from</span>, <span class="k">int</span> <span class="t">$to</span>): <span class="k">array</span>;
+    <span class="k">public function</span> <span class="t">getClientGraph</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">int</span> <span class="t">$from</span>, <span class="k">int</span> <span class="t">$to</span>): <span class="k">array</span>;
+
+    <span class="cm">// Issues + alarms (Overview + Alerts tabs)</span>
+    <span class="k">public function</span> <span class="t">getDeviceIssues</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">int</span> <span class="t">$from</span>, <span class="k">int</span> <span class="t">$to</span>): <span class="k">array</span>;
+    <span class="k">public function</span> <span class="t">getDeviceAlarms</span>(<span class="k">int</span> <span class="t">$id</span>, <span class="k">int</span> <span class="t">$from</span>, <span class="k">int</span> <span class="t">$to</span>, <span class="k">int</span> <span class="t">$limit</span> = <span class="num">100</span>): <span class="k">array</span>;
+
+    <span class="cm">// MAC formatting helper</span>
+    <span class="k">public static function</span> <span class="t">macInsertColons</span>(<span class="k">string</span> <span class="t">$raw</span>): <span class="k">string</span>;     <span class="cm">// "BCF31004C040" → "BC:F3:10:04:C0:40"</span>
+}
+</pre>
+
+  <h3>PFClient.php</h3>
+<pre>
+<span class="k">namespace</span> Modules\APDetail;
+
+<span class="k">final class</span> <span class="t">PFClient</span> {
+    <span class="k">public function</span> __construct(
+        <span class="k">private string</span> <span class="t">$host</span>,
+        <span class="k">private string</span> <span class="t">$user</span>,
+        <span class="k">private string</span> <span class="t">$pass</span>,
+        <span class="k">private int</span>    <span class="t">$port</span> = <span class="num">9999</span>,
+    ) {}
+
+    <span class="cm">// Auth — bearer token cached for ~50min</span>
+    <span class="k">private function</span> <span class="t">token</span>(): <span class="k">string</span>;
+    <span class="k">private function</span> <span class="t">httpPost</span>(<span class="k">string</span> <span class="t">$path</span>, <span class="k">array</span> <span class="t">$body</span> = []): <span class="k">array</span>;
+    <span class="k">private function</span> <span class="t">httpGet</span>(<span class="k">string</span> <span class="t">$path</span>, <span class="k">array</span> <span class="t">$params</span> = []): <span class="k">array</span>;
+
+    <span class="cm">// Active sessions on this AP — input MAC list for nodesByMac()</span>
+    <span class="k">public function</span> <span class="t">activeSessionMacs</span>(<span class="k">string</span> <span class="t">$switchIp</span>): <span class="k">array</span>;
+
+    <span class="cm">// Historical session bucketing — sparkline data (G2 op name)</span>
+    <span class="k">public function</span> <span class="t">locationLogWindow</span>(<span class="k">string</span> <span class="t">$switchIp</span>, <span class="k">string</span> <span class="t">$fromTs</span>): <span class="k">array</span>;
+
+    <span class="cm">// Batch MAC enrichment — op:or-of-equals (G12), keyed by mac in result</span>
+    <span class="k">public function</span> <span class="t">nodesByMac</span>(<span class="k">array</span> <span class="t">$macs</span>): <span class="k">array</span>;
+
+    <span class="cm">// RADIUS audit for one AP — op:or on switch_ip_address ∪ nas_ip_address (G1)</span>
+    <span class="k">public function</span> <span class="t">radiusAuditByAp</span>(<span class="k">string</span> <span class="t">$apIp</span>, <span class="k">int</span> <span class="t">$limit</span> = <span class="num">100</span>): <span class="k">array</span>;
+
+    <span class="cm">// Helpers</span>
+    <span class="k">public static function</span> <span class="t">macColonize</span>(<span class="k">string</span> <span class="t">$raw</span>): <span class="k">string</span>;       <span class="cm">// to lowercase colon-form</span>
+    <span class="k">public static function</span> <span class="t">summarizeRejectReason</span>(<span class="k">string</span> <span class="t">$raw</span>): <span class="k">string</span>; <span class="cm">// short label for table cell (G13)</span>
+}
+</pre>
+</section>
+
+<!-- ────────────────────────────────────────── §7  ───────────────────────────────────────── -->
+<section id="decisions">
+  <h2><span class="sec-num">7</span> Final decision table</h2>
+
+  <p>This table supersedes the rolling decision rows from v3, v4, and v5 reports.</p>
+
+  <table class="decision">
+    <thead><tr><th>Subject</th><th>Status</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>XIQ device lookup</td><td><span class="badge b-go">GO</span></td><td>Store device id in Zabbix host tag at onboarding. Full-scan fallback only on first onboard.</td></tr>
+      <tr><td>XIQ MAC format</td><td><span class="badge b-go">GO</span></td><td>No delimiters. <code>XIQClient::macInsertColons()</code> for any cross-system display/join.</td></tr>
+      <tr><td>XIQ uptime source</td><td><span class="badge b-go">GO</span></td><td>Zabbix <code>system.uptime</code> primary. XIQ <code>system_up_time</code> available but redundant.</td></tr>
+      <tr><td>XIQ network policy display</td><td><span class="badge b-go">GO</span></td><td>System Info row shows <code>name</code> from <code>/devices/{id}/network-policy</code>.</td></tr>
+      <tr><td>XIQ config_mismatch UI</td><td><span class="badge b-go">GO</span></td><td>Overview header badge when true.</td></tr>
+      <tr><td>XIQ radio stats window</td><td><span class="badge b-go">GO</span></td><td>15-minute window for "current" (5 min returns empty — G6). Query each radio iteratively.</td></tr>
+      <tr><td>XIQ wireless time-series</td><td><span class="badge b-go">GO</span></td><td>One call per radio (<code>channel=WIFI0/WIFI1</code> — G8). Sort by timestamp (G9).</td></tr>
+      <tr><td>XIQ client list (current)</td><td><span class="badge b-go">GO</span></td><td><code>/clients/active?deviceIds=X&amp;views=FULL</code> (G4 G5). Source of truth (G11).</td></tr>
+      <tr><td>XIQ client list (window)</td><td><span class="badge b-go">GO</span></td><td><code>/d360/client/grid</code> for issue-count filter pill on Clients tab.</td></tr>
+      <tr><td>XIQ client time-series</td><td><span class="badge b-go">GO</span></td><td><code>/d360/client/graph</code> for AP-total client-count sparkline.</td></tr>
+      <tr><td>XIQ connectivity issues</td><td><span class="badge b-go">GO</span></td><td><code>/d360/device/issues</code> drives Connectivity Issues panel.</td></tr>
+      <tr><td>XIQ device alarms</td><td><span class="badge b-go">GO</span></td><td><code>/devices/{id}/alarms</code> as secondary source for Recent Events.</td></tr>
+      <tr><td>XIQ SSID broadcast table</td><td><span class="badge b-go">GO</span></td><td>Two calls: <code>/devices/{id}/ssid/status</code> + <code>/network-policies/{policyId}/ssids</code>; JOIN on SSID id (G7).</td></tr>
+      <tr><td>PF locationlog active filter</td><td><span class="badge b-go">GO</span></td><td><code>switch_ip = AP_IP</code> + <code>end_time = '0000-…'</code> sentinel.</td></tr>
+      <tr><td>PF nodes batch lookup</td><td><span class="badge b-go">GO</span></td><td><code>op:or</code> of N <code>op:equals</code> clauses (G12). NOT <code>op:in</code>.</td></tr>
+      <tr><td>PF time-range operator</td><td><span class="badge b-go">GO</span></td><td><code>greater_than_equals</code> (no "or", trailing s — G2). Project doc was wrong.</td></tr>
+      <tr><td>PF radius audit filter</td><td><span class="badge b-go">GO</span></td><td><code>op:or</code> on <code>switch_ip_address</code> + <code>nas_ip_address</code> (G1).</td></tr>
+      <tr><td>PF reject reason field</td><td><span class="badge b-go">GO</span></td><td>Field name is <code>reason</code>. Summarize for Auth Failures table (G13).</td></tr>
+      <tr><td>PF SSID landscape</td><td><span class="badge b-go">GO</span></td><td>BHS sees only <code>TCS-Wireless</code> in PF (other 2 SSIDs are non-RADIUS — open and PPSK).</td></tr>
+      <tr><td>PF role pills</td><td><span class="badge b-go">GO</span></td><td>Map to <code>role</code> field. BHS values: Students, Machine. No Faculty/Guests on this AP.</td></tr>
+      <tr><td>PF locationlog retention</td><td><span class="badge b-zbx">DEFER</span></td><td>API unavailable — assume 30d default. Cap dashboard time-period selector at 24h until SSH-confirmed.</td></tr>
+      <tr><td>Connected Clients source-of-truth</td><td><span class="badge b-go">GO</span></td><td>XIQ <code>/clients/active</code>. PF enriches per MAC. Don't show PF-only "active" sessions (G11).</td></tr>
+      <tr><td>Wireless tab card count</td><td><span class="badge b-go">GO</span></td><td>Enumerate from API response. Pilot AP runs dual-5G (G10). Other deployments may differ.</td></tr>
+      <tr><td>Auth Failures filter scope</td><td><span class="badge b-go">GO</span></td><td>Both Accept and Reject visible (use auth_status badge). Default sort by created_at desc.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ────────────────────────────────────────── §8  ───────────────────────────────────────── -->
+<section id="nextsteps">
+  <h2><span class="sec-num">8</span> M1 launch order</h2>
+
+  <p>Recommended sequencing for the M1 milestone. Items at the same indent level can be parallelized.</p>
+
+  <ol>
+    <li><strong>Scaffold the widget skeleton</strong>
+      <ul>
+        <li><code>modules/apdetail/manifest.json</code> — <code>"in"</code>: <code>_hostid</code>, <code>_timeperiod</code>; <code>"out"</code>: <code>_itemids</code> (for native Graph widget)</li>
+        <li><code>actions/WidgetView.php</code> stub — extends <code>CControllerDashboardWidgetView</code></li>
+        <li><code>views/widget.view.php</code> + <code>views/widget.edit.php</code> stubs</li>
+        <li><code>includes/WidgetForm.php</code> stub with credential fields (PF user/pass, XIQ user/pass)</li>
+        <li><code>assets/js/class.widget.js</code> stub extending <code>CWidget</code></li>
+      </ul>
+    </li>
+    <li><strong>XIQClient.php</strong> — implement all 11 methods plus token cache + retry</li>
+    <li><strong>PFClient.php</strong> — extract from existing <code>packetfence/</code> widget; add the new methods</li>
+    <li><strong>Smoke test</strong> — bare WidgetView calls each client method, dumps JSON to <code>$debug</code> output, no rendering yet</li>
+    <li>Once smoke test green, M2 (Overview) and M3 (Wireless) can begin in parallel</li>
+  </ol>
+
+  <div class="callout info">
+    <strong>Reminder for M1 implementation:</strong> after the first <code>manifest.json</code> commit and
+    install, every existing dashboard with this widget instance must be deleted and re-added — Zabbix
+    assigns the broadcast <code>reference</code> only at widget creation time. Test on a scratch
+    dashboard first.
+  </div>
+</section>
+
+</main>
+</body>
+</html>
