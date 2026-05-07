@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M0 — PacketFence API Live Findings</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg:       #0d1117;
+  --bg2:      #161b22;
+  --bg3:      #1c2128;
+  --line:     #30363d;
+  --line2:    #21262d;
+  --fg:       #e6edf3;
+  --fg2:      #8b949e;
+  --fg3:      #484f58;
+  --acc:      #d92929;
+  --pf:       #9b59b6;
+  --pf2:      #1f0d2a;
+  --pf3:      #3a1a4a;
+  --xiq:      #1a9e6e;
+  --xiq2:     #0d2a1a;
+  --xiq3:     #1a4a2a;
+  --zbx:      #4d7cc7;
+  --zbx2:     #0d1f3a;
+  --zbx3:     #1a3a6a;
+  --warn:     #f59e0b;
+  --warn2:    #2a1f0d;
+  --warn3:    #4a3a1a;
+  --ok:       #22c55e;
+  --ok2:      #0d2a1a;
+  --ok3:      #1a4a2a;
+  --err:      #ef4444;
+  --err2:     #2a0d0d;
+  --err3:     #4a1a1a;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 48px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.brand { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); margin-bottom: 8px; }
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.subtitle { font-size: 13px; color: var(--fg2); margin-top: 5px; }
+.header-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--fg2); }
+.header-meta span { color: var(--fg); font-weight: 600; }
+
+.main { padding: 32px 48px 64px; max-width: 980px; }
+section { margin-bottom: 40px; }
+
+h2 {
+  font-size: 15px; font-weight: 600; color: var(--fg);
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+  margin-bottom: 18px; display: flex; align-items: center; gap: 10px;
+}
+.sec-num {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px; letter-spacing: .06em;
+}
+h3 { font-size: 13px; font-weight: 600; color: var(--fg); margin: 20px 0 10px; }
+p { color: var(--fg2); font-size: 13.5px; margin-bottom: 10px; }
+p:last-child { margin-bottom: 0; }
+
+.callout { padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6; margin: 14px 0; }
+.callout strong { font-weight: 600; }
+.callout.ok   { background: var(--ok2);   border-left: 3px solid var(--ok);   color: #86efac; }
+.callout.warn { background: var(--warn2); border-left: 3px solid var(--warn); color: #fcd34d; }
+.callout.info { background: var(--zbx2);  border-left: 3px solid var(--zbx);  color: #7dd3fc; }
+.callout.pf   { background: var(--pf2);   border-left: 3px solid var(--pf);   color: #d8b4fe; }
+.callout.err  { background: var(--err2);  border-left: 3px solid var(--err);  color: #fca5a5; }
+
+.endpoint { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+.ep-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.method { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px; letter-spacing: .06em; }
+.method.get  { background: var(--ok2);  color: #4ade80; border: 1px solid var(--ok3); }
+.method.post { background: var(--zbx2); color: #60a5fa; border: 1px solid var(--zbx3); }
+.ep-path { font-family: var(--mono); font-size: 12px; color: var(--fg); flex: 1; }
+.ep-tag { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 3px; letter-spacing: .07em; text-transform: uppercase; }
+.ep-tag.verified { background: var(--ok2); border: 1px solid var(--ok3); color: #86efac; }
+.ep-tag.method   { background: var(--pf2); border: 1px solid var(--pf3); color: #d8b4fe; }
+.ep-body { padding: 14px 16px; }
+.ep-desc { font-size: 13px; color: var(--fg2); margin-bottom: 14px; }
+
+code { font-family: var(--mono); font-size: 11px; background: var(--bg3); color: var(--fg); padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); }
+
+pre {
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px; font-family: var(--mono); font-size: 11.5px; color: #e6edf3;
+  overflow-x: auto; margin: 10px 0; line-height: 1.7;
+}
+pre .cm  { color: var(--fg3); }
+pre .k   { color: #ff7b72; }
+pre .s   { color: #a5d6ff; }
+pre .v   { color: #c084fc; }
+pre .num { color: #f2cc60; }
+pre .p   { color: var(--fg3); }
+pre .key { color: #7dd3fc; }
+
+/* ── Findings table ── */
+.findings-table { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.findings-table th { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); text-align: left; padding: 10px 14px; background: var(--bg2); border-bottom: 1px solid var(--line); }
+.findings-table td { padding: 12px 14px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+.findings-table tr:last-child td { border-bottom: none; }
+.findings-table tr:hover td { background: rgba(255,255,255,.015); }
+.findings-table .topic { font-family: var(--mono); font-size: 11.5px; color: #c084fc; white-space: nowrap; }
+.findings-table .verdict { white-space: nowrap; }
+.findings-table .original { color: var(--fg2); font-size: 12.5px; }
+.findings-table .correction { color: var(--fg); font-size: 12.5px; }
+.findings-table code { font-size: 10.5px; }
+
+.badge { font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 3px; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; display: inline-block; }
+.b-wrong   { background: var(--err2); border: 1px solid var(--err3); color: #fca5a5; }
+.b-right   { background: var(--ok2);  border: 1px solid var(--ok3);  color: #86efac; }
+.b-pending { background: var(--warn2);border: 1px solid var(--warn3);color: #fcd34d; }
+
+/* ── Method spec card ── */
+.method-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; overflow: hidden; }
+.method-card-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.method-card-head .sig { font-family: var(--mono); font-size: 12.5px; color: var(--fg); flex: 1; }
+.method-card-head .sig .ret { color: var(--fg3); }
+.method-card-head .sig .name { color: #c084fc; }
+.method-card-body { padding: 14px 16px; }
+.method-card-body p { margin-bottom: 8px; }
+.method-card-body p:last-of-type { margin-bottom: 0; }
+
+/* ── Idiosyncrasy card ── */
+.idio { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; background: var(--bg2); }
+.idio-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.idio-num { font-family: var(--mono); font-size: 9px; font-weight: 600; color: var(--pf); padding: 2px 7px; background: var(--pf2); border: 1px solid var(--pf3); border-radius: 3px; letter-spacing: .1em; }
+.idio-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.idio-body { color: var(--fg2); font-size: 12.5px; line-height: 1.65; }
+.idio-body code { font-size: 10.5px; }
+
+/* ── Footnote ── */
+.fn { color: var(--fg3); font-size: 11.5px; font-family: var(--mono); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">AP Dashboard · M0 Live Findings</div>
+    <h1>PacketFence API — Live-Verified Findings</h1>
+    <div class="subtitle">What PF 15 actually returned, vs. what the original M0 doc said it would</div>
+  </div>
+  <div class="header-meta">
+    <div>PF version <span>15 (TCS production)</span></div>
+    <div>Verified against <span>BHS-56-Hallway · 172.16.97.59</span></div>
+    <div>Validation date <span>2026-05-06</span></div>
+    <div>Supersedes <span>M0 PacketFence Historical API speculation</span></div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ── SECTION 0: Why this exists ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">→</span> Why This Document Exists</h2>
+
+  <p>The original <code>M0_PacketFence_Historical_API.html</code> was written speculatively against the PF source code on GitHub, before any live API call was made. M1 task <em>Validate PacketFence switch_ip filter + radius_audit_log</em> turned the speculation into ground truth by running every PFClient method against the live PF 15 instance during school hours. This document captures the diff: what was right, what was wrong, and what the corrected query bodies actually look like.</p>
+
+  <div class="callout pf">
+    <strong>Use this doc, not the original M0 PF doc, as the canonical reference</strong> when adding new PF endpoints in M2–M5. Schema columns and table semantics in the original doc are still correct (and worth re-reading), but every claim about endpoint paths, operator names, and filter syntax should be cross-checked against the findings table below.
+  </div>
+</section>
+
+<!-- ── SECTION 1: Findings summary ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">1</span> Findings Summary</h2>
+
+  <p>Every claim in the original M0 PF doc that affected PFClient implementation, with verdict and correction.</p>
+
+  <table class="findings-table">
+    <thead>
+      <tr>
+        <th style="width:140px">Topic</th>
+        <th style="width:80px">Verdict</th>
+        <th>Original claim → corrected</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="topic">nodes/search filter</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Filter <code>nodes/search</code> by <code>switch_ip = AP_IP</code> to get an AP's wireless clients.</div>
+          <div class="correction" style="margin-top:6px">→ <code>switch_ip</code> is not a column on the <code>node</code> table; PF returns HTTP 422 <code>"switch_ip is an invalid field"</code>. Use <code>PFClient::getActiveClientsForAp($apIp)</code> which orchestrates locationlog → MAC list → nodes/search by mac.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">datetime operator</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Operator <code>greater_than_or_equals</code> for time-window filtering.</div>
+          <div class="correction" style="margin-top:6px">→ PF returns 422 <code>"op is not valid"</code>. Use <code>greater_than</code>; PFClient compensates with <code>$from − 1</code> seconds to preserve inclusive boundary semantics.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">radius endpoint</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Endpoint <code>/api/v1/radius_audit_log</code> (singular).</div>
+          <div class="correction" style="margin-top:6px">→ PF returns 404. Correct path: <code>/api/v1/radius_audit_logs</code> (plural) — consistent with <code>nodes</code> and <code>locationlogs</code>.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">radius filter syntax</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">GET with <code>?filter=field:value</code> compact query params.</div>
+          <div class="correction" style="margin-top:6px">→ PF returns 400 <code>"schema: invalid path 'filter'"</code>. Use POST <code>/api/v1/radius_audit_logs/search</code> with the same structured query body shape as <code>nodes/search</code> and <code>locationlogs/search</code>.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">radius scoping field</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Filter <code>called_station_id starts_with $apMac</code> — relies on Called-Station-Id format <code>BSSID:SSID</code>.</div>
+          <div class="correction" style="margin-top:6px">→ Use <code>nas_ip_address starts_with $apIp</code>. Vendor-independent (no BSSID-format guessing), consistent with the AP-IP-as-identifier pattern used by every other PF call in PFClient.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">reject reason field</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Field <code>reply</code> for the RADIUS Reply-Message attribute.</div>
+          <div class="correction" style="margin-top:6px">→ Schema column is <code>radius_reply</code>. Primary reason field is <code>reason</code> — confirmed populated. Fallback chain: <code>reason → radius_reply → auth_status</code>.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">SSID parsing</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Parse SSID by splitting <code>called_station_id</code> on <code>:</code> after the BSSID.</div>
+          <div class="correction" style="margin-top:6px">→ <code>radius_audit_logs</code> has a dedicated <code>ssid</code> column. Read it directly. Parser kept as defensive fallback only.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">empty results</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">All PF search endpoints return 200 + <code>{items: []}</code> when nothing matches.</div>
+          <div class="correction" style="margin-top:6px">→ <code>radius_audit_logs/search</code> idiosyncratically returns <strong>HTTP 404</strong> with body <code>{"errors":[{"message":"entries not found"}]}</code>. <code>locationlogs</code> and <code>nodes</code> use the 200 + empty items[] convention. PFClient detects this 404 pattern and translates to empty success.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">retention endpoint</td>
+        <td class="verdict"><span class="badge b-wrong">Wrong</span></td>
+        <td>
+          <div class="original">Fetch retention via <code>GET /api/v1/config/maintenance/locationlog_cleanup</code>.</div>
+          <div class="correction" style="margin-top:6px">→ Path 404s. Measure empirically: query oldest locationlog row for the AP, derive age from <code>start_time</code>. Reflects real availability rather than configured maximum, and handles new APs gracefully.</div>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="3" style="padding:6px 14px;background:var(--bg2);border-top:1px solid var(--line);font-family:var(--mono);font-size:9px;color:var(--fg3);letter-spacing:.1em;text-transform:uppercase">— Still correct, kept for reference —</td>
+      </tr>
+      <tr>
+        <td class="topic">locationlog scoping</td>
+        <td class="verdict"><span class="badge b-right">Right</span></td>
+        <td>
+          <div class="correction"><code>switch_ip</code> is a valid column on the <code>locationlog</code> table. Filtering <code>locationlogs/search</code> by <code>switch_ip = $apIp</code> returns this AP's session history exactly as expected.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">open-session sentinel</td>
+        <td class="verdict"><span class="badge b-right">Right</span></td>
+        <td>
+          <div class="correction">Open sessions carry <code>end_time = '0000-00-00 00:00:00'</code>, not NULL. Treat this string literally when filtering or projecting.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">PF ↔ XIQ agreement</td>
+        <td class="verdict"><span class="badge b-right">Right</span></td>
+        <td>
+          <div class="correction">Active session count from PF locationlog matched XIQ client count within ±2 during validation. Tolerance margin holds for the dashboard's display purposes.</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="topic">bucket algorithm</td>
+        <td class="verdict"><span class="badge b-right">Right</span></td>
+        <td>
+          <div class="correction">PHP-side bucketing of locationlog sessions into a client-count time series produces the expected sparkline shape. <code>PFClient::bucketClientCounts()</code> with distinct-MAC dedupe is correct.</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── SECTION 2: PFClient method reference ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">2</span> PFClient Method Reference (verified shapes)</h2>
+
+  <p>The four operational methods callers should reach for, with the exact verified query body. Each block reflects what passes against PF 15 today — copy-paste safe.</p>
+
+  <!-- getActiveClientsForAp -->
+  <div class="method-card">
+    <div class="method-card-head">
+      <span class="ep-tag method">Orchestration</span>
+      <span class="sig"><span class="name">getActiveClientsForAp</span>(string $apIp): <span class="ret">array</span></span>
+      <span class="ep-tag verified">Verified</span>
+    </div>
+    <div class="method-card-body">
+      <p>The Clients tab primitive. Two PF calls under the hood: locationlog filtered by <code>switch_ip + open-session sentinel</code> to produce a MAC list, then <code>nodes/search</code> filtered by an OR-of-equals on <code>mac</code> to enrich each MAC with registration data.</p>
+      <p>Returns merged rows: <code>{mac, node: {...}, session: {...}}</code>. Use this — never call <code>nodes/search</code> with a <code>switch_ip</code> clause directly.</p>
+    </div>
+  </div>
+
+  <!-- locationlogSearch -->
+  <div class="method-card">
+    <div class="method-card-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/locationlogs/search</span>
+      <span class="ep-tag verified">Verified</span>
+    </div>
+    <div class="method-card-body">
+      <p>Returns <code>{series, sessions, truncated}</code>. <code>series</code> is the bucketed sparkline data, <code>sessions</code> is the raw rows for callers that need their own grouping.</p>
+<pre>
+<span class="p">{</span>
+  <span class="key">"cursor"</span><span class="p">:</span> <span class="num">0</span><span class="p">,</span>
+  <span class="key">"limit"</span><span class="p">:</span>  <span class="num">1000</span><span class="p">,</span>
+  <span class="key">"sort"</span><span class="p">:</span>   <span class="p">[</span> <span class="s">"start_time ASC"</span> <span class="p">],</span>
+  <span class="key">"fields"</span><span class="p">:</span> <span class="p">[</span> <span class="s">"mac"</span><span class="p">,</span> <span class="s">"ssid"</span><span class="p">,</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="s">"end_time"</span><span class="p">,</span> <span class="s">"role"</span> <span class="p">],</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span>       <span class="key">"field"</span><span class="p">:</span> <span class="s">"switch_ip"</span><span class="p">,</span>  <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"greater_than"</span><span class="p">,</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"start_time"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"2026-05-05 23:59:59"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre>
+      <p class="fn">Note the <code>−1s</code> on the lower bound — compensation for switching from <code>greater_than_or_equals</code> (rejected by PF) to <code>greater_than</code>.</p>
+    </div>
+  </div>
+
+  <!-- searchNodes -->
+  <div class="method-card">
+    <div class="method-card-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/nodes/search</span>
+      <span class="ep-tag verified">Verified</span>
+    </div>
+    <div class="method-card-body">
+      <p>Filter by <code>mac</code> only — never by <code>switch_ip</code> (that field doesn't exist on the <code>node</code> table). For multiple MACs, OR a list of <code>equals</code> clauses; the static helper <code>PFClient::nodeSearchBody($clauses, $limit)</code> builds this correctly.</p>
+<pre>
+<span class="p">{</span>
+  <span class="key">"cursor"</span><span class="p">:</span> <span class="num">0</span><span class="p">,</span>
+  <span class="key">"limit"</span><span class="p">:</span>  <span class="num">100</span><span class="p">,</span>
+  <span class="key">"sort"</span><span class="p">:</span>   <span class="p">[</span> <span class="s">"mac ASC"</span> <span class="p">],</span>
+  <span class="key">"fields"</span><span class="p">:</span> <span class="p">[</span> <span class="cm">/* device_class, last_seen, status, etc. */</span> <span class="p">],</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [{</span>
+      <span class="key">"op"</span><span class="p">:</span> <span class="s">"or"</span><span class="p">,</span>
+      <span class="key">"values"</span><span class="p">: [</span>
+        <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"mac"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"a4:c3:f0:12:34:56"</span> <span class="p">},</span>
+        <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"mac"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"b8:27:eb:aa:bb:cc"</span> <span class="p">}</span>
+        <span class="cm">// … one clause per MAC in list</span>
+      <span class="p">]</span>
+    <span class="p">}]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre>
+    </div>
+  </div>
+
+  <!-- radiusAuditLog -->
+  <div class="method-card">
+    <div class="method-card-head">
+      <span class="method post">POST</span>
+      <span class="ep-path">/api/v1/radius_audit_logs/search</span>
+      <span class="ep-tag verified">Verified</span>
+    </div>
+    <div class="method-card-body">
+      <p>Auth-failure rows scoped to one AP, grouped by client MAC with attempt counter. <strong>Endpoint is plural</strong> (<code>radius_audit_logs</code>, not <code>radius_audit_log</code>). <strong>Filter is by AP IP, not MAC.</strong></p>
+<pre>
+<span class="p">{</span>
+  <span class="key">"cursor"</span><span class="p">:</span> <span class="num">0</span><span class="p">,</span>
+  <span class="key">"limit"</span><span class="p">:</span>  <span class="num">100</span><span class="p">,</span>
+  <span class="key">"sort"</span><span class="p">:</span>   <span class="p">[</span> <span class="s">"created_at DESC"</span> <span class="p">],</span>
+  <span class="key">"fields"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s">"mac"</span><span class="p">,</span> <span class="s">"called_station_id"</span><span class="p">,</span> <span class="s">"ssid"</span><span class="p">,</span>
+    <span class="s">"user_name"</span><span class="p">,</span> <span class="s">"stripped_user_name"</span><span class="p">,</span>
+    <span class="s">"auth_status"</span><span class="p">,</span> <span class="s">"reason"</span><span class="p">,</span> <span class="s">"radius_reply"</span><span class="p">,</span>
+    <span class="s">"created_at"</span>
+  <span class="p">],</span>
+  <span class="key">"query"</span><span class="p">: {</span>
+    <span class="key">"op"</span><span class="p">:</span> <span class="s">"and"</span><span class="p">,</span>
+    <span class="key">"values"</span><span class="p">: [</span>
+      <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"starts_with"</span><span class="p">,</span> <span class="key">"field"</span><span class="p">:</span> <span class="s">"nas_ip_address"</span><span class="p">,</span> <span class="key">"value"</span><span class="p">:</span> <span class="v">"172.16.97.59"</span> <span class="p">},</span>
+      <span class="p">{</span> <span class="key">"op"</span><span class="p">:</span> <span class="s">"equals"</span><span class="p">,</span>      <span class="key">"field"</span><span class="p">:</span> <span class="s">"auth_status"</span><span class="p">,</span>    <span class="key">"value"</span><span class="p">:</span> <span class="s">"Reject"</span> <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre>
+      <p class="fn"><code>starts_with</code> rather than <code>equals</code> on <code>nas_ip_address</code> handles the case where PF appends a port or interface suffix in some configurations.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: Idiosyncrasy catalog ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">3</span> PF 15 Idiosyncrasies — Things to Know Before Adding Endpoints</h2>
+
+  <p>Non-obvious behaviour patterns that bit us during validation. Watch for these when implementing the next round of PF endpoints (Events tab merge, M5).</p>
+
+  <div class="idio">
+    <div class="idio-head">
+      <span class="idio-num">I-1</span>
+      <span class="idio-title">Empty results sometimes return HTTP 404, not 200 + <code>{items: []}</code></span>
+    </div>
+    <div class="idio-body">
+      <code>radius_audit_logs/search</code> returns <code>HTTP 404</code> with body <code>{"errors":[{"message":"entries not found"}]}</code> when a valid query matches zero rows. <code>locationlogs</code> and <code>nodes</code> use the conventional 200 + empty items[]. The asymmetry isn't documented anywhere — discovered only by running the script. <strong>For every new search endpoint, treat 404 + "entries not found" as empty success</strong>, not as an error. PFClient lifts a small predicate for this; promote it to a shared helper if a second endpoint shows the same pattern.
+    </div>
+  </div>
+
+  <div class="idio">
+    <div class="idio-head">
+      <span class="idio-num">I-2</span>
+      <span class="idio-title">No <code>greater_than_or_equals</code> operator</span>
+    </div>
+    <div class="idio-body">
+      PF 15's filter DSL has <code>equals</code>, <code>not_equals</code>, <code>contains</code>, <code>starts_with</code>, <code>ends_with</code>, <code>greater_than</code>, <code>less_than</code> — and that's it. No <code>_or_equals</code> compound operators. For inclusive boundaries, subtract or add 1 unit on the value side. PFClient compensates for datetime windows; do the same for any new range-filter implementation.
+    </div>
+  </div>
+
+  <div class="idio">
+    <div class="idio-head">
+      <span class="idio-num">I-3</span>
+      <span class="idio-title">Endpoint paths are plural; <code>/&lt;entity&gt;/search</code> is the universal POST shape</span>
+    </div>
+    <div class="idio-body">
+      Every search endpoint is <code>POST /api/v1/&lt;entity&gt;s/search</code> with the same query-body shape (<code>{cursor, limit, sort, fields, query: {op, values: [...]}}</code>). GET <code>?filter=…</code> compact syntax is rejected with HTTP 400. When implementing a new endpoint, default to POST <code>/search</code> first; only consider GET if the operation is clearly RPC-style (login, config-fetch).
+    </div>
+  </div>
+
+  <div class="idio">
+    <div class="idio-head">
+      <span class="idio-num">I-4</span>
+      <span class="idio-title"><code>switch_ip</code> exists on <code>locationlog</code>, not on <code>node</code></span>
+    </div>
+    <div class="idio-body">
+      The <code>node</code> table is the device registration store — no AP context. The link between "device" and "AP" lives only in <code>locationlog</code>, which is why every AP-scoped client query is a two-step: locationlog finds the MAC, nodes/search enriches it. When the Events tab is built in M5, expect the same pattern wherever AP-scoping intersects device data.
+    </div>
+  </div>
+
+  <div class="idio">
+    <div class="idio-head">
+      <span class="idio-num">I-5</span>
+      <span class="idio-title">The schema discovery page is the fastest way to verify field names</span>
+    </div>
+    <div class="idio-body">
+      Hitting any <code>/api/v1/&lt;entity&gt;s/search</code> endpoint with no body (or via the PF API explorer UI) returns a sample query object enumerating every valid field name — not by listing operators, but by populating each field with <code>"foo"</code>. This is gold for validating field names before writing query code; it's how this validation cycle compressed several hours of trial-and-error into a few targeted edits.
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 4: Validation harness ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">4</span> Validation Harness — How to Re-Run</h2>
+
+  <p>The script <code>test_pf_validation.php</code> exercises every PFClient public method against a live PF instance and reports pass/fail per check. Re-run it any time PF is upgraded, the webservices role changes, or PFClient is modified.</p>
+
+  <h3>Invocation</h3>
+<pre>
+<span class="cm"># From modules/apdetail/includes/ on a host with network access to PF</span>
+<span class="k">PF_URL</span>=https://<span class="v">PF_HOST</span>:<span class="num">9999</span> \
+<span class="k">PF_USER</span>=webservices \
+<span class="k">PF_PASS</span>=<span class="s">'…'</span> \
+<span class="k">AP_IP</span>=<span class="num">172.16.97.59</span> \
+<span class="k">XIQ_CLIENT_COUNT</span>=<span class="num">23</span> \
+php test_pf_validation.php
+</pre>
+
+  <h3>Exit codes</h3>
+  <p><code>0</code> = all required checks passed (M1 unblocked) · <code>1</code> = at least one required check failed · <code>2</code> = config error (missing env vars).</p>
+
+  <h3>Check structure</h3>
+  <p>Five checks, two required for M1 gating:</p>
+  <table class="findings-table" style="margin-top:8px">
+    <thead>
+      <tr><th>#</th><th>Required?</th><th>What it verifies</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="topic">1</td><td class="verdict"><span class="badge b-right">Required</span></td><td class="correction">getActiveClientsForAp returns enriched client rows during school hours.</td></tr>
+      <tr><td class="topic">2</td><td class="verdict"><span class="badge b-right">Required</span></td><td class="correction">locationlogSearch returns sessions and produces a usable bucket series.</td></tr>
+      <tr><td class="topic">3</td><td class="verdict"><span class="badge b-pending">Optional</span></td><td class="correction">Active session count agrees with operator-supplied XIQ client count within ±2.</td></tr>
+      <tr><td class="topic">4</td><td class="verdict"><span class="badge b-pending">Optional</span></td><td class="correction">radiusAuditLog filter format works (PASS-with-WARN if AP has no recent failures).</td></tr>
+      <tr><td class="topic">5</td><td class="verdict"><span class="badge b-pending">Optional</span></td><td class="correction">Empirical retention measurement — informs M2 time-range selector.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout info" style="margin-top:14px">
+    <strong>Run during school hours.</strong> Empty results outside class periods are ambiguous (filter broken vs. AP genuinely idle). The script emits a WARN when run outside 08:00–15:00 weekdays, but a definitive pass requires real load on the AP.
+  </div>
+</section>
+
+<!-- ── SECTION 5: Outstanding ── -->
+<section>
+  <h2><span class="sec-num" style="background:var(--pf2);color:#d8b4fe;border:1px solid var(--pf3)">5</span> Outstanding for M2+</h2>
+
+  <p>Things that are not blockers for M1 but warrant attention as the dashboard work continues.</p>
+
+  <div class="callout warn">
+    <strong>Force a real auth failure during M4 testing</strong> to definitively confirm <code>radiusAuditLog</code>'s filter is working. The current PASS-with-WARN state ("zero failures returned, AP may genuinely have none") is technically ambiguous. Manually fail an 802.1X auth on this AP, then re-run the validation; the script should pick up the deliberate failure within seconds and convert WARN to PASS-with-data.
+  </div>
+
+  <div class="callout warn">
+    <strong>Watch for retention truncation at 1000 rows.</strong> Check 5 measures retention by inspecting the oldest row in a 1000-row sample. If the script reports <code>truncated: true</code>, real retention extends beyond the sample window. For BHS-56-Hallway during the school year, ~50 unique clients × ~5 sessions/week ≈ 4 weeks before truncation kicks in. M2's time-range selector should handle the truncated case gracefully (offer a "more" option that triggers paginated retrieval).
+  </div>
+
+  <div class="callout pf">
+    <strong>Two PF data shapes still unverified</strong> because they didn't surface during M1 validation: <code>nas_ip_address</code> port-suffix scenarios (the <code>starts_with</code> operator handles these by design, but no live data has yet shown a suffix), and the format of <code>called_station_id</code> when the AP emits non-standard NAS-Identifier values. Both are defensively handled in PFClient; flag them if M4 client testing surfaces unexpected behaviour.
+  </div>
+
+  <div class="callout info">
+    <strong>The "entries not found" 404 idiom may appear on other endpoints.</strong> Currently only confirmed on <code>radius_audit_logs/search</code>. If M5's Events tab work hits the same pattern on <code>audit_log</code> (the unified PF audit log), promote the detection predicate from PFClient::radiusAuditLog into a shared helper. The check is small enough that duplicating once is fine; the moment a second endpoint exhibits it, refactor.
+  </div>
+</section>
+
+</div>
+</body>
+</html>
