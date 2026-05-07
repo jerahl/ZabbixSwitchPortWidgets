@@ -24,19 +24,33 @@ namespace Modules\APDetail\Includes;
  *     client left that to callers.
  *
  * Current scope (incremental — see AP Dashboard Project Plan v2):
- *   - login()              — session auth
- *   - searchNodes()        — POST /api/v1/nodes/search (Clients tab)
- *   - locationlogSearch()  — POST /api/v1/locationlogs/search +
- *                            bucketed client-count series for the
- *                            Live Telemetry "Clients Connected" sparkline
- *                            (resolves M0 open question Q6)
- *   - radiusAuditLog()     — GET /api/v1/radius_audit_log + grouped
- *                            failures-by-MAC for the Auth Failures
- *                            table (Clients tab)
- *   - nodeSearchBody()     — static body builder for nodes/search
+ *   - login()                  — session auth
+ *   - searchNodes()            — POST /api/v1/nodes/search (filter
+ *                                by mac, NOT switch_ip — see note
+ *                                below)
+ *   - getActiveClientsForAp()  — orchestrated locationlog + nodes
+ *                                merge for the Clients tab; this is
+ *                                the operational primitive widget
+ *                                code should call
+ *   - locationlogSearch()      — POST /api/v1/locationlogs/search +
+ *                                bucketed client-count series for the
+ *                                Live Telemetry "Clients Connected"
+ *                                sparkline (resolves M0 Q6)
+ *   - radiusAuditLog()         — POST /api/v1/radius_audit_logs/search
+ *                                + grouped failures-by-MAC (Clients
+ *                                tab Auth Failures table)
+ *   - nodeSearchBody()         — static body builder for nodes/search
  *   - locationlogSearchBody() / bucketClientCounts() — static helpers
  *     for the locationlog flow, exposed for unit testing and reuse by
  *     M3 SSID Broadcast (which consumes the same raw rows).
+ *
+ * IMPORTANT — PF data model gotcha (project plan v2 misread this):
+ * The 'switch_ip' field exists on the locationlog table but NOT on the
+ * node table. Filtering nodes/search by switch_ip → HTTP 422
+ * "switch_ip is an invalid field". The legacy packetfence/ widget
+ * never did that — it queried nodes/search by MAC. For wireless on a
+ * specific AP, the correct flow is two calls (locationlog → MAC list,
+ * then nodes/search by MAC); getActiveClientsForAp() encapsulates it.
  *
  * Security: credentials must be those of a dedicated read-only PF
  * webservices user. Never the admin account — the token grants every
@@ -49,17 +63,15 @@ namespace Modules\APDetail\Includes;
  * "Includes" is implicit from the path convention.
  *
  * @example
- *     // Inside WidgetView::doAction():
+ *     // Inside WidgetView::doAction() for the Clients tab:
  *     $pf = new PFClient(
  *         base_url: $this->getInput('pf_url'),
  *         username: $this->getInput('pf_user'),
  *         password: $this->getInput('pf_pass'),
  *     );
- *     $body = PFClient::nodeSearchBody([
- *         ['op' => 'equals', 'field' => 'switch_ip', 'value' => $ap_mgt0_ip],
- *     ]);
- *     $r = $pf->searchNodes($body);
- *     $pf_nodes = $r['ok'] ? ($r['data']['items'] ?? []) : [];
+ *     $r = $pf->getActiveClientsForAp($ap_mgt0_ip);
+ *     $rows = $r['ok'] ? $r['clients'] : [];
+ *     // Each row: ['mac' => ..., 'node' => [...], 'session' => [...]]
  */
 final class PFClient {
 
@@ -113,7 +125,8 @@ final class PFClient {
         $body      = curl_exec($ch);
         $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err_curl  = curl_error($ch);
-        curl_close($ch);
+        // curl_close() removed: no-op since PHP 8.0; CurlHandle is GC'd
+        // when $ch goes out of scope.
 
         if ($err_curl !== '') {
             return ['ok' => false, 'token' => null, 'http_code' => 0, 'error' => $err_curl];
@@ -322,6 +335,13 @@ final class PFClient {
      * (it's order-independent), but it makes the raw $sessions
      * payload easier for downstream callers to reason about.
      *
+     * Operator note: PF 15 rejects 'greater_than_or_equals' (the M0
+     * doc had this wrong — confirmed live by HTTP 422 "op is not
+     * valid"). The valid operator is 'greater_than'. To preserve
+     * inclusive boundary semantics, we subtract 1 second from $from
+     * before formatting — sessions that started in the same second
+     * as the window edge still appear in the result.
+     *
      * @return array<string,mixed>
      */
     public static function locationlogSearchBody(string $switchIp, int $from): array {
@@ -339,9 +359,11 @@ final class PFClient {
                         'value' => $switchIp,
                     ],
                     [
-                        'op'    => 'greater_than_or_equals',
+                        'op'    => 'greater_than',
                         'field' => 'start_time',
-                        'value' => date('Y-m-d H:i:s', $from),
+                        // -1s compensates for losing the inclusive
+                        // boundary when switching from '>=' to '>'.
+                        'value' => date('Y-m-d H:i:s', $from - 1),
                     ],
                 ],
             ],
@@ -435,7 +457,149 @@ final class PFClient {
     }
 
     /**
-     * GET /api/v1/radius_audit_log → grouped auth-failure rows.
+     * Get all currently-active wireless clients on a single AP, enriched
+     * with PF node-table fields. This is the Clients-tab data primitive.
+     *
+     * The PF data model does NOT expose switch_ip on the node table —
+     * that field lives on locationlog only. So a single nodes/search
+     * filtered by switch_ip would 422. The correct pattern is two
+     * calls:
+     *
+     *     1. locationlog filtered by switch_ip + open-session sentinel
+     *          → list of currently-connected MACs on this AP
+     *     2. nodes/search filtered by mac IN [list]
+     *          → enriched device records
+     *
+     * Result rows merge node fields with the originating session row,
+     * so callers get both registration data (vendor, OS, role) and
+     * live session data (start_time, ssid, vlan) in one shape:
+     *
+     *     [
+     *       {
+     *         mac:     '...',
+     *         node:    { ...nodes/search row... },
+     *         session: { mac, ssid, start_time, end_time, role }
+     *       },
+     *       ...
+     *     ]
+     *
+     * Window: locationlog query covers the last 24h. That's wide
+     * enough to capture even long-running sessions in school context
+     * (devices reboot daily) and narrow enough to keep response size
+     * bounded. Only sessions with end_time = '0000-00-00 00:00:00'
+     * (the open sentinel) survive into the result.
+     *
+     * @return array{
+     *     ok:bool, http_code:int, error:?string,
+     *     clients:array<int, array{mac:string, node:array, session:array}>
+     * }
+     */
+    public function getActiveClientsForAp(string $apIp): array {
+        // Step 1: pull recent locationlog rows for this AP, then keep
+        // only those still open. We deliberately DO NOT post-filter in
+        // PHP for "from" — the 24h window is the inclusive bound, and
+        // any session that started earlier and is still open will not
+        // appear here. In school context, that's a non-event (devices
+        // get rebooted/closed nightly). If a long-IoT-session edge case
+        // shows up in production, widen the window here.
+        $loc = $this->locationlogSearch(
+            switchIp: $apIp,
+            from:     time() - 24 * 3600,
+            to:       time(),
+            buckets:  1, // bucket series unused; pass min valid value
+        );
+        if (!$loc['ok']) {
+            return [
+                'ok'        => false,
+                'http_code' => $loc['http_code'],
+                'error'     => 'locationlog: ' . ($loc['error'] ?? 'unknown'),
+                'clients'   => [],
+            ];
+        }
+
+        // Dedupe by lowercased MAC. If the same client has two open
+        // session rows (rare — usually means a missed Acct-Stop), the
+        // most recent wins because locationlog is sorted ASC and we
+        // overwrite as we walk.
+        $sessions_by_mac = [];
+        foreach ($loc['sessions'] as $s) {
+            if (($s['end_time'] ?? '') !== '0000-00-00 00:00:00') {
+                continue;
+            }
+            $mac = strtolower((string) ($s['mac'] ?? ''));
+            if ($mac === '') {
+                continue;
+            }
+            $sessions_by_mac[$mac] = $s;
+        }
+
+        if ($sessions_by_mac === []) {
+            // No active clients — legitimate (idle AP, after-hours).
+            // Return success with empty list so callers can render
+            // "0 clients connected" instead of an error state.
+            return [
+                'ok'        => true,
+                'http_code' => 200,
+                'error'     => null,
+                'clients'   => [],
+            ];
+        }
+
+        // Step 2: enrich those MACs via nodes/search. Use the existing
+        // OR-of-equals body builder — known to work because the legacy
+        // packetfence widget uses the same pattern. PF does support an
+        // 'in' operator but its handling varies across versions, so OR
+        // of equals is the conservative choice.
+        $mac_list = array_keys($sessions_by_mac);
+        $clauses  = array_map(
+            fn(string $mac) => ['op' => 'equals', 'field' => 'mac', 'value' => $mac],
+            $mac_list,
+        );
+        // Limit must be at least clause count — every clause potentially
+        // returns one row.
+        $body = self::nodeSearchBody($clauses, max(count($clauses), 100));
+        $r    = $this->searchNodes($body);
+
+        if (!$r['ok']) {
+            return [
+                'ok'        => false,
+                'http_code' => $r['http_code'],
+                'error'     => 'nodes/search: ' . ($r['error'] ?? 'unknown'),
+                'clients'   => [],
+            ];
+        }
+
+        // Step 3: merge. Index node rows by lowercased MAC, then
+        // produce one client row per active session. A MAC in
+        // locationlog with no node-table entry still yields a row
+        // (registration-less device — possibly autoreg) with node = [].
+        $nodes_by_mac = [];
+        foreach (($r['data']['items'] ?? []) as $node) {
+            $mac = strtolower((string) ($node['mac'] ?? ''));
+            if ($mac !== '') {
+                $nodes_by_mac[$mac] = $node;
+            }
+        }
+
+        $clients = [];
+        foreach ($sessions_by_mac as $mac => $session) {
+            $clients[] = [
+                'mac'     => $mac,
+                'node'    => $nodes_by_mac[$mac] ?? [],
+                'session' => $session,
+            ];
+        }
+
+        return [
+            'ok'        => true,
+            'http_code' => 200,
+            'error'     => null,
+            'clients'   => $clients,
+        ];
+    }
+
+    /**
+     * POST /api/v1/radius_audit_logs/search → grouped auth-failure rows.
      *
      * Drives the Auth Failures table on the Clients tab. Returns
      * recent RADIUS Access-Reject events for this AP, collapsed by
@@ -444,40 +608,52 @@ final class PFClient {
      * failed 14 times in the last hour", not 14 individual rows
      * for the same iPad.
      *
-     * Filters:
-     *   - called_station_id: <AP MAC>   (PF GET-filter does prefix
-     *     match — wireless Called-Station-Id is BSSID:SSID, so a MAC
-     *     prefix catches all SSIDs broadcast by this AP)
-     *   - auth_status: Reject           (we only want failures)
+     * Filters (POST body, AND of two clauses):
+     *   - nas_ip_address starts_with <AP IP>
+     *     (the AP itself is the NAS in 802.1X — filtering on its IP
+     *     is more reliable than parsing the BSSID-prefixed
+     *     called_station_id, which varies by vendor format. Uses
+     *     starts_with rather than equals because PF may append a
+     *     port or interface suffix in some configurations.)
+     *   - auth_status equals Reject
+     *
+     * History (live-verified findings against PF 15, 2026-05-06):
+     *   - GET ?filter=… → HTTP 400 "invalid path 'filter'".
+     *     Switched to POST /search, matching the other PF endpoints.
+     *   - PF returns HTTP 404 with body "entries not found" when a
+     *     valid query matches zero rows. We translate that to an
+     *     empty success.
+     *   - Initial design filtered by called_station_id; switched to
+     *     nas_ip_address because that's vendor-independent and uses
+     *     the same identifier (AP Mgt0 IP) as the rest of the
+     *     dashboard.
      *
      * Each result row:
-     *   - timestamp      most recent failure for this MAC (ISO string)
+     *   - timestamp      most recent failure for this MAC
      *   - mac            client MAC, lowercased
-     *   - ssid           parsed from called_station_id
-     *   - reason         falls through reason → auth_status → reply
-     *   - user_name      RADIUS User-Name, useful when set
+     *   - ssid           from the dedicated `ssid` column. Falls
+     *                    back to parsing called_station_id if the
+     *                    column is empty (defensive — shouldn't fire
+     *                    in normal PF 15 operation).
+     *   - reason         from the `reason` column. Falls through to
+     *                    radius_reply → auth_status only when reason
+     *                    is empty.
+     *   - user_name      stripped_user_name preferred (display-
+     *                    friendly, no realm). Falls back to raw
+     *                    user_name when stripped is empty.
      *   - attempt_count  rejects in the result set for this MAC
      *
-     * No caching (per task spec) — the Auth Failures table refreshes
+     * No caching (per task spec) — Auth Failures table refreshes
      * live with the dashboard, and stale auth data would mislead an
      * operator triaging a current outage.
      *
-     * Validation gate: the exact GET filter syntax + the field where
-     * PF stores the reject reason are flagged TBD in M0 ("Validate
-     * PacketFence switch_ip filter + radius_audit_log"). Once that
-     * task closes against live BHS-56-Hallway, this implementation
-     * may need to switch to POST /api/v1/radius_audit_log/search if
-     * the GET filter doesn't behave as the M0 doc anticipates. The
-     * envelope return shape stays the same either way.
-     *
-     * @param  string $apMac  AP MAC. Pass through to PF as-is — caller
-     *                        owns format choice. Format that PF expects
-     *                        is pending live validation; the M0 doc
-     *                        example uses colon-separated uppercase
-     *                        (e.g. '74:26:AC:2C:A4:90').
-     * @param  int    $limit  Max raw audit rows to fetch (pre-grouping).
-     *                        100 covers a busy AP for ~1 hour of bad
-     *                        802.1X retries comfortably.
+     * @param  string $apIp   AP Mgt0 IP, e.g. '172.16.97.59'. Same
+     *                        identifier used to filter locationlog,
+     *                        which keeps the dashboard's AP-scoping
+     *                        consistent across all PF data sources.
+     * @param  int    $limit  Max raw audit rows pre-grouping. 100
+     *                        covers a busy AP for ~1 hour of bad
+     *                        802.1X retries.
      * @return array{
      *     ok:bool, http_code:int, error:?string,
      *     failures:array<int, array{
@@ -486,25 +662,64 @@ final class PFClient {
      *     }>
      * }
      */
-    public function radiusAuditLog(string $apMac, int $limit = 100): array {
-        // Bound limit defensively — PF's hard cap is per-deployment.
+    public function radiusAuditLog(string $apIp, int $limit = 100): array {
         $limit = max(1, min($limit, 1000));
 
-        // Fields list keeps the response payload small. Multiple
-        // candidate fields requested for `reason` because PF schema
-        // varies between versions — the projector falls through.
-        $fields = 'mac,called_station_id,user_name,auth_status,reason,reply,created_at';
+        $body = [
+            'cursor' => 0,
+            'limit'  => $limit,
+            'sort'   => ['created_at DESC'],
+            // Field list per PF 15 schema (live-verified). called_station_id
+            // kept in the projection only as fallback fuel for the SSID
+            // parser; it's not displayed.
+            'fields' => [
+                'mac', 'called_station_id', 'ssid',
+                'user_name', 'stripped_user_name',
+                'auth_status', 'reason', 'radius_reply',
+                'created_at',
+            ],
+            'query' => [
+                'op' => 'and',
+                'values' => [
+                    [
+                        'op'    => 'starts_with',
+                        'field' => 'nas_ip_address',
+                        'value' => $apIp,
+                    ],
+                    [
+                        'op'    => 'equals',
+                        'field' => 'auth_status',
+                        'value' => 'Reject',
+                    ],
+                ],
+            ],
+        ];
 
-        $path = '/api/v1/radius_audit_log'
-            . '?filter='  . rawurlencode('called_station_id:' . $apMac)
-            . '&filter='  . rawurlencode('auth_status:Reject')
-            . '&sort='    . rawurlencode('created_at DESC')
-            . '&fields='  . rawurlencode($fields)
-            . '&limit='   . $limit;
-
-        $r = $this->request(path: $path, method: 'GET', body: null);
+        $r = $this->request(
+            path:   '/api/v1/radius_audit_logs/search',
+            method: 'POST',
+            body:   $body,
+        );
 
         if (!$r['ok']) {
+            // PF idiosyncrasy: radius_audit_logs returns HTTP 404 with
+            // body {"errors":[{"message":"entries not found"}]} when a
+            // valid query matches zero rows. Other PF endpoints
+            // (locationlogs, nodes) return 200 + empty items[] for the
+            // same situation. We treat this 404 as an empty success so
+            // the dashboard doesn't show a fake error state during the
+            // common case (AP with no recent auth failures).
+            $is_empty_404 = $r['http_code'] === 404
+                && is_string($r['error'])
+                && str_contains($r['error'], 'entries not found');
+            if ($is_empty_404) {
+                return [
+                    'ok'        => true,
+                    'http_code' => 404, // preserved so callers can log/observe
+                    'error'     => null,
+                    'failures'  => [],
+                ];
+            }
             return [
                 'ok'        => false,
                 'http_code' => $r['http_code'],
@@ -531,6 +746,19 @@ final class PFClient {
      * the most recent failure, and we keep its timestamp / SSID /
      * reason as representative values.
      *
+     * Field projections per the PF 15 schema (live-verified against
+     * BHS-56-Hallway 2026-05-06):
+     *
+     *   - ssid:      use the dedicated `ssid` column. Only fall back
+     *                to parsing called_station_id if the column is
+     *                empty (shouldn't happen, but defensive).
+     *   - reason:    `reason` is the canonical column. Fall through
+     *                to radius_reply → auth_status only when reason
+     *                is empty (older PF builds, or row types where
+     *                reason isn't populated).
+     *   - user:      prefer stripped_user_name (display-friendly,
+     *                no realm) over user_name (raw RADIUS attribute).
+     *
      * Private static: the grouping logic is intrinsic to the auth
      * failures use case and not reusable elsewhere — unlike
      * bucketClientCounts() which generalises to any session-shaped
@@ -551,30 +779,37 @@ final class PFClient {
             }
 
             if (isset($by_mac[$mac])) {
-                // Already have a more-recent representative row;
-                // just bump the counter.
                 $by_mac[$mac]['attempt_count']++;
                 continue;
             }
 
-            // Reason field varies across PF versions — fall through
-            // the most-likely candidates. M0 live validation will
-            // determine the real one and let us prune.
-            $reason = (string) (
-                $row['reason']
-                ?? $row['reply']
-                ?? $row['auth_status']
-                ?? ''
-            );
+            // SSID — dedicated column first, parser fallback.
+            $ssid = (string) ($row['ssid'] ?? '');
+            if ($ssid === '') {
+                $ssid = self::parseSsidFromCalledStationId(
+                    (string) ($row['called_station_id'] ?? '')
+                );
+            }
+
+            // Reason — `reason` is the real field; the others cover
+            // the rare cases where it's not populated.
+            $reason = (string) ($row['reason'] ?? '');
+            if ($reason === '') {
+                $reason = (string) ($row['radius_reply'] ?? $row['auth_status'] ?? '');
+            }
+
+            // User — stripped_user_name is display-friendly when set.
+            $user = (string) ($row['stripped_user_name'] ?? '');
+            if ($user === '') {
+                $user = (string) ($row['user_name'] ?? '');
+            }
 
             $by_mac[$mac] = [
                 'timestamp'     => (string) ($row['created_at'] ?? ''),
                 'mac'           => $mac,
-                'ssid'          => self::parseSsidFromCalledStationId(
-                    (string) ($row['called_station_id'] ?? '')
-                ),
+                'ssid'          => $ssid,
                 'reason'        => $reason,
-                'user_name'     => (string) ($row['user_name'] ?? ''),
+                'user_name'     => $user,
                 'attempt_count' => 1,
             ];
         }
@@ -725,7 +960,7 @@ final class PFClient {
         $resp      = curl_exec($ch);
         $http_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err_curl  = curl_error($ch);
-        curl_close($ch);
+        // curl_close() removed: no-op since PHP 8.0.
 
         if ($err_curl !== '') {
             return ['ok' => false, 'data' => null, 'http_code' => 0, 'error' => $err_curl];
