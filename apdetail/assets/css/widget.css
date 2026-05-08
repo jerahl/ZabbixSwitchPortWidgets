@@ -1,33 +1,66 @@
 /**
  * AP Detail — widget stylesheet.
  *
- * BEM-ish naming, prefixed `ap-`. CSS custom properties for theming so
- * the widget inherits dark/light from Zabbix core. Status colors set per
- * ring via --ap-ring-color so a single variable drives both the donut
- * stroke and the sparkline color.
+ * Visual target: the React mockup in `Zabbix Extreme/Zabbix Dashboard.html`
+ * + `styles.css`.  Token names / palette / card patterns are mirrored so
+ * the widget reads like a slice of the mockup's main column.  Class names
+ * stay BEM-ish with an `ap-` prefix per CLAUDE_CODE_PLAN §4.
+ *
+ * Status colour drives source-badge stroke + ring stroke + sparkline stroke
+ * via per-component `--ap-tele-color` / `--ap-ring-color` properties so a
+ * single variable change re-themes a cell.
  */
 
-/* ── Custom property extensions ─────────────────────────────────────────── */
-:root {
-    --ap-bg:          var(--color-bg-dark, #161b22);
-    --ap-bg-2:        var(--color-bg-darker, #0d1117);
-    --ap-border:      var(--color-border, #30363d);
-    --ap-border-2:    var(--color-border-light, #21262d);
-    --ap-text:        var(--color-text, #e6edf3);
-    --ap-text-muted:  var(--color-text-secondary, #8b949e);
-    --ap-text-dim:    var(--color-text-tertiary, #484f58);
-    --ap-accent:      #1a9e6e;   /* XIQ teal */
-    --ap-accent-2:    #4d7cc7;   /* Zabbix blue */
-    --ap-ring-track:  rgba(255, 255, 255, .06);
+/* ── Token map (mockup `:root` values, scoped to .ap-detail to avoid
+ *    bleeding into the parent dashboard) ────────────────────────────────── */
+.ap-detail {
+    /* Background ramp */
+    --ap-bg:       #0d1117;
+    --ap-bg-1:     #131822;
+    --ap-bg-2:     #181f2c;
+    --ap-bg-3:     #1f2738;
 
-    /* Status palette — used by ring cells via --ap-ring-color */
-    --ap-ok:          #22c55e;
-    --ap-warn:        #f59e0b;
-    --ap-crit:        #ef4444;
-    --ap-info:        #4d7cc7;
-    --ap-unknown:     var(--ap-text-dim);
+    /* Borders */
+    --ap-line:     #232c3f;
+    --ap-line-2:   #2c3650;
 
-    --ap-mono:        'JetBrains Mono', 'Fira Mono', monospace;
+    /* Foreground ramp */
+    --ap-fg:       #e6ecf5;
+    --ap-fg-2:     #b8c2d4;
+    --ap-muted:    #6b7793;
+    --ap-muted-2:  #4a5572;
+
+    /* Source palette */
+    --ap-zbx:      #d92929;   /* Zabbix red — primary accent */
+    --ap-pf:       #f5b300;   /* PacketFence amber */
+    --ap-ext:      #7c5cff;   /* ExtremeCloud read-through */
+
+    /* Status palette */
+    --ap-ok:       #34d399;
+    --ap-warn:     #f5b300;
+    --ap-err:      #f25f5c;
+    --ap-info:     #5fa8d3;
+
+    /* Radii */
+    --ap-r-1:      4px;
+    --ap-r-2:      6px;
+    --ap-r-3:      10px;
+
+    /* Type stack */
+    --ap-mono:     'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --ap-sans:     'Inter', -apple-system, system-ui, sans-serif;
+
+    /* Legacy aliases used elsewhere in this file */
+    --ap-border:    var(--ap-line);
+    --ap-border-2:  var(--ap-line-2);
+    --ap-text:      var(--ap-fg);
+    --ap-text-muted:var(--ap-fg-2);
+    --ap-text-dim:  var(--ap-muted);
+    --ap-accent:    var(--ap-zbx);
+    --ap-accent-2:  var(--ap-info);
+    --ap-crit:      var(--ap-err);
+    --ap-unknown:   var(--ap-muted);
+    --ap-ring-track:rgba(255,255,255,0.06);
 }
 
 /* ── Error state ────────────────────────────────────────────────────────── */
@@ -36,10 +69,10 @@
     align-items: center;
     gap: 8px;
     padding: 16px;
-    color: var(--ap-text-muted);
+    color: var(--ap-fg-2);
     font-size: 13px;
 }
-.ap-error__icon { font-size: 18px; }
+.ap-error__icon { font-size: 18px; color: var(--ap-warn); }
 .ap-error__msg  { line-height: 1.4; }
 
 /* ── Widget root ────────────────────────────────────────────────────────── */
@@ -48,16 +81,20 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    font-family: var(--ap-sans);
     font-size: 13px;
-    color: var(--ap-text);
+    color: var(--ap-fg);
+    background: var(--ap-bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 /* ── Tab bar ────────────────────────────────────────────────────────────── */
 .ap-tabs {
     display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--ap-border);
-    padding: 0 4px;
+    gap: 4px;
+    padding: 14px 22px 0;
+    border-bottom: 1px solid var(--ap-line);
     flex-shrink: 0;
     overflow-x: auto;
     scrollbar-width: none;
@@ -65,72 +102,80 @@
 .ap-tabs::-webkit-scrollbar { display: none; }
 
 .ap-tab {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ap-text-muted);
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ap-muted);
     background: none;
-    border: none;
+    border: 0;
     border-bottom: 2px solid transparent;
     cursor: pointer;
     white-space: nowrap;
-    transition: color .15s, border-color .15s;
     margin-bottom: -1px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    user-select: none;
+    transition: color .15s, border-color .15s;
 }
-.ap-tab:hover { color: var(--ap-text); }
+.ap-tab:hover { color: var(--ap-fg-2); }
 .ap-tab:focus-visible {
-    outline: 2px solid var(--ap-accent);
+    outline: 2px solid var(--ap-zbx);
     outline-offset: -2px;
     border-radius: 2px;
 }
 .ap-tab--active {
-    color: var(--ap-text);
-    border-bottom-color: var(--ap-accent);
+    color: var(--ap-fg);
+    border-bottom-color: var(--ap-zbx);
 }
 
-/* Tab content + issue-count badge — wrap label in a span so the badge
-   sits beside the text without inheriting underline / border-bottom. */
+/* Tab content + issue-count badge */
 .ap-tab__label  { display: inline-block; vertical-align: middle; }
 .ap-tab__badge {
     display: inline-block;
-    margin-left: 6px;
-    padding: 0 5px;
-    min-width: 14px;
-    height: 14px;
-    line-height: 14px;
-    border-radius: 7px;
-    font-size: 9px;
-    font-weight: 700;
+    padding: 1px 5px;
+    min-width: 18px;
+    border-radius: 8px;
+    border: 1px solid var(--ap-line);
+    background: var(--ap-bg-2);
     font-family: var(--ap-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ap-fg-2);
     text-align: center;
-    color: #fff;
-    background: var(--ap-warn);
     vertical-align: middle;
 }
-.ap-tab__badge--warn { background: var(--ap-warn); }
-.ap-tab__badge--crit { background: var(--ap-crit); }
+.ap-tab__badge--warn {
+    color: var(--ap-warn);
+    border-color: rgba(245,179,0,0.4);
+    background: rgba(245,179,0,0.08);
+}
+.ap-tab__badge--crit {
+    color: var(--ap-err);
+    border-color: rgba(242,95,92,0.4);
+    background: rgba(242,95,92,0.10);
+}
 
 /* ── Tab panels ─────────────────────────────────────────────────────────── */
 .ap-panel {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 16px;
+    padding: 18px 22px 28px;
 }
 .ap-panel[hidden] { display: none; }
 .ap-panel__pending {
-    color: var(--ap-text-dim);
+    color: var(--ap-muted);
     font-style: italic;
     font-size: 12px;
     padding: 12px 0;
 }
 
-/* ────────────────────────────────────────────────────────────────────── *
- *  Card — generic frame for grouped panels (Device Health, etc.)        *
- * ────────────────────────────────────────────────────────────────────── */
+/* ── Card ───────────────────────────────────────────────────────────────── */
 .ap-card {
-    background: var(--ap-bg);
-    border: 1px solid var(--ap-border);
-    border-radius: 6px;
-    margin-bottom: 16px;
+    background: var(--ap-bg-1);
+    border: 1px solid var(--ap-line);
+    border-radius: var(--ap-r-3);
+    margin-bottom: 14px;
     overflow: hidden;
 }
 
@@ -138,42 +183,48 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--ap-border-2);
-    background: var(--ap-bg-2);
-    font-size: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--ap-line);
 }
 .ap-card__title {
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: .04em;
-    color: var(--ap-text);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--ap-fg-2);
     margin: 0;
 }
 .ap-card__spacer { flex: 1; }
 .ap-card__meta {
-    font-size: 11px;
-    color: var(--ap-text-dim);
     font-family: var(--ap-mono);
+    font-size: 11px;
+    color: var(--ap-muted);
 }
 
-/* ── Source badges (re-used across panels) ──────────────────────────────── */
+/* ── Source badges ──────────────────────────────────────────────────────── */
 .ap-source {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--ap-mono);
     font-size: 9px;
     font-weight: 600;
+    letter-spacing: 0.4px;
     padding: 1px 5px;
+    border: 1px solid;
     border-radius: 3px;
-    letter-spacing: .05em;
+    background: rgba(255,255,255,0.02);
+    height: 16px;
+    line-height: 1;
     vertical-align: middle;
 }
-.ap-source--zbx { background: #0d1f3a; color: #60a5fa; border: 1px solid #1a3a6a; }
-.ap-source--xiq { background: #0d2a1a; color: #4ade80; border: 1px solid #1a4a2a; }
-.ap-source--pf  { background: #2a1f0d; color: #fbbf24; border: 1px solid #4a3a1a; }
+.ap-source--zbx { color: var(--ap-zbx); border-color: var(--ap-zbx); }
+.ap-source--pf  { color: var(--ap-pf);  border-color: var(--ap-pf);  }
+.ap-source--ext { color: var(--ap-ext); border-color: var(--ap-ext); }
+.ap-source--xiq { color: var(--ap-ext); border-color: var(--ap-ext); }  /* alias */
 
 /* ────────────────────────────────────────────────────────────────────── *
- *  Device Health — CPU + Memory rings with sparklines                   *
+ *  Device Health — CPU + Memory rings                                   *
  * ────────────────────────────────────────────────────────────────────── */
 .ap-health-grid {
     display: grid;
@@ -182,83 +233,83 @@
 }
 
 .ap-ring-cell {
-    /* Per-cell color variable — drives both ring stroke and spark color.
-       Default to ok green; status modifier classes swap it. */
-    --ap-ring-color: var(--ap-ok);
+    --ap-ring-color: var(--ap-zbx);
 
-    position: relative;
-    padding: 14px 16px 10px;
-    border-right: 1px solid var(--ap-border-2);
+    padding: 18px 14px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
+    border-right: 1px solid var(--ap-line);
 }
 .ap-ring-cell:last-child { border-right: 0; }
 
-.ap-ring-cell--ok      { --ap-ring-color: var(--ap-ok); }
+.ap-ring-cell--ok      { --ap-ring-color: var(--ap-ok);   }
 .ap-ring-cell--warn    { --ap-ring-color: var(--ap-warn); }
-.ap-ring-cell--crit    { --ap-ring-color: var(--ap-crit); }
-.ap-ring-cell--unknown { --ap-ring-color: var(--ap-unknown); }
+.ap-ring-cell--crit    { --ap-ring-color: var(--ap-err);  }
+.ap-ring-cell--unknown { --ap-ring-color: var(--ap-muted);}
 
-/* Ring + value text sit side by side at the top of the cell. */
+/* Ring + centred value text. */
 .ap-ring-cell__ring {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.ap-ring__svg {
-    width: 56px;
-    height: 56px;
+    position: relative;
+    width: 92px;
+    height: 92px;
     flex-shrink: 0;
-    transform: rotate(-90deg);   /* arc starts at 12 o'clock */
+}
+.ap-ring__svg {
+    width: 92px;
+    height: 92px;
+    transform: rotate(-90deg);
 }
 .ap-ring__track {
     fill: none;
     stroke: var(--ap-ring-track);
-    stroke-width: 7;
+    stroke-width: 6;
 }
 .ap-ring__fill {
     fill: none;
     stroke: var(--ap-ring-color);
-    stroke-width: 7;
+    stroke-width: 6;
     stroke-linecap: round;
-    stroke-dasharray: 0 999;     /* JS overrides with the real arc length */
+    stroke-dasharray: 0 999;
     transition: stroke-dasharray .5s cubic-bezier(.4, 0, .2, 1),
                 stroke .25s ease;
 }
-
 .ap-ring-cell__text {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
     line-height: 1.1;
+    text-align: center;
 }
 .ap-ring-cell__value {
     font-family: var(--ap-mono);
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 600;
-    color: var(--ap-text);
+    color: var(--ap-fg);
 }
-.ap-ring-cell--unknown .ap-ring-cell__value {
-    color: var(--ap-text-dim);
-}
+.ap-ring-cell--unknown .ap-ring-cell__value { color: var(--ap-muted); }
 .ap-ring-cell__label {
-    font-size: 10px;
-    font-family: var(--ap-mono);
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--ap-text-muted);
-    margin-top: 2px;
+    font-size: 11px;
+    color: var(--ap-fg-2);
+    text-align: center;
+    line-height: 1.3;
+    /* Now sits below the ring instead of inside it. */
 }
 
-/* Sparkline strip — full cell width, sits below the ring.
-   Color matches the ring via --ap-ring-color so visually the ring's
-   "current value" and the sparkline's "trend" feel like one signal. */
+/* Sparkline behind the ring — full cell width strip beneath the ring +
+ * label, colour-matched to the ring's status.  Kept (vs the mockup which
+ * has none) because §8.2 of the plan calls for "ring + sparkline curve"
+ * and history is already paid for. */
 .ap-ring-cell__spark {
     display: block;
     width: 100%;
-    height: 36px;
+    height: 28px;
     overflow: visible;
+    margin-top: 2px;
 }
 .ap-ring-cell__spark-fill {
     fill: var(--ap-ring-color);
@@ -274,18 +325,17 @@
     vector-effect: non-scaling-stroke;
 }
 .ap-ring-cell__spark-empty {
-    fill: var(--ap-text-dim);
+    fill: var(--ap-muted);
     font-family: var(--ap-mono);
     font-size: 9px;
     letter-spacing: .04em;
 }
-
 .ap-ring-cell__caption {
-    font-size: 10px;
+    font-size: 9px;
     font-family: var(--ap-mono);
-    color: var(--ap-text-dim);
-    letter-spacing: .04em;
-    margin-top: -2px;
+    color: var(--ap-muted);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
 }
 
 /* Uptime row — KV pair beneath the rings, full card width. */
@@ -293,62 +343,56 @@
     display: flex;
     align-items: baseline;
     gap: 10px;
-    padding: 10px 16px;
-    border-top: 1px solid var(--ap-border-2);
-    background: var(--ap-bg-2);
+    padding: 10px 14px;
+    border-top: 1px solid var(--ap-line);
+    background: var(--ap-bg-1);
 }
 .ap-health-uptime__label {
     font-size: 10px;
     font-family: var(--ap-mono);
     text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--ap-text-muted);
+    letter-spacing: 0.6px;
+    color: var(--ap-muted);
 }
 .ap-health-uptime__value {
     font-family: var(--ap-mono);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ap-text);
+    font-size: 12px;
+    color: var(--ap-fg);
     cursor: help;
 }
-
-/* ────────────────────────────────────────────────────────────────────── *
- *  Pre-defined styles for subsequent M2/M3/M4/M5 panels (kept inert      *
- *  until the matching HTML appears in widget.view.php).                  *
- * ────────────────────────────────────────────────────────────────────── */
 
 /* ────────────────────────────────────────────────────────────────────── *
  *  Live Telemetry strip — 9 sparklines (M2 #3)                          *
  * ────────────────────────────────────────────────────────────────────── */
 
 .ap-card--telemetry .ap-tele__grid {
+    /* 9 cells laid out 3×3 to keep the spark-cell pattern's per-cell
+       breathing room (mockup uses 4×2; 3×3 is the closest fit for 9). */
     display: grid;
-    /* 9 cells in a single row at desktop widths; wraps to 3 columns on
-       narrow widget instances (≤ 760px) so labels + values stay legible. */
-    grid-template-columns: repeat(9, minmax(0, 1fr));
-    gap: 1px;
-    background: var(--ap-border-2);
-}
-
-@media (max-width: 1100px) {
-    .ap-card--telemetry .ap-tele__grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
 }
 
 .ap-tele-cell {
-    --ap-tele-color: var(--ap-accent-2);
+    --ap-tele-color: var(--ap-zbx);
 
+    padding: 12px 14px;
+    border-right: 1px solid var(--ap-line);
+    border-top:   1px solid var(--ap-line);
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 10px 6px;
-    background: var(--ap-bg);
+    gap: 6px;
+    background: var(--ap-bg-1);
     min-width: 0;
 }
+/* Strip the borders on the leftmost / topmost cells so each card edge
+   is a single line, not a doubled one. */
+.ap-tele-cell:nth-child(3n)       { border-right: 0; }
+.ap-tele-cell:nth-child(-n + 3)   { border-top: 0; }
 
-.ap-tele-cell--xiq { --ap-tele-color: var(--ap-accent); }
-.ap-tele-cell--zbx { --ap-tele-color: var(--ap-accent-2); }
+.ap-tele-cell--zbx { --ap-tele-color: var(--ap-zbx); }
+.ap-tele-cell--xiq { --ap-tele-color: var(--ap-ext); }
+.ap-tele-cell--pf  { --ap-tele-color: var(--ap-pf);  }
 
 .ap-tele-cell--clickable {
     cursor: pointer;
@@ -362,7 +406,7 @@
     outline-offset: -2px;
 }
 .ap-tele-cell--active {
-    background: color-mix(in srgb, var(--ap-tele-color) 18%, var(--ap-bg));
+    background: rgba(217,41,41,0.10);
 }
 
 .ap-tele-cell__head {
@@ -372,21 +416,20 @@
     gap: 6px;
 }
 .ap-tele-cell__label {
-    font-size: 10px;
-    font-family: var(--ap-mono);
+    font-size: 10.5px;
+    color: var(--ap-muted);
     text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--ap-text-muted);
+    letter-spacing: 0.5px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 .ap-tele-cell__value {
     font-family: var(--ap-mono);
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 600;
-    color: var(--ap-text);
-    line-height: 1.1;
+    color: var(--ap-fg);
+    line-height: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -395,76 +438,42 @@
 .ap-tele-cell__spark {
     display: block;
     width: 100%;
-    height: 28px;
+    height: 30px;
     overflow: visible;
 }
 .ap-tele-cell__spark-fill {
     fill: var(--ap-tele-color);
-    fill-opacity: .14;
+    fill-opacity: 0.12;
     stroke: none;
 }
 .ap-tele-cell__spark-line {
     fill: none;
     stroke: var(--ap-tele-color);
-    stroke-width: 1.2;
+    stroke-width: 1.4;
     stroke-linejoin: round;
     stroke-linecap: round;
     vector-effect: non-scaling-stroke;
 }
 .ap-tele-cell__spark-empty {
-    fill: var(--ap-text-dim);
+    fill: var(--ap-muted);
     font-family: var(--ap-mono);
     font-size: 9px;
-    letter-spacing: .04em;
-}
-
-/* KV tables (M2 #4, #5) */
-.ap-kv-section { margin-bottom: 16px; }
-.ap-kv-section__title {
-    font-size: 11px;
-    font-weight: 600;
-    font-family: var(--ap-mono);
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--ap-text-dim);
-    margin-bottom: 6px;
-}
-.ap-kv {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-}
-.ap-kv tr { border-bottom: 1px solid var(--ap-border-2); }
-.ap-kv tr:last-child { border-bottom: none; }
-.ap-kv th {
-    text-align: left;
-    font-weight: 500;
-    color: var(--ap-text-muted);
-    padding: 5px 8px 5px 0;
-    width: 38%;
-    vertical-align: top;
-}
-.ap-kv td {
-    padding: 5px 8px 5px 0;
-    color: var(--ap-text);
-    vertical-align: top;
-}
-.ap-kv td:last-child {
-    width: 36px;
-    text-align: right;
+    letter-spacing: 0.04em;
 }
 
 /* ────────────────────────────────────────────────────────────────────── *
- *  Connectivity Issues panel (M2 #6) — Zabbix-only, computed locally    *
+ *  Connectivity Issues panel (M2 #6)                                    *
+ *  Plan §8.4 wants the per-rule list, not the mockup's 3-stat grid.     *
+ *  Card shell follows the mockup; row internals stay rule-detailed.     *
  * ────────────────────────────────────────────────────────────────────── */
 
 .ap-card--connectivity .ap-card__meta--ok   { color: var(--ap-ok);   }
 .ap-card--connectivity .ap-card__meta--warn { color: var(--ap-warn); }
-.ap-card--connectivity .ap-card__meta--crit { color: var(--ap-crit); }
+.ap-card--connectivity .ap-card__meta--crit { color: var(--ap-err);  }
 
 /* Card-edge indicator stripe — picks up the worst rule's severity. */
 .ap-card--worst-warn { box-shadow: inset 3px 0 0 var(--ap-warn); }
-.ap-card--worst-crit { box-shadow: inset 3px 0 0 var(--ap-crit); }
+.ap-card--worst-crit { box-shadow: inset 3px 0 0 var(--ap-err);  }
 
 .ap-conn-list {
     list-style: none;
@@ -473,60 +482,174 @@
 }
 
 .ap-conn-row {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 8px 14px;
-    border-top: 1px solid var(--ap-border-2);
-    font-size: 12.5px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 14px;
+    border-top: 1px solid var(--ap-line);
+    font-size: 12px;
 }
 .ap-conn-row:first-child { border-top: 0; }
+.ap-conn-row:hover       { background: var(--ap-bg-2); }
 
 .ap-conn-row__sev {
-    flex-shrink: 0;
-    width: 64px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--ap-mono);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: .08em;
-    text-align: center;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
     padding: 2px 6px;
     border-radius: 3px;
-    color: #fff;
-    background: var(--ap-warn);
+    border: 1px solid;
+    background: rgba(255,255,255,0.02);
 }
-.ap-conn-row--crit .ap-conn-row__sev { background: var(--ap-crit); }
-.ap-conn-row--warn .ap-conn-row__sev { background: var(--ap-warn); }
+.ap-conn-row--crit .ap-conn-row__sev {
+    color: var(--ap-err);
+    border-color: rgba(242,95,92,0.4);
+    background: rgba(242,95,92,0.10);
+}
+.ap-conn-row--warn .ap-conn-row__sev {
+    color: var(--ap-warn);
+    border-color: rgba(245,179,0,0.4);
+    background: rgba(245,179,0,0.08);
+}
 
 .ap-conn-row__msg {
-    color: var(--ap-text);
+    color: var(--ap-fg);
     line-height: 1.4;
 }
 
-/* Empty / missing-input states. */
 .ap-conn-empty {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 16px;
-    color: var(--ap-text-muted);
+    padding: 30px 14px;
+    color: var(--ap-fg-2);
     font-size: 12.5px;
+    justify-content: center;
 }
 .ap-conn-empty__icon {
-    font-family: var(--ap-mono);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(52,211,153,0.10);
+    border: 1px solid rgba(52,211,153,0.4);
     color: var(--ap-ok);
+    font-family: var(--ap-mono);
     font-size: 16px;
     line-height: 1;
 }
-.ap-conn-empty--missing .ap-conn-empty__icon { color: var(--ap-text-dim); }
-.ap-conn-empty--missing .ap-conn-empty__msg  { color: var(--ap-text-dim); font-style: italic; }
+.ap-conn-empty--missing .ap-conn-empty__icon {
+    color: var(--ap-muted);
+    background: var(--ap-bg-2);
+    border-color: var(--ap-line);
+}
+.ap-conn-empty--missing .ap-conn-empty__msg {
+    color: var(--ap-muted);
+    font-style: italic;
+}
 
-/* Recent Events feed (M2 #7) — placeholder kept for next PR. */
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Pre-defined styles for subsequent M2 panels (kept inert until the    *
+ *  matching HTML appears in widget.view.php).                            *
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* KV tables (M2 #4, #5) — match the mockup's three-column kv pattern. */
+.ap-kv-section { margin-bottom: 14px; }
+.ap-kv-section__title {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ap-muted);
+    margin-bottom: 6px;
+}
+.ap-kv {
+    display: grid;
+    grid-template-columns: 160px 1fr auto;
+    gap: 0;
+    width: 100%;
+}
+.ap-kv__k,
+.ap-kv__v,
+.ap-kv__b {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--ap-line);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ap-kv__k {
+    font-size: 11px;
+    color: var(--ap-muted);
+}
+.ap-kv__v {
+    font-family: var(--ap-mono);
+    font-size: 12px;
+    color: var(--ap-fg);
+    word-break: break-word;
+}
+.ap-kv__b { justify-content: flex-end; }
+.ap-kv > :nth-last-child(-n + 3) { border-bottom: 0; }
+
+/* Plain monospace value text inside .ap-kv__v. */
+.ap-kv__text {
+    font-family: var(--ap-mono);
+    font-size: 12px;
+    color: var(--ap-fg);
+    word-break: break-word;
+}
+
+/* Status pill — used by Config sync row. */
+.ap-kv__pill {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--ap-mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid;
+    line-height: 1.2;
+}
+.ap-kv__pill--ok {
+    color: var(--ap-ok);
+    border-color: rgba(52,211,153,0.4);
+    background: rgba(52,211,153,0.10);
+}
+.ap-kv__pill--warn {
+    color: var(--ap-warn);
+    border-color: rgba(245,179,0,0.4);
+    background: rgba(245,179,0,0.08);
+}
+.ap-kv__pill--unknown {
+    color: var(--ap-muted);
+    border-color: var(--ap-line);
+    background: var(--ap-bg-2);
+}
+
+/* Firmware-mismatch chip — sits beside the version string. */
+.ap-kv__warn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    color: var(--ap-warn);
+    border: 1px solid rgba(245,179,0,0.4);
+    background: rgba(245,179,0,0.10);
+    cursor: help;
+}
+
+/* Recent Events feed (M2 #7) — placeholder shell. */
 .ap-events-feed {
-    padding: 10px;
-    background: var(--ap-bg);
-    border: 1px solid var(--ap-border);
-    border-radius: 6px;
-    margin-bottom: 16px;
+    background: var(--ap-bg-1);
+    border: 1px solid var(--ap-line);
+    border-radius: var(--ap-r-3);
+    margin-bottom: 14px;
     min-height: 48px;
 }

@@ -115,6 +115,28 @@ final class WidgetView extends CControllerDashboardWidgetView {
     private const LOSS_WARN_PCT = 1.0;
     private const LOSS_CRIT_PCT = 5.0;
 
+    // ── System Info KV table (M2 task #5) ───────────────────────────────
+    //
+    // Most rows come from already-populated Zabbix items — the fleet
+    // template caches XIQ device fields into `xiq.ap.*[{$XIQ_SERIAL}]`
+    // so no live XIQ call is required for this panel.
+
+    /** SNMP-direct serial number (.1.3.6.1.2.1.47.1.1.1.1.11.1 on AP305C). */
+    private const ITEM_KEY_SERIAL_SNMP   = 'extremeap.serial.0';
+
+    /** SNMP-direct firmware string (Aerohive ahDeviceFwVersion). */
+    private const ITEM_KEY_FIRMWARE_SNMP = 'extremeap.firmware.0';
+
+    /** Fleet-template item-key prefixes — actual keys carry [{$XIQ_SERIAL}]. */
+    private const ITEM_KEY_PREFIX_XIQ_MODEL       = 'xiq.ap.model[';
+    private const ITEM_KEY_PREFIX_XIQ_MAC         = 'xiq.ap.mac[';
+    private const ITEM_KEY_PREFIX_XIQ_VERSION     = 'xiq.ap.version[';
+    private const ITEM_KEY_PREFIX_XIQ_LASTCONNECT = 'xiq.ap.lastconnect[';
+    private const ITEM_KEY_PREFIX_XIQ_POLICY      = 'xiq.ap.policy[';
+
+    /** Host macro carrying the XIQ serial (stamped at LLD-host creation). */
+    private const MACRO_XIQ_SERIAL = '{$XIQ_SERIAL}';
+
     protected function doAction(): void {
         // ── 1. Resolve host from broadcast/form ─────────────────────────
         $field_hostids = $this->fields_values['hostids'] ?? [];
@@ -146,6 +168,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'health'       => $this->emptyHealth(),
                     'telemetry'    => $this->emptyTelemetry(),
                     'connectivity' => $this->emptyConnectivity(),
+                    'system_info'  => $this->emptySystemInfo(),
                     'error'        => _('No AP host selected. Wire this widget to a Host Navigator broadcast or configure a host in the widget settings.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
@@ -177,6 +200,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'health'       => $this->emptyHealth(),
                     'telemetry'    => $this->emptyTelemetry(),
                     'connectivity' => $this->emptyConnectivity(),
+                    'system_info'  => $this->emptySystemInfo(),
                     'error'        => _('AP host not found or access denied.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
@@ -204,7 +228,10 @@ final class WidgetView extends CControllerDashboardWidgetView {
         // ── 6. Connectivity Issues gather (M2 #6) ──────────────────────
         $connectivity = $this->gatherConnectivityIssues($items, $host);
 
-        // ── 7. Respond ──────────────────────────────────────────────────
+        // ── 7. System Info KV gather (M2 #5) ───────────────────────────
+        $system_info = $this->gatherSystemInfo($items, $host, $host_id);
+
+        // ── 8. Respond ──────────────────────────────────────────────────
         $this->setResponse(new CControllerResponseData([
             'name' => $name,
             'data' => [
@@ -214,6 +241,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                 'health'       => $health,
                 'telemetry'    => $telemetry,
                 'connectivity' => $connectivity,
+                'system_info'  => $system_info,
                 'error'        => null,
             ],
             'user' => ['debug_mode' => $debug_mode],
@@ -1036,6 +1064,276 @@ final class WidgetView extends CControllerDashboardWidgetView {
             'count'  => 0,
             'worst'  => 'ok',
             'reason' => '',
+        ];
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  System Info KV table (M2 #5) — Zabbix-only computation
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Build the System Information panel rows.  All sources come from
+     * items already loaded for Health + Telemetry + Connectivity, so
+     * this panel adds no extra round-trips.
+     *
+     * Returns a stable ordered list — view iterates verbatim:
+     *
+     *   [
+     *     {key, label, value, source, kind, ...kind-specific extras}, …
+     *   ]
+     *
+     * `kind` ∈
+     *   'text'     — plain monospace value (default)
+     *   'pill'     — rendered as a coloured pill ('tone' ∈ ok/warn/unknown)
+     *   'firmware' — value + optional ⚠ chip when SNMP/XIQ disagree
+     *   'when'     — relative + absolute time pair
+     *
+     * `source` ∈ 'ZBX' (SNMP-direct) | 'EXT' (XIQ-cached fleet template).
+     *
+     * @param  array<int, array<string, mixed>> $items  Host items.
+     * @param  array<string, mixed>|null         $host   API::Host result.
+     * @param  int                                $host_id
+     * @return list<array<string, mixed>>
+     */
+    private function gatherSystemInfo(array $items, ?array $host, int $host_id): array {
+        // Index host items — exact-key + prefix scan (only one match per
+        // prefix is meaningful since each carries the same {$XIQ_SERIAL}).
+        $by_key    = [];
+        $by_prefix = [];
+        $prefixes  = [
+            self::ITEM_KEY_PREFIX_XIQ_MODEL,
+            self::ITEM_KEY_PREFIX_XIQ_MAC,
+            self::ITEM_KEY_PREFIX_XIQ_VERSION,
+            self::ITEM_KEY_PREFIX_XIQ_LASTCONNECT,
+            self::ITEM_KEY_PREFIX_XIQ_CONFIGMISMATCH,
+            self::ITEM_KEY_PREFIX_XIQ_POLICY,
+        ];
+        foreach ($items as $item) {
+            $by_key[$item['key_']] = $item;
+            foreach ($prefixes as $pfx) {
+                if (str_starts_with($item['key_'], $pfx) && !isset($by_prefix[$pfx])) {
+                    $by_prefix[$pfx] = $item;
+                }
+            }
+        }
+
+        $get_str = static function (?array $item): ?string {
+            if ($item === null) {
+                return null;
+            }
+            $val = $item['lastvalue'] ?? null;
+            if ($val === null || $val === '') {
+                return null;
+            }
+            return (string) $val;
+        };
+
+        $get_int = static function (?array $item): ?int {
+            if ($item === null || !is_numeric($item['lastvalue'] ?? null)) {
+                return null;
+            }
+            return (int) $item['lastvalue'];
+        };
+
+        // ── Resolve host fields ─────────────────────────────────────────
+        $host_name    = $host !== null ? (string) ($host['host'] ?? '') : '';
+        $visible_name = $host !== null ? (string) ($host['name'] ?? '') : '';
+
+        // ── Resolve cross-source values ────────────────────────────────
+        $model    = $get_str($by_prefix[self::ITEM_KEY_PREFIX_XIQ_MODEL]   ?? null);
+        $mac_raw  = $get_str($by_prefix[self::ITEM_KEY_PREFIX_XIQ_MAC]     ?? null);
+        $xiq_ver  = $get_str($by_prefix[self::ITEM_KEY_PREFIX_XIQ_VERSION] ?? null);
+        $snmp_ver = $get_str($by_key[self::ITEM_KEY_FIRMWARE_SNMP]         ?? null);
+        $serial   = $get_str($by_key[self::ITEM_KEY_SERIAL_SNMP]           ?? null);
+
+        if ($serial === null) {
+            // Fall back to {$XIQ_SERIAL} host macro when SNMP serial item
+            // hasn't populated yet (fresh host before first poll).
+            $macros = $this->resolveMacros($host_id, [self::MACRO_XIQ_SERIAL]);
+            $macro_serial = $macros[self::MACRO_XIQ_SERIAL] ?? '';
+            if ($macro_serial !== '') {
+                $serial = $macro_serial;
+            }
+        }
+
+        $uptime_s    = $get_int($by_key[self::ITEM_KEY_UPTIME] ?? null);
+        $last_conn_s = $get_int($by_prefix[self::ITEM_KEY_PREFIX_XIQ_LASTCONNECT] ?? null);
+        $cm_val      = $get_int($by_prefix[self::ITEM_KEY_PREFIX_XIQ_CONFIGMISMATCH] ?? null);
+
+        // Firmware mismatch detector — only fires when both sides report
+        // a non-empty value AND they disagree after normalising whitespace.
+        $fw_primary = $snmp_ver ?? $xiq_ver;
+        $fw_hint    = null;
+        if ($snmp_ver !== null && $xiq_ver !== null) {
+            $a = trim($snmp_ver);
+            $b = trim($xiq_ver);
+            if ($a !== '' && $b !== '' && strcasecmp($a, $b) !== 0) {
+                $fw_hint = sprintf(_('SNMP reports %s · XIQ reports %s'), $a, $b);
+            }
+        }
+
+        // MAC display — XIQ stores colon-less (G3); insert colons.
+        $mac_display = $mac_raw !== null
+            ? XIQClient::macInsertColons($mac_raw)
+            : null;
+
+        $sync_pill = $this->configSyncPill($cm_val);
+        $when      = $this->formatLastConnect($last_conn_s);
+
+        // ── Build the row list (stable order) ──────────────────────────
+        return [
+            [
+                'key'    => 'host_name',
+                'label'  => _('Host Name'),
+                'kind'   => 'text',
+                'value'  => $host_name !== '' ? $host_name : '—',
+                'source' => 'ZBX',
+            ],
+            [
+                'key'    => 'visible_name',
+                'label'  => _('Visible Name'),
+                'kind'   => 'text',
+                'value'  => $visible_name !== '' ? $visible_name : '—',
+                'source' => 'ZBX',
+            ],
+            [
+                'key'    => 'model',
+                'label'  => _('Model'),
+                'kind'   => 'text',
+                'value'  => $model ?? '—',
+                'source' => 'EXT',
+            ],
+            [
+                'key'    => 'serial',
+                'label'  => _('Serial'),
+                'kind'   => 'text',
+                'value'  => $serial ?? '—',
+                'source' => $by_key[self::ITEM_KEY_SERIAL_SNMP] ?? null
+                                ? 'ZBX' : 'EXT',
+            ],
+            [
+                'key'    => 'firmware',
+                'label'  => _('Firmware'),
+                'kind'   => 'firmware',
+                'value'  => $fw_primary ?? '—',
+                'hint'   => $fw_hint,
+                'source' => $snmp_ver !== null ? 'ZBX' : 'EXT',
+            ],
+            [
+                'key'    => 'mac',
+                'label'  => _('MAC (wireless base)'),
+                'kind'   => 'text',
+                'value'  => $mac_display ?? '—',
+                'source' => 'EXT',
+            ],
+            [
+                'key'    => 'uptime',
+                'label'  => _('Uptime'),
+                'kind'   => 'when',
+                'value'  => $uptime_s !== null ? $this->formatUptime($uptime_s) : '—',
+                'hint'   => $uptime_s !== null
+                                ? sprintf(_('Last reboot: %s'),
+                                    zbx_date2str(DATE_TIME_FORMAT, time() - $uptime_s))
+                                : null,
+                'source' => 'ZBX',
+            ],
+            [
+                'key'    => 'last_config_push',
+                'label'  => _('Last config push'),
+                'kind'   => 'when',
+                'value'  => $when['rel']  ?? '—',
+                'hint'   => $when['abs']  ?? null,
+                'source' => 'EXT',
+            ],
+            [
+                'key'    => 'config_sync',
+                'label'  => _('Config sync'),
+                'kind'   => 'pill',
+                'value'  => $sync_pill['label'],
+                'tone'   => $sync_pill['tone'],
+                'source' => 'EXT',
+            ],
+        ];
+    }
+
+    /**
+     * Map a `xiq.ap.configmismatch` lastvalue (0/1/null) to a pill spec.
+     *
+     * @return array{label:string, tone:string}
+     */
+    private function configSyncPill(?int $val): array {
+        if ($val === null) {
+            return ['label' => _('Unknown'), 'tone' => 'unknown'];
+        }
+        return $val === 0
+            ? ['label' => _('In sync'),     'tone' => 'ok']
+            : ['label' => _('Out of sync'), 'tone' => 'warn'];
+    }
+
+    /**
+     * Format a unix-second timestamp for the "Last config push" row.
+     * Returns ['rel' => "3 h ago", 'abs' => "2026-05-08 09:14:27"] or
+     * empty strings when input is null/zero.
+     *
+     * @return array{rel:?string, abs:?string}
+     */
+    private function formatLastConnect(?int $unix_s): array {
+        if ($unix_s === null || $unix_s <= 0) {
+            return ['rel' => null, 'abs' => null];
+        }
+
+        $delta = time() - $unix_s;
+        if ($delta < 0) {
+            // Future timestamp — clock skew. Show absolute only.
+            return [
+                'rel' => zbx_date2str(DATE_TIME_FORMAT, $unix_s),
+                'abs' => null,
+            ];
+        }
+
+        return [
+            'rel' => $this->formatRelativeAge($delta),
+            'abs' => zbx_date2str(DATE_TIME_FORMAT, $unix_s),
+        ];
+    }
+
+    /**
+     * Render a duration as "3 h ago" / "12 d ago" / "just now".
+     */
+    private function formatRelativeAge(int $seconds): string {
+        if ($seconds < 60)        return _('just now');
+        if ($seconds < 3600)      return sprintf(_('%d m ago'),  intdiv($seconds, 60));
+        if ($seconds < 86400)     return sprintf(_('%d h ago'),  intdiv($seconds, 3600));
+        if ($seconds < 30*86400)  return sprintf(_('%d d ago'),  intdiv($seconds, 86400));
+        if ($seconds < 365*86400) return sprintf(_('%d mo ago'), intdiv($seconds, 30*86400));
+        return sprintf(_('%d y ago'), intdiv($seconds, 365*86400));
+    }
+
+    /**
+     * Empty-state System Info — same 9-row shape so the view's iteration
+     * order is stable across host-selected / no-host / error renders.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function emptySystemInfo(): array {
+        $blank = static fn(string $key, string $label, string $source, string $kind = 'text'): array => [
+            'key'    => $key,
+            'label'  => $label,
+            'kind'   => $kind,
+            'value'  => '—',
+            'source' => $source,
+        ];
+        return [
+            $blank('host_name',        _('Host Name'),           'ZBX'),
+            $blank('visible_name',     _('Visible Name'),        'ZBX'),
+            $blank('model',            _('Model'),               'EXT'),
+            $blank('serial',           _('Serial'),              'ZBX'),
+            $blank('firmware',         _('Firmware'),            'ZBX', 'firmware'),
+            $blank('mac',              _('MAC (wireless base)'), 'EXT'),
+            $blank('uptime',           _('Uptime'),              'ZBX', 'when'),
+            $blank('last_config_push', _('Last config push'),    'EXT', 'when'),
+            ['key' => 'config_sync', 'label' => _('Config sync'), 'kind' => 'pill',
+             'value' => _('Unknown'), 'tone' => 'unknown', 'source' => 'EXT'],
         ];
     }
 
