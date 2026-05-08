@@ -1,13 +1,10 @@
 /**
  * AP Detail — widget stylesheet.
  *
- * All colors use CSS custom properties so the widget inherits the Zabbix
- * dark/light theme automatically.  Properties not supplied by Zabbix core
- * are defined in :root here and can be overridden per-theme via
- * Zabbix's theming mechanism.
- *
- * Naming convention: BEM-ish, prefixed with 'ap-' to avoid global collisions.
- * Mirrors the class naming conventions in switchports/assets/css/widget.css.
+ * BEM-ish naming, prefixed `ap-`. CSS custom properties for theming so
+ * the widget inherits dark/light from Zabbix core. Status colors set per
+ * ring via --ap-ring-color so a single variable drives both the donut
+ * stroke and the sparkline color.
  */
 
 /* ── Custom property extensions ─────────────────────────────────────────── */
@@ -19,9 +16,17 @@
     --ap-text:        var(--color-text, #e6edf3);
     --ap-text-muted:  var(--color-text-secondary, #8b949e);
     --ap-text-dim:    var(--color-text-tertiary, #484f58);
-    --ap-accent:      #1a9e6e;   /* XIQ teal — matches xiq CSS var in project plan */
+    --ap-accent:      #1a9e6e;   /* XIQ teal */
     --ap-accent-2:    #4d7cc7;   /* Zabbix blue */
-    --ap-ring-track:  rgba(255,255,255,.07);
+    --ap-ring-track:  rgba(255, 255, 255, .06);
+
+    /* Status palette — used by ring cells via --ap-ring-color */
+    --ap-ok:          #22c55e;
+    --ap-warn:        #f59e0b;
+    --ap-crit:        #ef4444;
+    --ap-info:        #4d7cc7;
+    --ap-unknown:     var(--ap-text-dim);
+
     --ap-mono:        'JetBrains Mono', 'Fira Mono', monospace;
 }
 
@@ -35,6 +40,7 @@
     font-size: 13px;
 }
 .ap-error__icon { font-size: 18px; }
+.ap-error__msg  { line-height: 1.4; }
 
 /* ── Widget root ────────────────────────────────────────────────────────── */
 .ap-detail {
@@ -59,7 +65,6 @@
 .ap-tabs::-webkit-scrollbar { display: none; }
 
 .ap-tab {
-    padding: 8px 14px;
     font-size: 12px;
     font-weight: 500;
     color: var(--ap-text-muted);
@@ -72,6 +77,11 @@
     margin-bottom: -1px;
 }
 .ap-tab:hover { color: var(--ap-text); }
+.ap-tab:focus-visible {
+    outline: 2px solid var(--ap-accent);
+    outline-offset: -2px;
+    border-radius: 2px;
+}
 .ap-tab--active {
     color: var(--ap-text);
     border-bottom-color: var(--ap-accent);
@@ -82,75 +92,210 @@
     flex: 1;
     overflow-y: auto;
     padding: 14px 16px;
-    display: none;
 }
-.ap-panel--active { display: block; }
+.ap-panel[hidden] { display: none; }
 .ap-panel__pending {
     color: var(--ap-text-dim);
     font-style: italic;
     font-size: 12px;
-    padding: 8px 0;
+    padding: 12px 0;
 }
 
-/* ── Health rings ────────────────────────────────────────────────────────── */
-.ap-health-rings {
-    display: flex;
-    gap: 16px;
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Card — generic frame for grouped panels (Device Health, etc.)        *
+ * ────────────────────────────────────────────────────────────────────── */
+.ap-card {
+    background: var(--ap-bg);
+    border: 1px solid var(--ap-border);
+    border-radius: 6px;
     margin-bottom: 16px;
-    flex-wrap: wrap;
+    overflow: hidden;
 }
 
-.ap-ring {
+.ap-card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ap-border-2);
+    background: var(--ap-bg-2);
+    font-size: 12px;
+}
+.ap-card__title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ap-text);
+    margin: 0;
+}
+.ap-card__spacer { flex: 1; }
+.ap-card__meta {
+    font-size: 11px;
+    color: var(--ap-text-dim);
+    font-family: var(--ap-mono);
+}
+
+/* ── Source badges (re-used across panels) ──────────────────────────────── */
+.ap-source {
+    display: inline-block;
+    font-family: var(--ap-mono);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: .05em;
+    vertical-align: middle;
+}
+.ap-source--zbx { background: #0d1f3a; color: #60a5fa; border: 1px solid #1a3a6a; }
+.ap-source--xiq { background: #0d2a1a; color: #4ade80; border: 1px solid #1a4a2a; }
+.ap-source--pf  { background: #2a1f0d; color: #fbbf24; border: 1px solid #4a3a1a; }
+
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Device Health — CPU + Memory rings with sparklines                   *
+ * ────────────────────────────────────────────────────────────────────── */
+.ap-health-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0;
+}
+
+.ap-ring-cell {
+    /* Per-cell color variable — drives both ring stroke and spark color.
+       Default to ok green; status modifier classes swap it. */
+    --ap-ring-color: var(--ap-ok);
+
+    position: relative;
+    padding: 14px 16px 10px;
+    border-right: 1px solid var(--ap-border-2);
     display: flex;
     flex-direction: column;
+    gap: 6px;
+}
+.ap-ring-cell:last-child { border-right: 0; }
+
+.ap-ring-cell--ok      { --ap-ring-color: var(--ap-ok); }
+.ap-ring-cell--warn    { --ap-ring-color: var(--ap-warn); }
+.ap-ring-cell--crit    { --ap-ring-color: var(--ap-crit); }
+.ap-ring-cell--unknown { --ap-ring-color: var(--ap-unknown); }
+
+/* Ring + value text sit side by side at the top of the cell. */
+.ap-ring-cell__ring {
+    display: flex;
     align-items: center;
-    gap: 4px;
-    min-width: 72px;
+    gap: 12px;
 }
 
 .ap-ring__svg {
-    width: 64px;
-    height: 64px;
-    transform: rotate(-90deg);   /* start arc at top */
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    transform: rotate(-90deg);   /* arc starts at 12 o'clock */
 }
-
 .ap-ring__track {
     fill: none;
     stroke: var(--ap-ring-track);
-    stroke-width: 8;
+    stroke-width: 7;
 }
-
 .ap-ring__fill {
     fill: none;
-    stroke: var(--ap-accent);
-    stroke-width: 8;
+    stroke: var(--ap-ring-color);
+    stroke-width: 7;
     stroke-linecap: round;
-    stroke-dasharray: 0 163.4;   /* animated via JS */
-    transition: stroke-dasharray .4s ease;
+    stroke-dasharray: 0 999;     /* JS overrides with the real arc length */
+    transition: stroke-dasharray .5s cubic-bezier(.4, 0, .2, 1),
+                stroke .25s ease;
 }
 
-/* Per-metric ring colors — override stroke on the fill element */
-.ap-ring[data-metric="cpu"]  .ap-ring__fill { stroke: #4d7cc7; }
-.ap-ring[data-metric="mem"]  .ap-ring__fill { stroke: #1a9e6e; }
-.ap-ring[data-metric="temp"] .ap-ring__fill { stroke: #f59e0b; }
-.ap-ring[data-metric="poe"]  .ap-ring__fill { stroke: #9b59b6; }
-
-.ap-ring__label {
-    font-size: 10px;
-    font-family: var(--ap-mono);
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--ap-text-dim);
+.ap-ring-cell__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
 }
-
-.ap-ring__value {
-    font-size: 12px;
+.ap-ring-cell__value {
     font-family: var(--ap-mono);
+    font-size: 22px;
     font-weight: 600;
     color: var(--ap-text);
 }
+.ap-ring-cell--unknown .ap-ring-cell__value {
+    color: var(--ap-text-dim);
+}
+.ap-ring-cell__label {
+    font-size: 10px;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--ap-text-muted);
+    margin-top: 2px;
+}
 
-/* ── Live Telemetry strip ────────────────────────────────────────────────── */
+/* Sparkline strip — full cell width, sits below the ring.
+   Color matches the ring via --ap-ring-color so visually the ring's
+   "current value" and the sparkline's "trend" feel like one signal. */
+.ap-ring-cell__spark {
+    display: block;
+    width: 100%;
+    height: 36px;
+    overflow: visible;
+}
+.ap-ring-cell__spark-fill {
+    fill: var(--ap-ring-color);
+    fill-opacity: .12;
+    stroke: none;
+}
+.ap-ring-cell__spark-line {
+    fill: none;
+    stroke: var(--ap-ring-color);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+.ap-ring-cell__spark-empty {
+    fill: var(--ap-text-dim);
+    font-family: var(--ap-mono);
+    font-size: 9px;
+    letter-spacing: .04em;
+}
+
+.ap-ring-cell__caption {
+    font-size: 10px;
+    font-family: var(--ap-mono);
+    color: var(--ap-text-dim);
+    letter-spacing: .04em;
+    margin-top: -2px;
+}
+
+/* Uptime row — KV pair beneath the rings, full card width. */
+.ap-health-uptime {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--ap-border-2);
+    background: var(--ap-bg-2);
+}
+.ap-health-uptime__label {
+    font-size: 10px;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--ap-text-muted);
+}
+.ap-health-uptime__value {
+    font-family: var(--ap-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ap-text);
+    cursor: help;
+}
+
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Pre-defined styles for subsequent M2/M3/M4/M5 panels (kept inert      *
+ *  until the matching HTML appears in widget.view.php).                  *
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Live Telemetry strip (M2 #3) */
 .ap-telemetry {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -161,18 +306,9 @@
     border: 1px solid var(--ap-border);
     border-radius: 6px;
 }
-.ap-telemetry__loading {
-    grid-column: 1 / -1;
-    color: var(--ap-text-dim);
-    font-size: 11px;
-    text-align: center;
-    padding: 8px 0;
-}
 
-/* ── KV tables ──────────────────────────────────────────────────────────── */
-.ap-kv-section {
-    margin-bottom: 16px;
-}
+/* KV tables (M2 #4, #5) */
+.ap-kv-section { margin-bottom: 16px; }
 .ap-kv-section__title {
     font-size: 11px;
     font-weight: 600;
@@ -182,7 +318,6 @@
     color: var(--ap-text-dim);
     margin-bottom: 6px;
 }
-
 .ap-kv {
     width: 100%;
     border-collapse: collapse;
@@ -207,40 +342,8 @@
     width: 36px;
     text-align: right;
 }
-.ap-kv__pending {
-    color: var(--ap-text-dim);
-    font-style: italic;
-    font-size: 11px;
-}
 
-/* ── Source badges ───────────────────────────────────────────────────────── */
-.ap-source {
-    display: inline-block;
-    font-family: var(--ap-mono);
-    font-size: 9px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
-    letter-spacing: .05em;
-    vertical-align: middle;
-}
-.ap-source--zbx {
-    background: #0d1f3a;
-    color: #60a5fa;
-    border: 1px solid #1a3a6a;
-}
-.ap-source--xiq {
-    background: #0d2a1a;
-    color: #4ade80;
-    border: 1px solid #1a4a2a;
-}
-.ap-source--pf {
-    background: #2a1f0d;
-    color: #fbbf24;
-    border: 1px solid #4a3a1a;
-}
-
-/* ── Connectivity Issues ─────────────────────────────────────────────────── */
+/* Connectivity Issues + Recent Events panels (M2 #6, #7) */
 .ap-conn-issues,
 .ap-events-feed {
     padding: 10px;
@@ -249,28 +352,4 @@
     border-radius: 6px;
     margin-bottom: 16px;
     min-height: 48px;
-}
-.ap-conn-issues__loading,
-.ap-events-feed__loading {
-    color: var(--ap-text-dim);
-    font-size: 11px;
-    text-align: center;
-    padding: 8px 0;
-}
-
-/* ── Debug dump ─────────────────────────────────────────────────────────── */
-.ap-debug {
-    margin: 8px 16px;
-    font-size: 11px;
-    color: var(--ap-text-dim);
-}
-.ap-debug pre {
-    overflow-x: auto;
-    padding: 8px;
-    background: var(--ap-bg);
-    border: 1px solid var(--ap-border);
-    border-radius: 4px;
-    font-family: var(--ap-mono);
-    font-size: 10px;
-    line-height: 1.5;
 }

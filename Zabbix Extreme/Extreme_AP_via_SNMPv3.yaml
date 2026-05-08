@@ -1,0 +1,724 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: c070a4dcf1854fc989bb24876665172a
+      name: 'Templates/Network devices'
+  templates:
+    - uuid: bcf7c91856f74f0097db719b83f9d3ca
+      template: 'Extreme AP via SNMPv3'
+      name: 'Extreme AP via SNMPv3'
+      description: |
+        SNMPv3 monitoring template for Extreme Networks AP_305C access points running
+        IQ Engine 10.7rx firmware.
+
+        DESIGN
+        ──────
+        This template is linked automatically to per-AP Zabbix hosts created by the
+        host prototype in the "Extreme XIQ APs by API" fleet template. The host
+        receives an SNMPv3 interface, host macros ({$XIQ_DEVICE_ID}, {$XIQ_SERIAL},
+        {$XIQ_MAC}, {$XIQ_LOCATION_ID}), and tags at discovery time. This template
+        supplies the metrics that the AP detail dashboard widget reads via
+        API::Item()->get().
+
+        SCOPE
+        ─────
+        Confirmed against MLK-A205 (AP305C, IQ Engine 10.7r5b) and validated for
+        BHS-56-Hallway during M0. Three MIB subtrees provide all useful data:
+
+          .1.3.6.1.2.1                  (MIB-II)   standard IF-MIB only
+          .1.3.6.1.4.1.26928.1.2        (Aerohive) system scalars: CPU, mem, serial, fw
+          .1.3.6.1.4.1.26928.1.3        (Aerohive) noise floor string scalar
+          .1.3.6.1.4.1.26928.1.1.1.2.1  (Aerohive) per-radio + per-SSID interface table
+
+        Absent on this hardware: HOST-RESOURCES-MIB, POWER-ETHERNET-MIB,
+        ENTITY-SENSOR-MIB. ifHighSpeed returns 0 — uplink rate uses ifHCOctets deltas.
+        Temperature and PoE draw are absent from every available source.
+
+        REQUIRED HOST-LEVEL MACROS
+        ──────────────────────────
+        Inherited from the host prototype, set once at the global or fleet-host level:
+          {$SNMP_SEC_NAME}   - SNMPv3 username
+          {$SNMP_AUTH_PASS}  - SNMPv3 authentication passphrase (SHA-256)
+          {$SNMP_PRIV_PASS}  - SNMPv3 privacy passphrase (AES-128)
+
+        TUNING MACROS (template defaults, override per-host if needed)
+        ──────────────────────────────────────────────────────────────
+          {$EXTREMEAP.CPU.MAX}   - CPU % alert threshold (default 80)
+          {$EXTREMEAP.MEM.MAX}   - Memory % alert threshold (default 85)
+          {$EXTREMEAP.NOISE.MAX} - Noise floor dBm alert threshold (default -75)
+
+        INTERFACE INDEX REFERENCE (AP_305C dual-radio)
+        ──────────────────────────────────────────────
+          ifIndex 10  = eth0      (physical uplink)
+          ifIndex 12  = wifi0     (radio 0)
+          ifIndex 13  = wifi1     (radio 1)
+          ifIndex 17+ = wifiN.M   (SSID subinterfaces, 7 typical)
+
+        Other model variants (e.g. AP410, tri-radio APs) may use different ifIndices.
+        The radio LLD rule discovers radios dynamically; eth0 is hardcoded to
+        ifIndex 10 because the dashboard widget needs a fixed key for the uplink
+        sparkline. If a different model uses a different ifIndex for the uplink,
+        clone this template and adjust.
+      groups:
+        - name: 'Templates/Network devices'
+      macros:
+        - macro: '{$EXTREMEAP.CPU.MAX}'
+          value: '80'
+          description: 'CPU utilization % above which to fire a high-CPU trigger'
+        - macro: '{$EXTREMEAP.MEM.MAX}'
+          value: '85'
+          description: 'Memory utilization % above which to fire a high-memory trigger'
+        - macro: '{$EXTREMEAP.NOISE.MAX}'
+          value: '-75'
+          description: 'Noise floor dBm above which to warn (less negative = higher noise = worse)'
+        - macro: '{$EXTREMEAP.IFINDEX.UPLINK}'
+          value: '10'
+          description: 'ifIndex of physical uplink interface (eth0). Override per-host for non-AP305C models.'
+
+      items:
+
+        # ─── System scalars (Aerohive .26928.1.2.x) ──────────────────────
+
+        - uuid: 7e64760cc76e47eb86039ea021aa3e1c
+          name: 'CPU utilization'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.4.1.26928.1.2.4.0'
+          key: extremeap.cpu.util
+          delay: 1m
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: '%'
+          description: |
+            CPU utilization percentage from Aerohive enterprise MIB scalar.
+            HOST-RESOURCES-MIB is absent on AP305C — this is the only CPU source.
+          tags:
+            - tag: component
+              value: cpu
+
+        - uuid: 8becda6732764f438759d338020caaa4
+          name: 'Memory utilization'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.4.1.26928.1.2.10.0'
+          key: extremeap.mem.util
+          delay: 1m
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: '%'
+          description: |
+            Memory utilization percentage from Aerohive enterprise MIB scalar.
+            HOST-RESOURCES-MIB is absent on AP305C — this is the only memory source.
+          tags:
+            - tag: component
+              value: memory
+
+        - uuid: a14fdcc720744756b67d71a00c653105
+          name: 'Serial number'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.4.1.26928.1.2.5.0'
+          key: extremeap.serial.0
+          delay: 1h
+          history: 7d
+          value_type: CHAR
+          description: 'Hardware serial number. Used in System Info KV panel and as a fallback for fleet-template join.'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          tags:
+            - tag: component
+              value: identity
+
+        - uuid: 8555af406d264c61bd50f59c4c4761e3
+          name: 'Firmware version'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.4.1.26928.1.2.12.0'
+          key: extremeap.firmware.0
+          delay: 1h
+          history: 30d
+          value_type: CHAR
+          description: 'IQ Engine firmware version string (e.g. "IQ Engine 10.7r5b build-c6be9b0").'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          tags:
+            - tag: component
+              value: firmware
+
+        # ─── Noise floor: master + 2 dependents (Aerohive .26928.1.3.1.0) ─
+
+        - uuid: b29a055baf4c4d60a3174d7c4d3f6811
+          name: 'Noise floor (raw string, master item)'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.4.1.26928.1.3.1.0'
+          key: extremeap.noise.raw
+          delay: 1m
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: |
+            Raw noise floor string returned by the AP, containing both radios in
+            one combined value (e.g. "wifi0: -96 wifi1: -95"). This is the master
+            item; two dependent items below extract per-radio integer dBm values
+            via JavaScript regex.
+
+            History is disabled on the master item — only the parsed dependents
+            store history.
+          tags:
+            - tag: component
+              value: noise
+
+        - uuid: ae5c1116e5034107b9ad6de26e4cb8d9
+          name: 'Noise floor wifi0'
+          type: DEPENDENT
+          key: extremeap.noise.wifi0
+          delay: '0'
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: dBm
+          description: |
+            Per-radio noise floor in dBm, extracted from the master string item.
+            Negative values are normal (e.g. -95 dBm). Less negative = noisier.
+          master_item:
+            key: extremeap.noise.raw
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  // Extract the wifi0 dBm value from the raw noise floor string.
+                  // The string format observed in the M0 walk is roughly:
+                  //   "wifi0: -96 wifi1: -95"
+                  // but tolerate variations (separator, whitespace) by matching
+                  // any non-digit/-minus chars between the radio label and the
+                  // signed integer that follows.
+                  var m = String(value).match(/wifi0[^-\d]*(-?\d+)/i);
+                  if (!m) {
+                      throw 'wifi0 noise floor not found in: ' + value;
+                  }
+                  return parseInt(m[1], 10);
+          tags:
+            - tag: component
+              value: noise
+            - tag: radio
+              value: wifi0
+
+        - uuid: 4a9e5a965fca46dc84b90dcf9f658c9c
+          name: 'Noise floor wifi1'
+          type: DEPENDENT
+          key: extremeap.noise.wifi1
+          delay: '0'
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: dBm
+          description: 'Per-radio noise floor in dBm, extracted from the master string item.'
+          master_item:
+            key: extremeap.noise.raw
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var m = String(value).match(/wifi1[^-\d]*(-?\d+)/i);
+                  if (!m) {
+                      throw 'wifi1 noise floor not found in: ' + value;
+                  }
+                  return parseInt(m[1], 10);
+          tags:
+            - tag: component
+              value: noise
+            - tag: radio
+              value: wifi1
+
+        # ─── Standard IF-MIB: physical uplink eth0 (ifIndex 10) ──────────
+
+        - uuid: d2a450e7344e4cb3ae3f9232acc19ec4
+          name: 'Uplink: bits in (eth0)'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.2.1.31.1.1.1.6.10'
+          key: 'net.if.in[ifHCInOctets.10]'
+          delay: 1m
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: bps
+          description: |
+            Inbound uplink traffic rate in bits per second. Counter64 source
+            (ifHCInOctets) converted to per-second rate via Change-per-second
+            preprocessing, then ×8 to convert bytes → bits.
+
+            ifIndex 10 = eth0 (physical uplink) on AP305C. ifHighSpeed returns 0
+            on this hardware so it cannot be used to derive bps — must use
+            ifHCOctets deltas.
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+            - type: MULTIPLIER
+              parameters:
+                - '8'
+          tags:
+            - tag: component
+              value: network
+            - tag: interface
+              value: eth0
+            - tag: direction
+              value: in
+
+        - uuid: b246277179e74b4696fcc3bd8ae22de7
+          name: 'Uplink: bits out (eth0)'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.2.1.31.1.1.1.10.10'
+          key: 'net.if.out[ifHCOutOctets.10]'
+          delay: 1m
+          history: 90d
+          trends: 365d
+          value_type: FLOAT
+          units: bps
+          description: 'Outbound uplink traffic rate in bps. See "Uplink: bits in" for derivation notes.'
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+            - type: MULTIPLIER
+              parameters:
+                - '8'
+          tags:
+            - tag: component
+              value: network
+            - tag: interface
+              value: eth0
+            - tag: direction
+              value: out
+
+        - uuid: 2e16ee3fa07144f087833ce406720cbb
+          name: 'Uplink: operational status (eth0)'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.2.1.2.2.1.8.10'
+          key: 'net.if.status[ifOperStatus.10]'
+          delay: 1m
+          history: 90d
+          trends: 365d
+          value_type: UNSIGNED
+          valuemap:
+            name: 'Interface oper status'
+          description: 'eth0 operational state (1=up, 2=down, others=transitional). Drives availability alerting and Wired tab status badge.'
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 5m
+          tags:
+            - tag: component
+              value: network
+            - tag: interface
+              value: eth0
+
+        - uuid: 9b3a9e1cb3a7455ea86c595237ddaaee
+          name: 'Uplink: link speed (eth0)'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.2.1.2.2.1.5.10'
+          key: 'net.if.speed[ifSpeed.10]'
+          delay: 5m
+          history: 30d
+          value_type: UNSIGNED
+          units: bps
+          description: |
+            eth0 nominal link speed from ifSpeed (bps). Confirmed to return
+            1000000000 (1 Gbps) on AP305C, unlike ifHighSpeed which returns 0.
+          preprocessing:
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          tags:
+            - tag: component
+              value: network
+            - tag: interface
+              value: eth0
+
+        # ─── System uptime ────────────────────────────────────────────────
+
+        - uuid: bc64f28783d948e985caeacf462174e0
+          name: 'System uptime'
+          type: SNMP_AGENT
+          snmp_oid: '.1.3.6.1.2.1.1.3.0'
+          key: system.uptime
+          delay: 1m
+          history: 30d
+          trends: 365d
+          value_type: FLOAT
+          units: uptime
+          description: |
+            sysUpTimeInstance — time since SNMP agent (re)started, in
+            hundredths of a second. Preprocessing converts to seconds.
+          preprocessing:
+            - type: MULTIPLIER
+              parameters:
+                - '0.01'
+          tags:
+            - tag: component
+              value: health
+
+      discovery_rules:
+
+        # ─── Radio interfaces (wifi0, wifi1) ──────────────────────────────
+
+        - uuid: afa4c9a97c6041929f0cbb5734d49b0c
+          name: 'Radio interface discovery'
+          type: SNMP_AGENT
+          key: extremeap.radio.discovery
+          delay: 5m
+          snmp_oid: 'discovery[{#CHANNEL},.1.3.6.1.4.1.26928.1.1.1.2.1.5.1.1,{#IFNAME},.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.1]'
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#IFNAME}'
+                value: '^wifi[0-9]+$'
+              - macro: '{#CHANNEL}'
+                value: '^[1-9][0-9]*$'
+          description: |
+            Discovers radio interfaces by walking the Aerohive per-radio channel
+            column. Returns one entry per radio with:
+
+              {#SNMPINDEX} = ifIndex of the radio (12 for wifi0, 13 for wifi1)
+              {#IFNAME}    = interface name string ("wifi0", "wifi1")
+              {#CHANNEL}   = current channel number (used as filter only)
+
+            The .26928.1.1.1.2.1.5.1 sub-table only exists for radio interfaces,
+            so the IFNAME filter is mostly belt-and-braces. Tri-radio APs (e.g.
+            AP410) will discover three radios automatically.
+          item_prototypes:
+
+            - uuid: c1c9afd289fe4cc7bd3743f4a310ec5d
+              name: '{#IFNAME}: channel'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.5.1.1.{#SNMPINDEX}'
+              key: 'extremeap.channel[{#SNMPINDEX}]'
+              delay: 5m
+              history: 30d
+              value_type: UNSIGNED
+              description: 'Current operating channel number. Channels 1–14 = 2.4 GHz, ≥36 = 5 GHz, UNII-6/7/8 = 6 GHz on tri-band hardware.'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+            - uuid: be41e198262a4f02ae795b1b277ac4a0
+              name: '{#IFNAME}: TX power'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.5.1.2.{#SNMPINDEX}'
+              key: 'extremeap.txpower[{#SNMPINDEX}]'
+              delay: 5m
+              history: 90d
+              trends: 365d
+              value_type: FLOAT
+              units: dBm
+              description: 'Current transmit power in dBm.'
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+            - uuid: 16563947747549879f22b5c602bb2ad7
+              name: '{#IFNAME}: channel width (encoded)'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.5.1.3.{#SNMPINDEX}'
+              key: 'extremeap.chanwidth[{#SNMPINDEX}]'
+              delay: 5m
+              history: 30d
+              value_type: UNSIGNED
+              description: |
+                Aerohive-encoded channel width value. AP305C is 802.11ac Wave 1
+                and physically limited to 80 MHz, but the SNMP walk returned
+                value 160 for both 5 GHz radios — this is an internal encoding,
+                NOT actual MHz.
+
+                Decoding TBD — the dashboard widget cross-references the XIQ
+                wifi-interfaces/stats response for the same AP to get the
+                human-readable channel width value. This item is collected for
+                completeness and future decoding.
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+            - uuid: b75d23004e664006bfa07e6ed99033e6
+              name: '{#IFNAME}: input errors'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.2.1.2.2.1.14.{#SNMPINDEX}'
+              key: 'net.if.errors[ifInErrors.{#SNMPINDEX}]'
+              delay: 1m
+              history: 90d
+              trends: 365d
+              value_type: FLOAT
+              units: '!eps'
+              description: 'Input error rate on the radio interface (errors per second). Sourced from standard IF-MIB ifInErrors at the same ifIndex as the radio.'
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+            - uuid: fdaa733ec52942ca9204e6b0ecf5de21
+              name: '{#IFNAME}: TX bytes'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.3.1.2.{#SNMPINDEX}'
+              key: 'extremeap.radio.txbytes[{#SNMPINDEX}]'
+              delay: 1m
+              history: 30d
+              trends: 90d
+              value_type: FLOAT
+              units: Bps
+              description: |
+                Per-radio transmitted bytes per second from the Aerohive
+                enterprise traffic counter table. Column index 2 in the
+                .26928.1.1.1.2.1.3.1 sub-table.
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+            - uuid: 88adf24a69774f8da8e8ecb92f3f2706
+              name: '{#IFNAME}: RX bytes'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.3.1.4.{#SNMPINDEX}'
+              key: 'extremeap.radio.rxbytes[{#SNMPINDEX}]'
+              delay: 1m
+              history: 30d
+              trends: 90d
+              value_type: FLOAT
+              units: Bps
+              description: 'Per-radio received bytes per second from the Aerohive enterprise traffic counter table.'
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: radio
+                - tag: radio
+                  value: '{#IFNAME}'
+
+        # ─── SSID subinterfaces ───────────────────────────────────────────
+
+        - uuid: dc651d201071411fab89866fc4fa92b1
+          name: 'SSID subinterface discovery'
+          type: SNMP_AGENT
+          key: extremeap.ssid.discovery
+          delay: 1h
+          snmp_oid: 'discovery[{#SSIDNAME},.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.2,{#IFNAME},.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.1]'
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#SSIDNAME}'
+                value: '^.+$'
+              - macro: '{#IFNAME}'
+                value: '^wifi[0-9]+\.[0-9]+$'
+          description: |
+            Discovers SSID subinterfaces by walking the Aerohive interface
+            attribute table column 2 (SSID name). Returns one entry per SSID:
+
+              {#SNMPINDEX} = ifIndex of the SSID subinterface (17–23 typical)
+              {#SSIDNAME}  = SSID broadcast name (e.g. "TCS-Wireless")
+              {#IFNAME}    = subinterface name (e.g. "wifi0.1")
+
+            SSID config changes infrequently — discovery runs hourly. The XIQ
+            fleet template provides per-SSID security and VLAN data via API;
+            these SNMP items are a fallback label source and traffic counter.
+          item_prototypes:
+
+            - uuid: dfae97f116fd42b386121e923ed12c61
+              name: 'SSID {#SSIDNAME} ({#IFNAME}): name'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.2.{#SNMPINDEX}'
+              key: 'extremeap.ssid.name[{#SNMPINDEX}]'
+              delay: 1h
+              history: 7d
+              value_type: CHAR
+              description: 'SSID broadcast name string. Polled hourly — config-class data.'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: ssid
+                - tag: ssid
+                  value: '{#SSIDNAME}'
+
+            - uuid: cc602f1efeec4a2ead097a75f26117a8
+              name: 'SSID {#SSIDNAME} ({#IFNAME}): interface name'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.1.1.1.{#SNMPINDEX}'
+              key: 'extremeap.ssid.ifname[{#SNMPINDEX}]'
+              delay: 1h
+              history: 7d
+              value_type: CHAR
+              description: 'Subinterface name (e.g. "wifi0.1"). The radio prefix maps the SSID to its parent radio.'
+              preprocessing:
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              tags:
+                - tag: component
+                  value: ssid
+                - tag: ssid
+                  value: '{#SSIDNAME}'
+
+            - uuid: 29150d906c0e44ceb13a8ca1d349d4d0
+              name: 'SSID {#SSIDNAME}: TX bytes'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.4.1.2.{#SNMPINDEX}'
+              key: 'extremeap.ssid.txbytes[{#SNMPINDEX}]'
+              delay: 5m
+              history: 30d
+              trends: 90d
+              value_type: FLOAT
+              units: Bps
+              description: |
+                Per-SSID transmitted bytes per second from the Aerohive
+                per-SSID traffic counter table. Column index 2 confirmed by
+                the M0 walk; cross-reference XIQ wifi-interfaces/stats if
+                values disagree.
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: ssid
+                - tag: ssid
+                  value: '{#SSIDNAME}'
+
+            - uuid: fc512933856542d38e3fed6c60e94a0b
+              name: 'SSID {#SSIDNAME}: RX bytes'
+              type: SNMP_AGENT
+              snmp_oid: '.1.3.6.1.4.1.26928.1.1.1.2.1.4.1.4.{#SNMPINDEX}'
+              key: 'extremeap.ssid.rxbytes[{#SNMPINDEX}]'
+              delay: 5m
+              history: 30d
+              trends: 90d
+              value_type: FLOAT
+              units: Bps
+              description: 'Per-SSID received bytes per second from the Aerohive per-SSID traffic counter table.'
+              preprocessing:
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              tags:
+                - tag: component
+                  value: ssid
+                - tag: ssid
+                  value: '{#SSIDNAME}'
+
+      valuemaps:
+
+        - uuid: 6023f54ce8b347c49e4f278129515eff
+          name: 'Interface oper status'
+          mappings:
+            - value: '1'
+              newvalue: up
+            - value: '2'
+              newvalue: down
+            - value: '3'
+              newvalue: testing
+            - value: '4'
+              newvalue: unknown
+            - value: '5'
+              newvalue: dormant
+            - value: '6'
+              newvalue: notPresent
+            - value: '7'
+              newvalue: lowerLayerDown
+
+  triggers:
+
+    - uuid: caa728389fe34b1595c8597785108b4e
+      expression: 'min(/Extreme AP via SNMPv3/extremeap.cpu.util,5m)>{$EXTREMEAP.CPU.MAX}'
+      name: 'High CPU utilization (>{$EXTREMEAP.CPU.MAX}% for 5m)'
+      priority: AVERAGE
+      description: 'CPU has been continuously above the configured threshold for 5 minutes. Sustained high CPU on an AP usually indicates either a broken/spinning client, excessive scanning, or a firmware problem.'
+      tags:
+        - tag: scope
+          value: performance
+
+    - uuid: fef4ebfb603d49bea60a0c28b0df970b
+      expression: 'min(/Extreme AP via SNMPv3/extremeap.mem.util,5m)>{$EXTREMEAP.MEM.MAX}'
+      name: 'High memory utilization (>{$EXTREMEAP.MEM.MAX}% for 5m)'
+      priority: AVERAGE
+      description: 'Memory has been continuously above the configured threshold for 5 minutes. May indicate a memory leak in firmware; consider AP reboot if persistent.'
+      tags:
+        - tag: scope
+          value: performance
+
+    - uuid: 07d26e657c3344649aaa34b4a00daa11
+      expression: 'last(/Extreme AP via SNMPv3/net.if.status[ifOperStatus.10])=2'
+      name: 'Uplink interface eth0 is down'
+      priority: HIGH
+      description: 'The physical uplink interface on the AP reports oper-down. Either the AP is rebooting, the switch port is shut, or the cable is unplugged. ICMP ping triggers (ICMP Ping template) will fire shortly after.'
+      tags:
+        - tag: scope
+          value: availability
+
+    - uuid: dfaccb0728b1444381cf2cd0e33c4939
+      expression: 'last(/Extreme AP via SNMPv3/extremeap.noise.wifi0)>{$EXTREMEAP.NOISE.MAX}'
+      name: 'Noise floor on wifi0 is elevated (>{$EXTREMEAP.NOISE.MAX} dBm)'
+      priority: WARNING
+      description: |
+        Noise floor on radio 0 is less negative than the threshold (= more
+        ambient RF noise = degraded performance). Common causes: nearby
+        non-Wi-Fi interferers (microwave, security cameras, baby monitors)
+        or co-channel congestion from other APs. Expected baseline is
+        around -90 to -95 dBm on a quiet AP.
+      tags:
+        - tag: scope
+          value: rf
+        - tag: radio
+          value: wifi0
+
+    - uuid: ff56bcacd7fd4f04a66cc91844f14aba
+      expression: 'last(/Extreme AP via SNMPv3/extremeap.noise.wifi1)>{$EXTREMEAP.NOISE.MAX}'
+      name: 'Noise floor on wifi1 is elevated (>{$EXTREMEAP.NOISE.MAX} dBm)'
+      priority: WARNING
+      description: 'Noise floor on radio 1 is elevated. See wifi0 trigger description for context.'
+      tags:
+        - tag: scope
+          value: rf
+        - tag: radio
+          value: wifi1
+
+    - uuid: 378ed55d0c2a4cd7b363a4ad25375b79
+      expression: 'last(/Extreme AP via SNMPv3/system.uptime)<300'
+      name: 'AP rebooted within last 5 minutes'
+      priority: INFO
+      description: |
+        System uptime dropped below 5 minutes — AP has rebooted. This is
+        informational only; the trigger auto-resolves once uptime climbs
+        back above the threshold. Pair with XIQ device alarm correlation
+        to determine whether the reboot was scheduled (firmware update,
+        config push) or unexpected (kernel panic, power blip).
+      manual_close: 'YES'
+      tags:
+        - tag: scope
+          value: availability

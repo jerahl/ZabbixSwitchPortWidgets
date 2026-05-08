@@ -1,12 +1,20 @@
 {
     "manifest_version": 2.0,
-    "id":              "apdetail",
-    "name":            "AP Detail",
-    "namespace":       "APDetail",
-    "version":         "1.0",
-    "description":     "Multi-tab detail view for Extreme Networks APs — combines Zabbix SNMP, ExtremeCloud IQ, and PacketFence NAC data.",
-    "js":  ["assets/js/class.widget.js"],
-    "css": ["assets/css/widget.css"],
+    "id":               "apdetail",
+    "name":             "AP Detail",
+    "namespace":        "APDetail",
+    "version":          "1.0.0",
+    "type":             "widget",
+
+    "widget": {
+        "js_class": "CWidgetAPDetail",
+        "size":     {"width": 36, "height": 8}
+    },
+
+    "assets": {
+        "js":  ["class.widget.js"],
+        "css": ["widget.css"]
+    },
 
     "actions": {
         "widget.apdetail.view": {
@@ -17,12 +25,8 @@
 
     "config": {
         "in": {
-            "hostid": {
-                "type": "_hostid"
-            },
-            "time_period": {
-                "type": "_timeperiod"
-            }
+            "hostids":     {"type": "_hostid"},
+            "time_period": {"type": "_timeperiod"}
         },
         "out": [
             {"type": "_hostid"},

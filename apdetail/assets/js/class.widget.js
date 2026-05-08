@@ -3,142 +3,148 @@
 /**
  * AP Detail — widget JS class.
  *
- * Extends Zabbix's CWidget base class exactly as portdetail/ and switchports/
- * do — no build step, no bundler, plain ES2020 loaded as a module asset.
+ * Extends Zabbix's CWidget base class. Plain ES2020+, no build step.
  *
  * Responsibilities:
- *  - Restore active tab from sessionStorage on mount / after refresh
- *  - Handle tab switching and persist selection to sessionStorage
- *  - Animate health ring SVGs after data is rendered into the DOM
- *  - Drive sparkline rendering (delegated to ApTelemetry helper — M2)
- *  - Receive _timeperiod broadcast updates and re-trigger sparklines
+ *   - Tab nav: persist active tab to sessionStorage, restore on every
+ *     setContents (which fires after _hostid broadcasts and refreshes).
+ *   - Ring fill animation: compute stroke-dasharray from data-value and
+ *     transition into place after first paint.
+ *   - Keyboard nav on the tab bar (WAI-ARIA tablist).
  *
- * SessionStorage keys (namespaced to avoid collisions with switchports widget):
- *   ap.activeTab   — last selected tab name ('overview' | 'wireless' | …)
+ * Sparkline paths are pre-rendered server-side as <path d="..."/>
+ * elements; no JS sparkline code is needed.
  *
- * All keys prefixed 'ap.' — matches the 'sw.' convention in switchports/.
+ * Framework lessons (M1 closeout):
+ *   G27: Every lifecycle override calls super.<method>() first.
+ *   G28: DOM rendering and event binding happen in setContents. Each
+ *        setContents call gets a fresh this._body so we re-bind events
+ *        and re-trigger animations on every refresh.
  */
 class CWidgetAPDetail extends CWidget {
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────────────
 
     onInitialize() {
-        // Called once when the widget instance is created on the dashboard.
-        // Bind DOM-independent initialisation here.
+        super.onInitialize();
         this._activeTab = sessionStorage.getItem('ap.activeTab') ?? 'overview';
     }
 
-    onActivate() {
-        // Called every time the widget becomes visible / after a refresh cycle.
+    setContents(response) {
+        super.setContents(response);
+
+        const root = this._body && this._body.querySelector('.ap-detail');
+        if (!root) return;
+
+        // Restore the user's last selected tab.
         this._activateTab(this._activeTab);
-        this._animateRings();
-        // TODO (M2): this._telemetry = new ApTelemetry(this._container, …)
+
+        // Tab click delegation. this._body is fresh on every setContents
+        // so old listeners die with the old DOM tree — no double-binding.
+        root.addEventListener('click', (e) => {
+            const btn = e.target.closest('.ap-tab');
+            if (!btn || !root.contains(btn)) return;
+            this._activateTab(btn.dataset.tab);
+        });
+
+        // WAI-ARIA tablist keyboard nav.
+        const nav = root.querySelector('.ap-tabs');
+        if (nav) {
+            nav.addEventListener('keydown', (e) => this._onTabKeydown(e, nav));
+        }
+
+        // Trigger ring-fill animation on next frame so the CSS transition
+        // catches the dasharray change (otherwise the value is set during
+        // initial paint and there's nothing to animate from).
+        requestAnimationFrame(() => this._animateRings(root));
+    }
+
+    onActivate() {
+        super.onActivate();
     }
 
     onDeactivate() {
-        // Called when the dashboard navigates away or widget is hidden.
-        // Clean up any running timers or animation frames.
+        super.onDeactivate();
     }
 
-    // ── Tab management ────────────────────────────────────────────────────
+    // ── Tab management ───────────────────────────────────────────────────
 
-    /**
-     * Wire tab click events.  Called once after the widget HTML is injected
-     * into the DOM by Zabbix.
-     *
-     * Using event delegation on the nav element so we don't need to re-bind
-     * after AJAX refreshes that replace inner content.
-     */
-    onReady() {
-        const nav = this._container.querySelector('.ap-tabs');
-        if (!nav) return;
-
-        nav.addEventListener('click', (e) => {
-            const btn = e.target.closest('.ap-tab');
-            if (!btn) return;
-            this._activateTab(btn.dataset.tab);
-        });
-    }
-
-    /**
-     * Switch the visible tab and persist the selection.
-     *
-     * @param {string} tabName — one of overview|wireless|wired|clients|events|alerts
-     */
     _activateTab(tabName) {
-        const root = this._container.querySelector('.ap-detail');
+        if (!tabName) return;
+        const root = this._body && this._body.querySelector('.ap-detail');
         if (!root) return;
 
-        // Buttons
-        for (const btn of root.querySelectorAll('.ap-tab')) {
-            btn.classList.toggle('ap-tab--active', btn.dataset.tab === tabName);
-            btn.setAttribute('aria-selected', btn.dataset.tab === tabName ? 'true' : 'false');
+        // Fall back to overview if the persisted tab was renamed away.
+        const known = root.querySelector(`.ap-tab[data-tab="${CSS.escape(tabName)}"]`);
+        if (!known) {
+            tabName = 'overview';
         }
 
-        // Panels
+        for (const btn of root.querySelectorAll('.ap-tab')) {
+            const isActive = btn.dataset.tab === tabName;
+            btn.classList.toggle('ap-tab--active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            btn.setAttribute('tabindex', isActive ? '0' : '-1');
+        }
+
         for (const panel of root.querySelectorAll('.ap-panel')) {
-            const active = panel.dataset.panel === tabName;
-            panel.classList.toggle('ap-panel--active', active);
-            panel.hidden = !active;
+            const isActive = panel.dataset.panel === tabName;
+            panel.classList.toggle('ap-panel--active', isActive);
+            if (isActive) {
+                panel.removeAttribute('hidden');
+            }
+            else {
+                panel.setAttribute('hidden', 'hidden');
+            }
         }
 
         this._activeTab = tabName;
         sessionStorage.setItem('ap.activeTab', tabName);
     }
 
-    // ── Health rings ──────────────────────────────────────────────────────
+    _onTabKeydown(e, nav) {
+        const focused = document.activeElement;
+        if (!focused || !focused.classList.contains('ap-tab')) return;
 
-    /**
-     * Animate the SVG donut rings on the Overview tab.
-     *
-     * Each ring's <circle class="ap-ring__fill"> carries a data-value
-     * attribute (0–100) written by widget.view.php.  We calculate the
-     * stroke-dasharray to create the arc, then CSS transitions handle the
-     * animation.
-     *
-     * Circumference for r=26: 2π×26 ≈ 163.4
-     */
-    _animateRings() {
-        const CIRC = 2 * Math.PI * 26;  // must match SVG r attribute in widget.view.php
+        const tabs = Array.from(nav.querySelectorAll('.ap-tab'));
+        const idx  = tabs.indexOf(focused);
+        if (idx === -1) return;
 
-        for (const fill of this._container.querySelectorAll('.ap-ring__fill')) {
-            const pct = Math.min(100, Math.max(0, parseFloat(fill.dataset.value ?? '0')));
-            const arc = (pct / 100) * CIRC;
-            // Small rAF delay so CSS transition fires after initial paint.
-            requestAnimationFrame(() => {
-                fill.style.strokeDasharray = `${arc} ${CIRC - arc}`;
-            });
+        let next = idx;
+        switch (e.key) {
+            case 'ArrowLeft':  next = (idx - 1 + tabs.length) % tabs.length; break;
+            case 'ArrowRight': next = (idx + 1) % tabs.length; break;
+            case 'Home':       next = 0; break;
+            case 'End':        next = tabs.length - 1; break;
+            default: return;
         }
+        e.preventDefault();
+        tabs[next].focus();
+        this._activateTab(tabs[next].dataset.tab);
     }
 
-    // ── Broadcast receivers ───────────────────────────────────────────────
+    // ── Ring fill animation ──────────────────────────────────────────────
 
     /**
-     * Called by Zabbix when a _timeperiod broadcast arrives from the
-     * dashboard time selector.
+     * For each <circle class="ap-ring__fill"> in the DOM, compute the
+     * stroke-dasharray that produces an arc of the right length for its
+     * data-value (0–100) and apply it. CSS transition does the easing.
      *
-     * The period object shape: { from: string, to: string }
-     * Same handling as portdetail/assets/js/class.widget.js.
-     *
-     * TODO (M2): pass updated period to ApTelemetry instance to re-fetch
-     *            Zabbix history.get with the new time window.
+     * Circle radius is fixed at 26 in the SVG (matches widget.view.php),
+     * so the circumference 2π·26 ≈ 163.36 is constant. Two-segment
+     * dasharray "<arcLen> <restLen>" controls how much of the stroke
+     * is visible, starting at the top because of the -90deg transform
+     * applied in CSS.
      */
-    onTimePeriodChange(period) {
-        const root = this._container.querySelector('.ap-detail');
-        if (!root) return;
-        root.dataset.from = period.from;
-        root.dataset.to   = period.to;
-        // TODO (M2): this._telemetry?.update(period);
-    }
+    _animateRings(root) {
+        const CIRC = 2 * Math.PI * 26;
 
-    // ── Utilities ─────────────────────────────────────────────────────────
-
-    /**
-     * Convenience accessor — the outermost element injected by Zabbix for
-     * this widget instance.  Scopes all querySelector calls so widgets don't
-     * bleed across each other on multi-widget dashboards.
-     */
-    get _container() {
-        return this.getContents();
+        for (const fill of root.querySelectorAll('.ap-ring__fill')) {
+            const raw = parseFloat(fill.dataset.value ?? '0');
+            const pct = Number.isFinite(raw) ? Math.min(100, Math.max(0, raw)) : 0;
+            const arc = (pct / 100) * CIRC;
+            // Use float strings so SVG won't serialize "163.36000000000001".
+            fill.style.strokeDasharray = `${arc.toFixed(2)} ${(CIRC - arc).toFixed(2)}`;
+        }
     }
 }

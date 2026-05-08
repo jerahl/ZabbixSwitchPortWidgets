@@ -2,7 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Modules\APDetail;
+namespace Modules\TcsApDetail\Includes;
+
+// Polyfill: array_is_list() landed in PHP 8.1; this Zabbix host is on 8.0.
+// Declared inside this namespace so XIQClient's unqualified array_is_list()
+// calls (lines ~800, 860, 958) resolve via PHP's namespace-first function
+// lookup.  function_exists check uses __NAMESPACE__ so the polyfill isn't
+// re-declared if XIQClient.php is loaded twice in the same request.
+if (!function_exists(__NAMESPACE__ . '\\array_is_list')) {
+    function array_is_list(array $arr): bool {
+        return $arr === array_values($arr);
+    }
+}
 
 /**
  * XIQClient — ExtremeCloud IQ API HTTP client.
@@ -128,10 +139,10 @@ final class XIQClient
 
     // ── State ────────────────────────────────────────────────────────────────
 
-    private readonly string  $baseUrl;
-    private readonly ?string $staticToken;   // fromToken() path — never refreshed
-    private readonly ?string $username;      // fromCredentials() path
-    private readonly ?string $password;      // fromCredentials() path
+    private string  $baseUrl;
+    private ?string $staticToken;   // fromToken() path — never refreshed
+    private ?string $username;      // fromCredentials() path
+    private ?string $password;      // fromCredentials() path
 
     /** Last observed RateLimit-Remaining value across all calls this instance. */
     private int $rateLimitRemaining = PHP_INT_MAX;

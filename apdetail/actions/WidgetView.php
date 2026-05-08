@@ -4,65 +4,111 @@ declare(strict_types=1);
 
 namespace Modules\APDetail\Actions;
 
+use API;
 use CControllerDashboardWidgetView;
 use CControllerResponseData;
-
-use API;
 
 /**
  * AP Detail — widget view controller.
  *
- * doAction() is the single entry point called by Zabbix on every widget
- * refresh.  It is responsible for:
+ * M2 task #2 scope: gather Device Health metrics (CPU, Memory, Uptime)
+ * from the Extreme AP via SNMPv3 template's items and fetch enough
+ * history.get data to render server-side SVG sparkline paths.
  *
- *  1. Reading the resolved host from the _hostid broadcast (or the form's
- *     static hostid field if no broadcast is active).
- *  2. Fetching Zabbix data via the internal API (no HTTP — we are inside
- *     the Zabbix PHP process).
- *  3. Calling XIQClient and PFClient for live API data.
- *  4. Passing all collected data to the view via setResponse().
+ * Subsequent M2 tasks layer on Live Telemetry sparklines, System Info
+ * KV, Network Info KV, Connectivity Issues, and Recent Events; each
+ * extends gatherHealth's pattern of resolve-items → fetch-values →
+ * pack-into-data.
  *
- * Convention: match switchports/actions/WidgetView.php structure exactly.
- * Use named arguments on multi-param API calls for readability.
+ * Framework lessons baked in (M1 closeout, see project plan §B):
+ *   G22: hostids field is plural (single-host with setMultiple(false));
+ *        fields_values['hostids'] is an array — take first.
+ *   G26: All operator-visible payload packed under top-level 'data' key.
+ *        Custom keys outside 'data' get stripped by the AJAX layer.
+ *   G29: Read field values via $this->fields_values, not getInput().
  *
- * Status: M1 scaffold — the client libraries are stubbed pending
- * implementation in M1 step 1 (XIQClient) and step 2 (PFClient).  All
- * payload fields are present and correctly typed but populated as empty
- * arrays.  This file's job in M1 step 0 is to make the response shape
- * correct so the smoke test in step 3 only has to swap stubs for real
- * client calls.
+ * PHP 8.0.30 (G21) — no readonly, no enums, no never, no intersection
+ *   types, no new in initializers.
  */
 final class WidgetView extends CControllerDashboardWidgetView {
 
-    protected function doAction(): void {
-        // ── 1. Resolve host ───────────────────────────────────────────────
-        // getInputHost() resolves the broadcast _hostid or falls back to
-        // the statically configured hostid field in WidgetForm.
-        $host_id = $this->getInputHost();
+    /** Item key for CPU utilization (Aerohive enterprise OID .26928.1.2.4.0). */
+    private const ITEM_KEY_CPU = 'extremeap.cpu.util';
 
-        if ($host_id === null) {
+    /** Item key for Memory utilization (Aerohive enterprise OID .26928.1.2.10.0). */
+    private const ITEM_KEY_MEM = 'extremeap.mem.util';
+
+    /** Item key for system uptime (standard Zabbix SNMP item). */
+    private const ITEM_KEY_UPTIME = 'system.uptime';
+
+    /** CPU alert threshold — matches {$EXTREMEAP.CPU.MAX} default in the per-AP template. */
+    private const CPU_THRESHOLD = 80.0;
+
+    /** Memory alert threshold — matches {$EXTREMEAP.MEM.MAX} default in the per-AP template. */
+    private const MEM_THRESHOLD = 85.0;
+
+    /** Sparkline viewBox width (SVG user units, stretches via preserveAspectRatio="none"). */
+    private const SPARK_W = 200;
+
+    /** Sparkline viewBox height. */
+    private const SPARK_H = 36;
+
+    /** Maximum sparkline plot points after downsampling. */
+    private const SPARK_POINTS_MAX = 120;
+
+    /** API::History row cap before downsampling — generous enough for 24h@1m polling. */
+    private const HISTORY_LIMIT = 1500;
+
+    /** value_type=0 means FLOAT in Zabbix's history table. CPU/Mem are FLOAT. */
+    private const VALUE_TYPE_FLOAT = 0;
+
+    /** value_type=3 means UNSIGNED. system.uptime is UNSIGNED. */
+    private const VALUE_TYPE_UNSIGNED = 3;
+
+    protected function doAction(): void {
+        // ── 1. Resolve host from broadcast/form ─────────────────────────
+        $field_hostids = $this->fields_values['hostids'] ?? [];
+        $host_id = 0;
+
+        if (is_array($field_hostids)) {
+            $first = reset($field_hostids);
+            $host_id = $first !== false ? (int) $first : 0;
+        }
+        elseif (is_numeric($field_hostids)) {
+            $host_id = (int) $field_hostids;
+        }
+
+        $name = $this->getInput('name', $this->widget->getDefaultName());
+        $debug_mode = $this->getDebugMode();
+
+        $time_period = $this->normalizeTimePeriod(
+            $this->fields_values['time_period'] ?? null
+        );
+
+        // ── 2. No-host state — render shell only ────────────────────────
+        if ($host_id <= 0) {
             $this->setResponse(new CControllerResponseData([
-                'name'  => $this->getInput('name', $this->widget->getDefaultName()),
-                'error' => _('No AP host selected.'),
-                'user'  => ['debug_mode' => $this->getDebugMode()],
+                'name' => $name,
+                'data' => [
+                    'host_id'     => 0,
+                    'host'        => null,
+                    'time_period' => $time_period,
+                    'health'      => $this->emptyHealth(),
+                    'error'       => _('No AP host selected. Wire this widget to a Host Navigator broadcast or configure a host in the widget settings.'),
+                ],
+                'user' => ['debug_mode' => $debug_mode],
             ]));
             return;
         }
 
-        // ── 2. Zabbix host object + interfaces + macros ───────────────────
-        // selectInterfaces is required to derive the AP management IP
-        // (PFClient uses it as switch_ip for every locationlog and
-        // radius_audit_log query — closeout G3 sidesteps the dual-MAC
-        // problem by always filtering PF logs on switch_ip rather than MAC).
-        // selectMacros surfaces the host-scoped {$XIQ_DEVICE_ID} macro
-        // which is the only reliable Zabbix → XIQ join key (see closeout
-        // §7 final decisions: full-scan fallback only on first onboard).
+        // ── 3. Resolve host via internal API ────────────────────────────
+        // selectItems pulls the per-host items list with last values; we
+        // index by key_ for O(1) lookup in gatherHealth().
         $hosts = API::Host()->get([
             'output'           => ['hostid', 'host', 'name', 'status'],
-            'selectItems'      => ['itemid', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type'],
-            'selectGroups'     => ['groupid', 'name'],
-            'selectInterfaces' => ['interfaceid', 'ip', 'dns', 'useip', 'type', 'main'],
-            'selectMacros'     => ['macro', 'value'],
+            'selectItems'      => ['itemid', 'key_', 'lastvalue', 'lastclock', 'value_type', 'units'],
+            'selectInterfaces' => ['interfaceid', 'ip', 'main', 'type', 'useip', 'dns'],
+            'selectHostGroups' => ['groupid', 'name'],
             'hostids'          => [$host_id],
             'limit'            => 1,
         ]);
@@ -71,256 +117,364 @@ final class WidgetView extends CControllerDashboardWidgetView {
 
         if ($host === null) {
             $this->setResponse(new CControllerResponseData([
-                'name'  => $this->getInput('name', $this->widget->getDefaultName()),
-                'error' => _('AP host not found or access denied.'),
-                'user'  => ['debug_mode' => $this->getDebugMode()],
+                'name' => $name,
+                'data' => [
+                    'host_id'     => $host_id,
+                    'host'        => null,
+                    'time_period' => $time_period,
+                    'health'      => $this->emptyHealth(),
+                    'error'       => _('AP host not found or access denied.'),
+                ],
+                'user' => ['debug_mode' => $debug_mode],
             ]));
             return;
         }
 
-        // AP management IP — primary SNMP interface address.  The Extreme
-        // template polls the AP exclusively over SNMP, so the main SNMP
-        // interface is also the management interface PF logs against.
-        $ap_ip = $this->resolveApIp($host['interfaces'] ?? []);
+        // ── 4. Health gather ────────────────────────────────────────────
+        $health = $this->gatherHealth(
+            items:    $host['items'] ?? [],
+            from_ts:  $time_period['from_ts'],
+            to_ts:    $time_period['to_ts']
+        );
 
-        // XIQ device id from host-scoped macro {$XIQ_DEVICE_ID}.  Set per
-        // host during onboarding (one-time XIQ /devices full-scan, then
-        // stamped on the Zabbix host).  Returned as a string here — cast
-        // to int when calling XIQClient methods (XIQ uses int64 ids).
-        $xiq_device_id = $this->resolveHostMacro($host['macros'] ?? [], '{$XIQ_DEVICE_ID}');
-
-        // ── 3. Widget config fields (consumed by clients in M1 step 1) ────
-        // These are only used when constructing the client instances — not
-        // returned to the view.  Defaults mirror WidgetForm::addFields().
-        $xiq_host = (string) $this->getInput('xiq_host', 'https://api.extremecloudiq.com');
-        $pf_url   = (string) $this->getInput('pf_url',   '');
-        $pf_user  = (string) $this->getInput('pf_user',  '');
-        $pf_pass  = (string) $this->getInput('pf_pass',  '');
-
-        // ── 4. Zabbix health items ────────────────────────────────────────
-        // Reduced to CPU + Memory only.  M0 SNMP analysis confirmed
-        // HOST-RESOURCES-MIB (.1.3.6.1.2.1.25) and POWER-ETHERNET-MIB
-        // (.1.3.6.1.2.1.105) are both absent on AP305C — there is no
-        // standard temperature OID and the AP is a PoE consumer, not a
-        // PSE.  Vendor CPU/memory items in the Extreme AP template are
-        // SNMP-polled OIDs from enterprises.26928, not standard MIB.
-        // TODO (M2): implement gatherHealth() key matching for the AP
-        //            template's CPU + memory item keys + threshold colors.
-        $health = $this->gatherHealth($host['items']);
-
-        // ── 5. XIQ data ───────────────────────────────────────────────────
-        // XIQClient (built in M1 step 1) — shared OAuth2 library at
-        // includes/XIQClient.php.  Bearer-token auth via /login.  OAuth2
-        // credentials from Zabbix global macros {$XIQ_CLIENT_ID} and
-        // {$XIQ_CLIENT_SECRET}; base URL from the xiq_host config field.
-        //
-        // Method set used by Overview (per closeout §6 signatures):
-        //   getDevice($xiqId)                   identity, software_version
-        //   getDeviceNetworkPolicy($xiqId)      policy id + name
-        //   getRadioStats($xiqId, 15)           per-radio current values (G6: 15-min window)
-        //   getActiveClients($xiqId)            connected clients (G4: deviceIds=, G5: views=FULL)
-        //   getDeviceIssues($xiqId, $f, $t)     Connectivity Issues panel
-        //   getDeviceAlarms($xiqId, $f, $t)     Recent Events secondary feed
-        //   getWirelessGraph($xiqId, $r, …)     telemetry sparklines (G8: $r ∈ WIFI0|WIFI1|WIFI2, G9: sort)
-        //   getClientGraph($xiqId, $f, $t)      AP-total client-count sparkline
-        //   getLocation($locationId)            building / floor metadata
-        //
-        // Wireless tab (M3) additionally calls getPolicySsids() and
-        // getSsidStatus() — both 5-min cached, joined on SSID id (G7).
-        //
-        // TODO (M1 step 1): instantiate XIQClient and replace these stubs.
-        $xiq_device   = [];   // GET /devices/{id}
-        $xiq_radios   = [];   // GET /devices/{id}/wifi-interfaces/stats?startTime=&endTime=
-        $xiq_clients  = [];   // GET /clients/active?deviceIds=X&views=FULL
-        $xiq_issues   = [];   // GET /d360/device/issues
-        $xiq_alarms   = [];   // GET /devices/{id}/alarms
-        $xiq_location = [];   // GET /locations/{id}
-
-        // ── 6. PacketFence data ───────────────────────────────────────────
-        // PFClient (built in M1 step 2) — extracted from the existing
-        // packetfence/ widget at includes/PFClient.php.  Bearer-token auth
-        // via /api/v1/login (~50 min cache).  Credentials from widget
-        // config: pf_url / pf_user / pf_pass.
-        //
-        // Filter is always switch_ip = AP management IP — sidesteps the
-        // dual-MAC problem (G3) and is required to capture both Accept
-        // (switch_ip_address populated) and Reject (nas_ip_address
-        // populated) records via op:or in radius_audit_log (G1).
-        //
-        // Method set (per closeout §6 signatures):
-        //   activeSessionMacs($apIp)            input MAC list for nodesByMac()
-        //   nodesByMac($macs)                   batch enrichment (G12: op:or, NOT op:in)
-        //   radiusAuditLog($apIp, 100)          Auth Failures table
-        //   locationlogSearch($apIp, $f, $t)    raw rows for client-count sparkline buckets
-        //
-        // CAVEAT: do NOT use PF's locationlog active sessions as the
-        // connected-clients list (G11).  PF's active sentinel
-        // (end_time = '0000-00-00 00:00:00') is sticky and stale.  XIQ
-        // /clients/active is the source of truth; PF enriches per MAC.
-        //
-        // TODO (M1 step 2): instantiate PFClient and replace these stubs.
-        $pf_nodes     = [];   // POST /api/v1/nodes/search (enriched per MAC)
-        $pf_radius    = [];   // GET  /api/v1/radius_audit_log
-        $pf_locations = [];   // POST /api/v1/locationlogs/search (raw rows for bucketing)
-
-        // ── 7. Time period ────────────────────────────────────────────────
-        // Received via the _timeperiod broadcast — passed to the sparkline
-        // JS so it renders the correct history window.  Same pattern as
-        // portdetail/actions/WidgetView.php.
-        //
-        // CAVEAT: PF locationlog retention is unconfirmed (closeout §7 —
-        // PF locationlog retention DEFER).  Cap the dashboard time-period
-        // selector at 24h until SSH-verified against pf.conf.
-        $time_period = $this->getTimePeriod();
-
-        // ── 8. Respond ────────────────────────────────────────────────────
+        // ── 5. Respond ──────────────────────────────────────────────────
         $this->setResponse(new CControllerResponseData([
-            'name'          => $this->getInput('name', $this->widget->getDefaultName()),
-            'host'          => $host,
-            'host_id'       => (int) $host_id,
-            'ap_ip'         => $ap_ip,
-            'xiq_device_id' => $xiq_device_id,
-            'health'        => $health,
-            'xiq_device'    => $xiq_device,
-            'xiq_radios'    => $xiq_radios,
-            'xiq_clients'   => $xiq_clients,
-            'xiq_issues'    => $xiq_issues,
-            'xiq_alarms'    => $xiq_alarms,
-            'xiq_location'  => $xiq_location,
-            'pf_nodes'      => $pf_nodes,
-            'pf_radius'     => $pf_radius,
-            'pf_locations'  => $pf_locations,
-            'time_period'   => $time_period,
-            'user'          => ['debug_mode' => $this->getDebugMode()],
+            'name' => $name,
+            'data' => [
+                'host_id'     => $host_id,
+                'host'        => $host,
+                'time_period' => $time_period,
+                'health'      => $health,
+                'error'       => null,
+            ],
+            'user' => ['debug_mode' => $debug_mode],
         ]));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────
+    //  Health gather — CPU + Memory rings + Uptime KV
+    // ──────────────────────────────────────────────────────────────────
 
     /**
-     * Collect AP health metrics from the host's last-value item list.
+     * Build the health metrics payload consumed by widget.view.php.
      *
-     * Mirrors switchports/WidgetView.php gatherHealth() — same item key
-     * pattern matching, same return shape style.  Reduced to CPU + Memory
-     * only after M0 SNMP analysis confirmed HOST-RESOURCES-MIB and
-     * POWER-ETHERNET-MIB are absent on AP305C.
+     * Returns a dict shaped like:
+     *   {
+     *     cpu:    { value, status, threshold, item_id, spark_line, spark_fill, points },
+     *     mem:    { value, status, threshold, item_id, spark_line, spark_fill, points },
+     *     uptime: { seconds, formatted, since_epoch, item_id }
+     *   }
      *
-     * @param  array<int,array<string,mixed>> $items  All items for the host.
-     * @return array{
-     *     cpu: array{value:float|null, status:string},
-     *     mem: array{value:float|null, status:string},
-     * }
+     * `value` is the most-recent percentage as a float (or null on missing
+     * item). `status` is one of 'ok' | 'warn' | 'crit' | 'unknown'.
+     * `spark_line` / `spark_fill` are SVG path d="..." strings ready to
+     * drop into <path d="..."/>; pre-rendered server-side because the
+     * data is small (≤120 points, ~1.5 KB) and PHP rendering keeps the
+     * client JS minimal.
      *
-     * TODO (M2): fill in key matching logic and threshold constants.
+     * @param array<int, array<string, mixed>> $items  All host items.
+     * @param int $from_ts  Sparkline window start (unix seconds).
+     * @param int $to_ts    Sparkline window end (unix seconds).
+     * @return array<string, mixed>
      */
-    private function gatherHealth(array $items): array {
-        // Index by key_ for O(1) lookup in M2's matcher.
+    private function gatherHealth(array $items, int $from_ts, int $to_ts): array {
+        // Index items by key_ for direct lookup.
         $by_key = [];
         foreach ($items as $item) {
             $by_key[$item['key_']] = $item;
         }
 
         return [
-            'cpu' => ['value' => null, 'status' => 'unknown'],
-            'mem' => ['value' => null, 'status' => 'unknown'],
+            'cpu' => $this->buildRing(
+                $by_key[self::ITEM_KEY_CPU] ?? null,
+                self::CPU_THRESHOLD,
+                $from_ts,
+                $to_ts
+            ),
+            'mem' => $this->buildRing(
+                $by_key[self::ITEM_KEY_MEM] ?? null,
+                self::MEM_THRESHOLD,
+                $from_ts,
+                $to_ts
+            ),
+            'uptime' => $this->buildUptime($by_key[self::ITEM_KEY_UPTIME] ?? null),
         ];
     }
 
     /**
-     * Resolve the host ID from the widget's _hostid broadcast input.
-     *
-     * Returns null when no host is selected (no broadcast active and no
-     * static host configured in the form).  The field name 'hostid'
-     * matches the manifest.json "in" key and the CWidgetFieldHost declared
-     * in WidgetForm::addFields().
+     * Resolve a single ring metric — current value + status + sparkline.
      */
-    private function getInputHost(): ?int {
-        $raw = $this->getInput('hostid', null);
-        return $raw !== null ? (int) $raw : null;
+    private function buildRing(?array $item, float $threshold, int $from_ts, int $to_ts): array {
+        if ($item === null) {
+            return [
+                'value'      => null,
+                'status'     => 'unknown',
+                'threshold'  => $threshold,
+                'item_id'    => null,
+                'spark_line' => '',
+                'spark_fill' => '',
+                'points'     => 0,
+                'last_clock' => null,
+            ];
+        }
+
+        $value = is_numeric($item['lastvalue'] ?? null) ? (float) $item['lastvalue'] : null;
+        $points = $this->fetchHistoryPoints((int) $item['itemid'], $from_ts, $to_ts);
+        $paths  = $this->buildSparklinePath($points);
+
+        return [
+            'value'      => $value,
+            'status'     => $this->valueStatus($value, $threshold),
+            'threshold'  => $threshold,
+            'item_id'    => (int) $item['itemid'],
+            'spark_line' => $paths['line'],
+            'spark_fill' => $paths['fill'],
+            'points'     => count($points),
+            'last_clock' => is_numeric($item['lastclock'] ?? null) ? (int) $item['lastclock'] : null,
+        ];
     }
 
     /**
-     * Return the active time period from the _timeperiod broadcast.
-     *
-     * Falls back to a 1-hour default so sparklines always have a range.
-     * Matches the pattern in portdetail/actions/WidgetView.php.
-     *
-     * Defensively coerces each axis individually because Zabbix 7.x can
-     * deliver the broadcast input as a partial array — e.g.
-     * ['from' => null, 'to' => null] when no time-period broadcaster is
-     * wired on the dashboard, or [...,'from_ts' => 12345] without the
-     * human-readable 'from' string.  We accept the structure as long as
-     * it's an array, and fall back per-axis to defaults otherwise.
-     *
-     * The proper long-term fix is to declare a CWidgetFieldTimePeriod
-     * in WidgetForm so the field validates the input shape — deferred
-     * to M2 when sparkline rendering actually consumes the time range.
-     *
-     * @return array{from:string, to:string}
+     * Resolve uptime — current seconds + human-readable formatting.
      */
-    private function getTimePeriod(): array {
-        $period = $this->getInput('time_period', null);
-        $period = is_array($period) ? $period : [];
+    private function buildUptime(?array $item): array {
+        $seconds = is_numeric($item['lastvalue'] ?? null) ? (int) $item['lastvalue'] : null;
 
-        $from = (isset($period['from']) && is_string($period['from']) && $period['from'] !== '')
-            ? $period['from']
-            : 'now-1h';
-
-        $to = (isset($period['to']) && is_string($period['to']) && $period['to'] !== '')
-            ? $period['to']
-            : 'now';
-
-        return ['from' => $from, 'to' => $to];
+        return [
+            'seconds'     => $seconds,
+            'formatted'   => $seconds !== null ? $this->formatUptime($seconds) : '—',
+            'since_epoch' => $seconds !== null ? (time() - $seconds) : null,
+            'item_id'     => $item !== null ? (int) $item['itemid'] : null,
+        ];
     }
 
     /**
-     * Pick the AP's management IP from the host's interface list.
+     * Pull and downsample history rows for a single item.
      *
-     * Prefers the primary SNMP interface (type=2, main=1) since the
-     * Extreme AP template polls exclusively over SNMP and that interface
-     * holds the address PF logs against.  Falls back to the first
-     * interface if no primary SNMP entry exists.
+     * Returns rows shaped [{clock:int, value:float}, …] sorted ascending
+     * by clock so the sparkline draws left-to-right in chronological order.
+     * Downsamples bucket-averaged to SPARK_POINTS_MAX so wide windows
+     * (24 h, 7 d, 90 d) don't produce crowded path strings.
      *
-     * @param  array<int,array<string,mixed>> $interfaces
+     * @return list<array{clock:int, value:float}>
      */
-    private function resolveApIp(array $interfaces): string {
-        // Zabbix interface type constants — type=2 is SNMP.
-        $primary_snmp = null;
-        foreach ($interfaces as $iface) {
-            if ((int) ($iface['type'] ?? 0) === 2 && (int) ($iface['main'] ?? 0) === 1) {
-                $primary_snmp = $iface;
-                break;
+    private function fetchHistoryPoints(int $item_id, int $from_ts, int $to_ts): array {
+        if ($from_ts <= 0 || $to_ts <= $from_ts) {
+            return [];
+        }
+
+        $rows = API::History()->get([
+            'output'    => ['clock', 'value'],
+            'history'   => self::VALUE_TYPE_FLOAT,
+            'itemids'   => [$item_id],
+            'time_from' => $from_ts,
+            'time_till' => $to_ts,
+            'sortfield' => ['clock'],
+            'sortorder' => ZBX_SORT_UP,
+            'limit'     => self::HISTORY_LIMIT,
+        ]);
+
+        if (!is_array($rows) || count($rows) === 0) {
+            return [];
+        }
+
+        $points = [];
+        foreach ($rows as $row) {
+            $points[] = [
+                'clock' => (int) $row['clock'],
+                'value' => (float) $row['value'],
+            ];
+        }
+
+        return $this->downsample($points, self::SPARK_POINTS_MAX);
+    }
+
+    /**
+     * Bucket-average downsample to at most $target points.
+     */
+    private function downsample(array $points, int $target): array {
+        $n = count($points);
+        if ($n <= $target || $target <= 0) {
+            return $points;
+        }
+
+        $bucket = (int) ceil($n / $target);
+        $out = [];
+
+        for ($i = 0; $i < $n; $i += $bucket) {
+            $chunk = array_slice($points, $i, $bucket);
+            $sum_v = 0.0;
+            $sum_c = 0;
+            $count = count($chunk);
+            foreach ($chunk as $p) {
+                $sum_v += $p['value'];
+                $sum_c += $p['clock'];
             }
+            $out[] = [
+                'clock' => (int) ($sum_c / $count),
+                'value' => $sum_v / $count,
+            ];
         }
-        $iface = $primary_snmp ?? ($interfaces[0] ?? null);
 
-        if ($iface === null) {
-            return '';
-        }
-
-        return ((int) ($iface['useip'] ?? 1) === 1)
-            ? (string) ($iface['ip'] ?? '')
-            : (string) ($iface['dns'] ?? '');
+        return $out;
     }
 
     /**
-     * Pull a named macro value out of API::Host()->get(... selectMacros).
+     * Build SVG path d="..." strings for a sparkline line and its fill area.
      *
-     * Returns null when the macro is not defined on the host.  Reads only
-     * host-scoped macros — global macros and template-inherited macros
-     * are intentionally out of scope here, since {$XIQ_DEVICE_ID} must be
-     * unique per AP (set during onboarding) and inheritance would defeat
-     * that.  Global OAuth2 credentials are resolved inside XIQClient via
-     * CMacrosResolverHelper, not here.
+     * Auto-scales y between min and max of the data with a 5% range floor
+     * so a near-flat signal doesn't get amplified to look chaotic. Returns
+     * empty strings when there are no points (view renders an empty state).
      *
-     * @param  array<int,array{macro:string,value:string}> $macros
+     * @param list<array{clock:int, value:float}> $points
+     * @return array{line:string, fill:string}
      */
-    private function resolveHostMacro(array $macros, string $name): ?string {
-        foreach ($macros as $m) {
-            if (($m['macro'] ?? '') === $name) {
-                return (string) ($m['value'] ?? '');
-            }
+    private function buildSparklinePath(array $points): array {
+        $n = count($points);
+        if ($n === 0) {
+            return ['line' => '', 'fill' => ''];
         }
-        return null;
+
+        $w = (float) self::SPARK_W;
+        $h = (float) self::SPARK_H;
+        $pad = 1.5;
+        $usable_h = $h - 2 * $pad;
+
+        if ($n === 1) {
+            $y = $h / 2;
+            $line = sprintf('M0,%.2f L%.2f,%.2f', $y, $w, $y);
+            $fill = sprintf('M0,%.2f L%.2f,%.2f L%.2f,%.2f L0,%.2f Z', $y, $w, $y, $w, $h, $h);
+            return ['line' => $line, 'fill' => $fill];
+        }
+
+        $values = array_column($points, 'value');
+        $min = min($values);
+        $max = max($values);
+        $range = max($max - $min, 5.0);   // 5% floor — avoids amplifying jitter on flat signals.
+
+        // Recenter window when range was bumped to the floor — keeps the
+        // line centered vertically rather than hugging the bottom edge.
+        $headroom = ($range - ($max - $min)) / 2;
+        $plot_min = $min - $headroom;
+
+        $step = $w / ($n - 1);
+        $xys = [];
+        foreach ($values as $i => $v) {
+            $x = $i * $step;
+            $y = $h - $pad - (($v - $plot_min) / $range) * $usable_h;
+            $xys[] = [$x, $y];
+        }
+
+        $line_parts = [];
+        foreach ($xys as $i => $xy) {
+            $line_parts[] = ($i === 0 ? 'M' : 'L') . sprintf('%.2f,%.2f', $xy[0], $xy[1]);
+        }
+        $line = implode(' ', $line_parts);
+
+        // Fill = same path then drop to the bottom-right and bottom-left and close.
+        $first = $xys[0];
+        $last  = $xys[$n - 1];
+        $fill = sprintf('M%.2f,%.2f', $first[0], $h)
+              . ' ' . implode(' ', array_map(
+                    static fn($p) => 'L' . sprintf('%.2f,%.2f', $p[0], $p[1]),
+                    $xys
+                ))
+              . sprintf(' L%.2f,%.2f Z', $last[0], $h);
+
+        return ['line' => $line, 'fill' => $fill];
+    }
+
+    /**
+     * Map a metric value to a status bucket relative to its alert threshold.
+     *
+     *   value >= threshold              → 'crit'  (red)   triggers will fire
+     *   value >= threshold * 0.85       → 'warn'  (amber) approaching alert
+     *   value <  threshold * 0.85       → 'ok'    (green) healthy
+     *   value === null                  → 'unknown'       no data
+     */
+    private function valueStatus(?float $value, float $threshold): string {
+        if ($value === null) {
+            return 'unknown';
+        }
+        if ($value >= $threshold) {
+            return 'crit';
+        }
+        if ($value >= $threshold * 0.85) {
+            return 'warn';
+        }
+        return 'ok';
+    }
+
+    /**
+     * Human-readable uptime: "12d 4h 13m" or "47m 12s" for short uptimes.
+     * Returns "—" for negative or wildly large nonsense values.
+     */
+    private function formatUptime(int $seconds): string {
+        if ($seconds < 0 || $seconds > 365 * 86400 * 10) {
+            return '—';
+        }
+
+        $d = intdiv($seconds, 86400);
+        $h = intdiv($seconds % 86400, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+
+        if ($d > 0) {
+            return sprintf('%dd %dh %dm', $d, $h, $m);
+        }
+        if ($h > 0) {
+            return sprintf('%dh %dm', $h, $m);
+        }
+        if ($m > 0) {
+            return sprintf('%dm %ds', $m, $s);
+        }
+        return sprintf('%ds', $s);
+    }
+
+    /**
+     * Empty-state health payload — used when there's no host yet so the
+     * view can still render its skeleton without conditionals.
+     */
+    private function emptyHealth(): array {
+        return [
+            'cpu'    => $this->buildRing(null, self::CPU_THRESHOLD, 0, 0),
+            'mem'    => $this->buildRing(null, self::MEM_THRESHOLD, 0, 0),
+            'uptime' => $this->buildUptime(null),
+        ];
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  Time period normalization
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Coerce a fields_values['time_period'] entry into the shape the
+     * view + history.get calls need. CWidgetFieldTimePeriod populates
+     * 'from', 'to', 'from_ts', 'to_ts' — we forward all four. The *_ts
+     * values are unix timestamps already resolved from relative strings
+     * by the framework.
+     *
+     * @param mixed $period Raw value from fields_values['time_period'].
+     * @return array{from:string, to:string, from_ts:int, to_ts:int}
+     */
+    private function normalizeTimePeriod($period): array {
+        $now = time();
+        $hour_ago = $now - 3600;
+
+        if (!is_array($period)) {
+            return ['from' => 'now-1h', 'to' => 'now', 'from_ts' => $hour_ago, 'to_ts' => $now];
+        }
+
+        $from_ts = isset($period['from_ts']) && is_numeric($period['from_ts'])
+            ? (int) $period['from_ts'] : $hour_ago;
+        $to_ts = isset($period['to_ts']) && is_numeric($period['to_ts'])
+            ? (int) $period['to_ts'] : $now;
+
+        return [
+            'from'    => (string) ($period['from'] ?? 'now-1h'),
+            'to'      => (string) ($period['to']   ?? 'now'),
+            'from_ts' => $from_ts,
+            'to_ts'   => $to_ts,
+        ];
     }
 }
