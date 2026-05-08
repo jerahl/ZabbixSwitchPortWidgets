@@ -137,6 +137,28 @@ final class WidgetView extends CControllerDashboardWidgetView {
     /** Host macro carrying the XIQ serial (stamped at LLD-host creation). */
     private const MACRO_XIQ_SERIAL = '{$XIQ_SERIAL}';
 
+    // ── Network Info KV table (M2 task #6) ──────────────────────────────
+    //
+    // Sources:
+    //   - Host interface (main=1) for IPv4 + DNS hostname.
+    //   - xiq.ap.ip[{$XIQ_SERIAL}] as IPv4 cross-check.
+    //   - Optional prefix-matched SNMP items for IPv6 / gateway / LLDP
+    //     when the per-AP template is extended to carry them.
+
+    /** Fleet-template item-key prefix for the AP's management IPv4. */
+    private const ITEM_KEY_PREFIX_XIQ_IP = 'xiq.ap.ip[';
+
+    /** Optional SNMP item prefixes — emit "—" when absent.  These match
+     *  the keys per CLAUDE_CODE_PLAN §8.6 (lldp.neighbor.*) plus the
+     *  conventional Zabbix SNMP-template names for IPv6 / gateway / DNS. */
+    private const ITEM_KEY_PREFIX_IPV6           = 'net.if.ip6[';
+    private const ITEM_KEY_FALLBACK_IPV6_LEGACY  = 'extremeap.ipv6.0';
+    private const ITEM_KEY_PREFIX_GATEWAY        = 'net.route.default';
+    private const ITEM_KEY_FALLBACK_GATEWAY      = 'extremeap.gateway.0';
+    private const ITEM_KEY_PREFIX_DNS            = 'extremeap.dns';
+    private const ITEM_KEY_PREFIX_LLDP_SYSNAME   = 'lldp.neighbor.sysname';
+    private const ITEM_KEY_PREFIX_LLDP_PORTID    = 'lldp.neighbor.portid';
+
     protected function doAction(): void {
         // ── 1. Resolve host from broadcast/form ─────────────────────────
         $field_hostids = $this->fields_values['hostids'] ?? [];
@@ -169,6 +191,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'telemetry'    => $this->emptyTelemetry(),
                     'connectivity' => $this->emptyConnectivity(),
                     'system_info'  => $this->emptySystemInfo(),
+                    'network_info' => $this->emptyNetworkInfo(),
                     'error'        => _('No AP host selected. Wire this widget to a Host Navigator broadcast or configure a host in the widget settings.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
@@ -201,6 +224,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'telemetry'    => $this->emptyTelemetry(),
                     'connectivity' => $this->emptyConnectivity(),
                     'system_info'  => $this->emptySystemInfo(),
+                    'network_info' => $this->emptyNetworkInfo(),
                     'error'        => _('AP host not found or access denied.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
@@ -231,7 +255,10 @@ final class WidgetView extends CControllerDashboardWidgetView {
         // ── 7. System Info KV gather (M2 #5) ───────────────────────────
         $system_info = $this->gatherSystemInfo($items, $host, $host_id);
 
-        // ── 8. Respond ──────────────────────────────────────────────────
+        // ── 8. Network Info KV gather (M2 #6) ──────────────────────────
+        $network_info = $this->gatherNetworkInfo($items, $host);
+
+        // ── 9. Respond ──────────────────────────────────────────────────
         $this->setResponse(new CControllerResponseData([
             'name' => $name,
             'data' => [
@@ -242,6 +269,7 @@ final class WidgetView extends CControllerDashboardWidgetView {
                 'telemetry'    => $telemetry,
                 'connectivity' => $connectivity,
                 'system_info'  => $system_info,
+                'network_info' => $network_info,
                 'error'        => null,
             ],
             'user' => ['debug_mode' => $debug_mode],
@@ -1334,6 +1362,192 @@ final class WidgetView extends CControllerDashboardWidgetView {
             $blank('last_config_push', _('Last config push'),    'EXT', 'when'),
             ['key' => 'config_sync', 'label' => _('Config sync'), 'kind' => 'pill',
              'value' => _('Unknown'), 'tone' => 'unknown', 'source' => 'EXT'],
+        ];
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  Network Info KV table (M2 #6)
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Build the Network Information panel rows.  Most rows come from the
+     * `selectInterfaces` slice on $host (already loaded in doAction); the
+     * remaining rows pull from items the per-AP / fleet templates already
+     * populate.  Per CLAUDE_CODE_PLAN §8.6, rows that depend on items the
+     * current SNMPv3 template doesn't yet ship (IPv6 / gateway / DNS via
+     * SNMP / LLDP neighbour) gracefully fall back to "—" until those
+     * items are added — they aren't surfaced as errors.
+     *
+     * Row order (stable, matches the view's iteration):
+     *   1. Mgt0 IPv4
+     *   2. Mgt0 IPv6
+     *   3. Default Gateway
+     *   4. DNS
+     *   5. Network Policy
+     *   6. LLDP Neighbour
+     *
+     * @param  array<int, array<string, mixed>> $items
+     * @param  array<string, mixed>|null         $host
+     * @return list<array<string, mixed>>
+     */
+    private function gatherNetworkInfo(array $items, ?array $host): array {
+        // ── Index host items — exact + prefix scan ─────────────────────
+        $by_key    = [];
+        $by_prefix = [];
+        $prefixes  = [
+            self::ITEM_KEY_PREFIX_XIQ_IP,
+            self::ITEM_KEY_PREFIX_XIQ_POLICY,
+            self::ITEM_KEY_PREFIX_IPV6,
+            self::ITEM_KEY_PREFIX_GATEWAY,
+            self::ITEM_KEY_PREFIX_DNS,
+            self::ITEM_KEY_PREFIX_LLDP_SYSNAME,
+            self::ITEM_KEY_PREFIX_LLDP_PORTID,
+        ];
+        foreach ($items as $item) {
+            $by_key[$item['key_']] = $item;
+            foreach ($prefixes as $pfx) {
+                if (str_starts_with($item['key_'], $pfx) && !isset($by_prefix[$pfx])) {
+                    $by_prefix[$pfx] = $item;
+                }
+            }
+        }
+
+        $get_str = static function (?array $item): ?string {
+            if ($item === null) {
+                return null;
+            }
+            $val = $item['lastvalue'] ?? null;
+            if ($val === null || $val === '') {
+                return null;
+            }
+            return (string) $val;
+        };
+
+        // ── Mgt0 IPv4 — host interface (main=1) wins; xiq.ap.ip is a
+        //    cross-check shown in a hover hint when the two disagree. ──
+        $iface_ip   = '';
+        $iface_dns  = '';
+        if ($host !== null && is_array($host['interfaces'] ?? null)) {
+            foreach ($host['interfaces'] as $iface) {
+                $main = (int) ($iface['main'] ?? 0);
+                if ($main === 1 || $iface_ip === '') {
+                    $iface_ip  = (string) ($iface['ip']  ?? '');
+                    $iface_dns = (string) ($iface['dns'] ?? '');
+                    if ($main === 1) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        $xiq_ip   = $get_str($by_prefix[self::ITEM_KEY_PREFIX_XIQ_IP] ?? null);
+        $ipv4_val = $iface_ip !== '' ? $iface_ip : ($xiq_ip ?? '');
+        $ipv4_hint = null;
+        if ($iface_ip !== '' && $xiq_ip !== null && strcasecmp(trim($xiq_ip), trim($iface_ip)) !== 0) {
+            $ipv4_hint = sprintf(_('Zabbix interface: %s · XIQ: %s'), $iface_ip, $xiq_ip);
+        }
+
+        // ── Mgt0 IPv6 — try template item then legacy fallback. ────────
+        $ipv6 = $get_str($by_prefix[self::ITEM_KEY_PREFIX_IPV6] ?? null)
+             ?? $get_str($by_key[self::ITEM_KEY_FALLBACK_IPV6_LEGACY] ?? null);
+
+        // ── Default Gateway. ──────────────────────────────────────────
+        $gateway = $get_str($by_prefix[self::ITEM_KEY_PREFIX_GATEWAY] ?? null)
+                ?? $get_str($by_key[self::ITEM_KEY_FALLBACK_GATEWAY] ?? null);
+
+        // ── DNS — prefer the host interface's DNS hostname (if set);
+        //    fall back to an SNMP DNS resolver item if present. ─────────
+        $dns_snmp = $get_str($by_prefix[self::ITEM_KEY_PREFIX_DNS] ?? null);
+        $dns_val  = $iface_dns !== '' ? $iface_dns : ($dns_snmp ?? '');
+        $dns_source = $dns_snmp !== null && $iface_dns === '' ? 'ZBX' : 'ZBX';
+
+        // ── Network Policy. ───────────────────────────────────────────
+        $policy = $get_str($by_prefix[self::ITEM_KEY_PREFIX_XIQ_POLICY] ?? null);
+
+        // ── LLDP Neighbour — combine sysname + portid when both exist. ─
+        $lldp_sys  = $get_str($by_prefix[self::ITEM_KEY_PREFIX_LLDP_SYSNAME] ?? null);
+        $lldp_port = $get_str($by_prefix[self::ITEM_KEY_PREFIX_LLDP_PORTID]  ?? null);
+        $lldp_val  = '';
+        if ($lldp_sys !== null && $lldp_port !== null) {
+            $lldp_val = sprintf('%s · %s', $lldp_sys, $lldp_port);
+        }
+        elseif ($lldp_sys !== null) {
+            $lldp_val = $lldp_sys;
+        }
+        elseif ($lldp_port !== null) {
+            $lldp_val = $lldp_port;
+        }
+
+        // ── Build the row list (stable order) ─────────────────────────
+        return [
+            [
+                'key'    => 'mgt0_ipv4',
+                'label'  => _('Mgt0 IPv4'),
+                'kind'   => 'text',
+                'value'  => $ipv4_val !== '' ? $ipv4_val : '—',
+                'hint'   => $ipv4_hint,
+                'source' => $iface_ip !== '' ? 'ZBX' : ($xiq_ip !== null ? 'EXT' : 'ZBX'),
+            ],
+            [
+                'key'    => 'mgt0_ipv6',
+                'label'  => _('Mgt0 IPv6'),
+                'kind'   => 'text',
+                'value'  => $ipv6 ?? '—',
+                'source' => 'ZBX',
+            ],
+            [
+                'key'    => 'default_gateway',
+                'label'  => _('Default Gateway'),
+                'kind'   => 'text',
+                'value'  => $gateway ?? '—',
+                'source' => 'ZBX',
+            ],
+            [
+                'key'    => 'dns',
+                'label'  => _('DNS'),
+                'kind'   => 'text',
+                'value'  => $dns_val !== '' ? $dns_val : '—',
+                'source' => $dns_source,
+            ],
+            [
+                'key'    => 'network_policy',
+                'label'  => _('Network Policy'),
+                'kind'   => 'text',
+                'value'  => $policy ?? '—',
+                'source' => 'EXT',
+            ],
+            [
+                'key'    => 'lldp_neighbor',
+                'label'  => _('LLDP Neighbour'),
+                'kind'   => 'text',
+                'value'  => $lldp_val !== '' ? $lldp_val : '—',
+                'source' => 'ZBX',
+            ],
+        ];
+    }
+
+    /**
+     * Empty-state Network Info — same 6-row shape so the view's
+     * iteration order is stable across host-selected / no-host /
+     * error renders.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function emptyNetworkInfo(): array {
+        $blank = static fn(string $key, string $label, string $source): array => [
+            'key'    => $key,
+            'label'  => $label,
+            'kind'   => 'text',
+            'value'  => '—',
+            'source' => $source,
+        ];
+        return [
+            $blank('mgt0_ipv4',       _('Mgt0 IPv4'),       'ZBX'),
+            $blank('mgt0_ipv6',       _('Mgt0 IPv6'),       'ZBX'),
+            $blank('default_gateway', _('Default Gateway'), 'ZBX'),
+            $blank('dns',             _('DNS'),             'ZBX'),
+            $blank('network_policy',  _('Network Policy'),  'EXT'),
+            $blank('lldp_neighbor',   _('LLDP Neighbour'),  'ZBX'),
         ];
     }
 

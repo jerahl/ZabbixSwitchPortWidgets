@@ -35,6 +35,7 @@ $health      = $payload['health']      ?? null;
 $telemetry   = $payload['telemetry']   ?? [];
 $connectivity = $payload['connectivity'] ?? ['issues' => [], 'count' => 0, 'worst' => 'ok', 'reason' => ''];
 $system_info  = is_array($payload['system_info'] ?? null) ? $payload['system_info'] : [];
+$network_info = is_array($payload['network_info'] ?? null) ? $payload['network_info'] : [];
 
 // ── Error state ───────────────────────────────────────────────────────────
 if ($error !== null) {
@@ -477,6 +478,9 @@ $render_kv_row = static function (array $row): array {
         case 'text':
         default:
             $value_node->addItem((new CSpan($value))->addClass('ap-kv__text'));
+            if (is_string($hint) && $hint !== '') {
+                $value_node->setAttribute('title', $hint);
+            }
             break;
     }
 
@@ -513,16 +517,47 @@ $sysinfo_card = (new CDiv([
     $sysinfo_grid,
 ]))->addClass('ap-card')->addClass('ap-card--sysinfo');
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Overview tab — Network Information KV (M2 task #6)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Same render path as System Info — reuses $render_kv_row.  Rows that
+// depend on items the per-AP template doesn't yet ship (IPv6, gateway,
+// DNS via SNMP, LLDP) gracefully render "—" until those items are
+// added (per CLAUDE_CODE_PLAN §8.6).
+
+$netinfo_grid = (new CDiv())->addClass('ap-kv');
+foreach ($network_info as $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    foreach ($render_kv_row($row) as $node) {
+        $netinfo_grid->addItem($node);
+    }
+}
+
+$netinfo_card_head = (new CDiv([
+    (new CTag('h3', true, _('Network Information')))->addClass('ap-card__title'),
+    (new CDiv())->addClass('ap-card__spacer'),
+    (new CSpan(_('SNMPv3 · Zabbix host interface · ExtremeCloud IQ')))
+        ->addClass('ap-card__meta'),
+]))->addClass('ap-card__head');
+
+$netinfo_card = (new CDiv([
+    $netinfo_card_head,
+    $netinfo_grid,
+]))->addClass('ap-card')->addClass('ap-card--netinfo');
+
 // Overview panel content.
 $overview_panel_content = [
     $health_card,
     $telemetry_card,
     $conn_card,
     $sysinfo_card,
+    $netinfo_card,
     // Subsequent M2 tasks insert here:
-    //   - M2 #6: Network Info KV
     //   - M2 #7: Recent Events feed
-    (new CDiv(_('Network Info and Recent Events panels — populated in M2 tasks #6, #7.')))
+    (new CDiv(_('Recent Events panel — populated in M2 task #7.')))
         ->addClass('ap-panel__pending'),
 ];
 
