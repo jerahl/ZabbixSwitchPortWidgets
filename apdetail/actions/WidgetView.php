@@ -94,6 +94,27 @@ final class WidgetView extends CControllerDashboardWidgetView {
     private const MACRO_XIQ_TOKEN     = '{$XIQ_TOKEN}';
     private const MACRO_XIQ_DEVICE_ID = '{$XIQ_DEVICE_ID}';
 
+    // ── Connectivity Issues panel (M2 task #6) ──────────────────────────
+    //
+    // Five Zabbix-only rules per CLAUDE_CODE_PLAN §8.4 (G30: XIQ
+    // /d360/device/issues wrapper does not exist; all rules computed
+    // locally from already-collected item lastvalues).
+
+    /** Operational status of the eth0 uplink — IF-MIB ifOperStatus on ifIndex 10. */
+    private const ITEM_KEY_IFOPER = 'net.if.status[ifOperStatus.10]';
+
+    /** Fleet-template item key prefixes — actual key includes [{$XIQ_SERIAL}]. */
+    private const ITEM_KEY_PREFIX_XIQ_CONNECTED      = 'xiq.ap.connected[';
+    private const ITEM_KEY_PREFIX_XIQ_CONFIGMISMATCH = 'xiq.ap.configmismatch[';
+
+    /** ICMP latency thresholds — warn/critical, in seconds (icmppingsec is sec). */
+    private const LATENCY_WARN_S = 0.010;   // 10 ms
+    private const LATENCY_CRIT_S = 0.050;   // 50 ms
+
+    /** ICMP loss thresholds — warn/critical, in percent (icmppingloss is Float %). */
+    private const LOSS_WARN_PCT = 1.0;
+    private const LOSS_CRIT_PCT = 5.0;
+
     protected function doAction(): void {
         // ── 1. Resolve host from broadcast/form ─────────────────────────
         $field_hostids = $this->fields_values['hostids'] ?? [];
@@ -122,9 +143,10 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'host_id'     => 0,
                     'host'        => null,
                     'time_period' => $time_period,
-                    'health'      => $this->emptyHealth(),
-                    'telemetry'   => $this->emptyTelemetry(),
-                    'error'       => _('No AP host selected. Wire this widget to a Host Navigator broadcast or configure a host in the widget settings.'),
+                    'health'       => $this->emptyHealth(),
+                    'telemetry'    => $this->emptyTelemetry(),
+                    'connectivity' => $this->emptyConnectivity(),
+                    'error'        => _('No AP host selected. Wire this widget to a Host Navigator broadcast or configure a host in the widget settings.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
             ]));
@@ -152,9 +174,10 @@ final class WidgetView extends CControllerDashboardWidgetView {
                     'host_id'     => $host_id,
                     'host'        => null,
                     'time_period' => $time_period,
-                    'health'      => $this->emptyHealth(),
-                    'telemetry'   => $this->emptyTelemetry(),
-                    'error'       => _('AP host not found or access denied.'),
+                    'health'       => $this->emptyHealth(),
+                    'telemetry'    => $this->emptyTelemetry(),
+                    'connectivity' => $this->emptyConnectivity(),
+                    'error'        => _('AP host not found or access denied.'),
                 ],
                 'user' => ['debug_mode' => $debug_mode],
             ]));
@@ -178,16 +201,20 @@ final class WidgetView extends CControllerDashboardWidgetView {
             to_ts:    $time_period['to_ts']
         );
 
-        // ── 6. Respond ──────────────────────────────────────────────────
+        // ── 6. Connectivity Issues gather (M2 #6) ──────────────────────
+        $connectivity = $this->gatherConnectivityIssues($items, $host);
+
+        // ── 7. Respond ──────────────────────────────────────────────────
         $this->setResponse(new CControllerResponseData([
             'name' => $name,
             'data' => [
-                'host_id'     => $host_id,
-                'host'        => $host,
-                'time_period' => $time_period,
-                'health'      => $health,
-                'telemetry'   => $telemetry,
-                'error'       => null,
+                'host_id'      => $host_id,
+                'host'         => $host,
+                'time_period'  => $time_period,
+                'health'       => $health,
+                'telemetry'    => $telemetry,
+                'connectivity' => $connectivity,
+                'error'        => null,
             ],
             'user' => ['debug_mode' => $debug_mode],
         ]));
@@ -814,6 +841,201 @@ final class WidgetView extends CControllerDashboardWidgetView {
             'chan_util_w0' => $blank('chan_util_w0', _('Ch Util W0'),   'XIQ', '%'),
             'chan_util_w1' => $blank('chan_util_w1', _('Ch Util W1'),   'XIQ', '%'),
             'ap_clients'   => $blank('ap_clients',   _('Clients'),      'XIQ', ''),
+        ];
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  Connectivity Issues panel (M2 #6) — Zabbix-only computation
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Compute the Connectivity Issues row list from already-collected
+     * Zabbix item lastvalues.  Returns:
+     *
+     *   {
+     *     issues: [{ severity: 'warn'|'crit', code: string, msg: string }, …],
+     *     count:  int,
+     *     worst:  'ok' | 'warn' | 'crit',
+     *     reason: string         // empty when no input items resolved at all
+     *   }
+     *
+     * Per CLAUDE_CODE_PLAN §8.4 + G30: XIQ /d360/device/issues wrapper
+     * does not exist on XIQClient — this panel is computed entirely
+     * locally from items the per-AP and fleet templates already populate.
+     * No network round-trip beyond what was already needed for Health +
+     * Live Telemetry, so the panel adds no observable latency.
+     *
+     * Rule set:
+     *   1. icmppingsec       > 50 ms        → CRIT  ICMP latency
+     *                        > 10 ms        → WARN
+     *   2. icmppingloss      >  5 %         → CRIT  Packet loss
+     *                        >  1 %         → WARN
+     *   3. ifOperStatus.10   ≠ 1 (up)       → CRIT  eth0 down
+     *   4. xiq.ap.connected  == 0           → CRIT  Disconnected from XIQ
+     *   5. xiq.ap.configmismatch == 1       → WARN  Config out of sync
+     *
+     * Items that aren't on the host are silently skipped — surfacing
+     * "missing item" as an issue would create false positives during
+     * template rollout. The `reason` field carries a short developer
+     * note when ALL five inputs are absent (typical fresh-discovery
+     * state), which the view can surface as an empty-state hint.
+     *
+     * @param  array<int, array<string, mixed>> $items
+     * @param  array<string, mixed>|null $host  selectInterfaces / selectItems result
+     * @return array<string, mixed>
+     */
+    private function gatherConnectivityIssues(array $items, ?array $host): array {
+        $by_key    = [];
+        $by_prefix = [];
+        $prefixes  = [
+            self::ITEM_KEY_PREFIX_LATENCY,
+            self::ITEM_KEY_PREFIX_LOSS,
+            self::ITEM_KEY_PREFIX_XIQ_CONNECTED,
+            self::ITEM_KEY_PREFIX_XIQ_CONFIGMISMATCH,
+        ];
+        foreach ($items as $item) {
+            $by_key[$item['key_']] = $item;
+            foreach ($prefixes as $pfx) {
+                if (str_starts_with($item['key_'], $pfx) && !isset($by_prefix[$pfx])) {
+                    $by_prefix[$pfx] = $item;
+                }
+            }
+        }
+
+        $latency = $by_prefix[self::ITEM_KEY_PREFIX_LATENCY] ?? null;
+        $loss    = $by_prefix[self::ITEM_KEY_PREFIX_LOSS]    ?? null;
+        $oper    = $by_key[self::ITEM_KEY_IFOPER]            ?? null;
+        $xiq_up  = $by_prefix[self::ITEM_KEY_PREFIX_XIQ_CONNECTED]      ?? null;
+        $xiq_cm  = $by_prefix[self::ITEM_KEY_PREFIX_XIQ_CONFIGMISMATCH] ?? null;
+
+        $any_input = ($latency || $loss || $oper || $xiq_up || $xiq_cm);
+
+        $issues = [];
+
+        // ── ICMP latency ──────────────────────────────────────────────
+        if ($latency !== null && is_numeric($latency['lastvalue'] ?? null)) {
+            $sec = (float) $latency['lastvalue'];
+            $ms  = $sec * 1000;
+            if ($sec > self::LATENCY_CRIT_S) {
+                $issues[] = [
+                    'severity' => 'crit',
+                    'code'     => 'latency_crit',
+                    'msg'      => sprintf(_('ICMP latency %.1f ms (above %d ms critical threshold)'),
+                                        $ms, (int) (self::LATENCY_CRIT_S * 1000)),
+                ];
+            }
+            elseif ($sec > self::LATENCY_WARN_S) {
+                $issues[] = [
+                    'severity' => 'warn',
+                    'code'     => 'latency_warn',
+                    'msg'      => sprintf(_('ICMP latency %.1f ms (above %d ms warning threshold)'),
+                                        $ms, (int) (self::LATENCY_WARN_S * 1000)),
+                ];
+            }
+        }
+
+        // ── ICMP packet loss ──────────────────────────────────────────
+        if ($loss !== null && is_numeric($loss['lastvalue'] ?? null)) {
+            $pct = (float) $loss['lastvalue'];
+            if ($pct > self::LOSS_CRIT_PCT) {
+                $issues[] = [
+                    'severity' => 'crit',
+                    'code'     => 'loss_crit',
+                    'msg'      => sprintf(_('Packet loss %.1f%% (above %g%% critical threshold)'),
+                                        $pct, self::LOSS_CRIT_PCT),
+                ];
+            }
+            elseif ($pct > self::LOSS_WARN_PCT) {
+                $issues[] = [
+                    'severity' => 'warn',
+                    'code'     => 'loss_warn',
+                    'msg'      => sprintf(_('Packet loss %.1f%% (above %g%% warning threshold)'),
+                                        $pct, self::LOSS_WARN_PCT),
+                ];
+            }
+        }
+
+        // ── Uplink (eth0) operational status ──────────────────────────
+        if ($oper !== null && is_numeric($oper['lastvalue'] ?? null)) {
+            $oper_val = (int) $oper['lastvalue'];
+            if ($oper_val !== 1) {
+                $issues[] = [
+                    'severity' => 'crit',
+                    'code'     => 'eth0_down',
+                    'msg'      => sprintf(_('Uplink eth0 %s'), $this->ifOperLabel($oper_val)),
+                ];
+            }
+        }
+
+        // ── XIQ-side connectivity (fleet template) ────────────────────
+        if ($xiq_up !== null && is_numeric($xiq_up['lastvalue'] ?? null)) {
+            if ((int) $xiq_up['lastvalue'] === 0) {
+                $issues[] = [
+                    'severity' => 'crit',
+                    'code'     => 'xiq_disconnected',
+                    'msg'      => _('AP is disconnected from ExtremeCloud IQ'),
+                ];
+            }
+        }
+
+        if ($xiq_cm !== null && is_numeric($xiq_cm['lastvalue'] ?? null)) {
+            if ((int) $xiq_cm['lastvalue'] === 1) {
+                $issues[] = [
+                    'severity' => 'warn',
+                    'code'     => 'config_mismatch',
+                    'msg'      => _('Running config is out of sync with the XIQ network policy'),
+                ];
+            }
+        }
+
+        // Sort: crit first, warn second; preserve insertion order within
+        // a severity bucket so the rule order above is the on-screen
+        // tie-breaker (latency → loss → eth0 → XIQ disconnect → mismatch).
+        $sev_rank = ['crit' => 0, 'warn' => 1];
+        usort($issues, static function (array $a, array $b) use ($sev_rank): int {
+            return ($sev_rank[$a['severity']] ?? 99) <=> ($sev_rank[$b['severity']] ?? 99);
+        });
+
+        $worst = 'ok';
+        foreach ($issues as $issue) {
+            if ($issue['severity'] === 'crit') { $worst = 'crit'; break; }
+            $worst = 'warn';
+        }
+
+        $reason = '';
+        if (!$any_input) {
+            $reason = _('No connectivity-state items found on this host. The Extreme AP via SNMPv3 template + ExtremeCloud IQ fleet template must be linked for this panel to populate.');
+        }
+
+        return [
+            'issues' => $issues,
+            'count'  => count($issues),
+            'worst'  => $worst,
+            'reason' => $reason,
+        ];
+    }
+
+    /** Human label for IF-MIB ifOperStatus values used in issue messages. */
+    private function ifOperLabel(int $oper): string {
+        return match ($oper) {
+            1       => _('up'),
+            2       => _('down'),
+            3       => _('testing'),
+            4       => _('unknown'),
+            5       => _('dormant'),
+            6       => _('not present'),
+            7       => _('lower-layer down'),
+            default => sprintf(_('non-operational (state %d)'), $oper),
+        };
+    }
+
+    /** Empty-state Connectivity payload — keeps the view's iteration stable. */
+    private function emptyConnectivity(): array {
+        return [
+            'issues' => [],
+            'count'  => 0,
+            'worst'  => 'ok',
+            'reason' => '',
         ];
     }
 

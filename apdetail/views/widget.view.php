@@ -33,6 +33,7 @@ $host_id     = (int) ($payload['host_id'] ?? 0);
 $time_period = $payload['time_period'] ?? ['from' => 'now-1h', 'to' => 'now', 'from_ts' => 0, 'to_ts' => 0];
 $health      = $payload['health']      ?? null;
 $telemetry   = $payload['telemetry']   ?? [];
+$connectivity = $payload['connectivity'] ?? ['issues' => [], 'count' => 0, 'worst' => 'ok', 'reason' => ''];
 
 // ── Error state ───────────────────────────────────────────────────────────
 if ($error !== null) {
@@ -62,14 +63,33 @@ $tabs_nav = (new CTag('nav', true))
     ->setAttribute('role', 'tablist')
     ->setAttribute('aria-label', _('AP detail tabs'));
 
+// Issue badge attached to the Overview tab when Connectivity Issues panel
+// reports any rule firing. Severity drives the badge colour (crit > warn).
+$conn_count = (int) ($connectivity['count'] ?? 0);
+$conn_worst = (string) ($connectivity['worst'] ?? 'ok');
+
 foreach ($TABS as $key => $label) {
-    $btn = (new CTag('button', true, $label))
+    $btn = (new CTag('button', true))
         ->setAttribute('type', 'button')
         ->setAttribute('data-tab', $key)
         ->setAttribute('role', 'tab')
         ->setAttribute('tabindex', $key === $DEFAULT_TAB ? '0' : '-1')
         ->setAttribute('aria-selected', $key === $DEFAULT_TAB ? 'true' : 'false')
         ->addClass('ap-tab');
+
+    $btn->addItem((new CSpan($label))->addClass('ap-tab__label'));
+
+    if ($key === 'overview' && $conn_count > 0) {
+        $btn->addItem(
+            (new CSpan((string) $conn_count))
+                ->addClass('ap-tab__badge')
+                ->addClass('ap-tab__badge--' . $conn_worst)
+                ->setAttribute('aria-label', sprintf(
+                    _n('%d connectivity issue', '%d connectivity issues', $conn_count),
+                    $conn_count
+                ))
+        );
+    }
 
     if ($key === $DEFAULT_TAB) {
         $btn->addClass('ap-tab--active');
@@ -328,16 +348,78 @@ $telemetry_card = (new CDiv([
     $telemetry_grid,
 ]))->addClass('ap-card')->addClass('ap-card--telemetry');
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Overview tab — Connectivity Issues panel (M2 task #6)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Zabbix-only computation (G30 — XIQ /d360/device/issues wrapper does not
+// exist on XIQClient). All five rules read item lastvalues already on the
+// host, so this panel adds no extra round-trip beyond Health + Telemetry.
+
+$conn_issues = is_array($connectivity['issues'] ?? null) ? $connectivity['issues'] : [];
+$conn_reason = (string) ($connectivity['reason'] ?? '');
+
+$conn_card_head = (new CDiv([
+    (new CTag('h3', true, _('Connectivity Issues')))->addClass('ap-card__title'),
+    (new CSpan('ZBX'))->addClass('ap-source')->addClass('ap-source--zbx'),
+    (new CDiv())->addClass('ap-card__spacer'),
+    (new CSpan(
+        $conn_count === 0
+            ? _('All clear')
+            : sprintf(_n('%d issue', '%d issues', $conn_count), $conn_count)
+    ))
+        ->addClass('ap-card__meta')
+        ->addClass('ap-card__meta--' . $conn_worst),
+]))->addClass('ap-card__head');
+
+if ($conn_count === 0) {
+    if ($conn_reason !== '') {
+        $conn_body = (new CDiv([
+            (new CSpan('—'))->addClass('ap-conn-empty__icon'),
+            (new CSpan($conn_reason))->addClass('ap-conn-empty__msg'),
+        ]))->addClass('ap-conn-empty')->addClass('ap-conn-empty--missing');
+    }
+    else {
+        $conn_body = (new CDiv([
+            (new CSpan('✓'))->addClass('ap-conn-empty__icon'),
+            (new CSpan(_('No connectivity issues')))->addClass('ap-conn-empty__msg'),
+        ]))->addClass('ap-conn-empty');
+    }
+}
+else {
+    $conn_list = (new CTag('ul', true))->addClass('ap-conn-list');
+    foreach ($conn_issues as $issue) {
+        $sev   = (string) ($issue['severity'] ?? 'warn');
+        $code  = (string) ($issue['code']     ?? '');
+        $msg   = (string) ($issue['msg']      ?? '');
+        $sev_label = $sev === 'crit' ? _('CRITICAL') : _('WARNING');
+
+        $row = (new CTag('li', true))
+            ->addClass('ap-conn-row')
+            ->addClass('ap-conn-row--' . $sev)
+            ->setAttribute('data-code', $code)
+            ->addItem((new CSpan($sev_label))->addClass('ap-conn-row__sev'))
+            ->addItem((new CSpan($msg))->addClass('ap-conn-row__msg'));
+        $conn_list->addItem($row);
+    }
+    $conn_body = $conn_list;
+}
+
+$conn_card = (new CDiv([
+    $conn_card_head,
+    $conn_body,
+]))->addClass('ap-card')->addClass('ap-card--connectivity')->addClass('ap-card--worst-' . $conn_worst);
+
 // Overview panel content.
 $overview_panel_content = [
     $health_card,
     $telemetry_card,
+    $conn_card,
     // Subsequent M2 tasks insert here:
     //   - M2 #4: System Info KV
     //   - M2 #5: Network Info KV
-    //   - M2 #6: Connectivity Issues
     //   - M2 #7: Recent Events feed
-    (new CDiv(_('System Info, Network Info, Connectivity Issues, and Recent Events panels — populated in M2 tasks #4–#7.')))
+    (new CDiv(_('System Info, Network Info, and Recent Events panels — populated in M2 tasks #4, #5, #7.')))
         ->addClass('ap-panel__pending'),
 ];
 
