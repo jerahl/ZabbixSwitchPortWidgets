@@ -34,6 +34,7 @@ $time_period = $payload['time_period'] ?? ['from' => 'now-1h', 'to' => 'now', 'f
 $health      = $payload['health']      ?? null;
 $telemetry   = $payload['telemetry']   ?? [];
 $connectivity = $payload['connectivity'] ?? ['issues' => [], 'count' => 0, 'worst' => 'ok', 'reason' => ''];
+$system_info  = is_array($payload['system_info'] ?? null) ? $payload['system_info'] : [];
 
 // ── Error state ───────────────────────────────────────────────────────────
 if ($error !== null) {
@@ -413,16 +414,115 @@ $conn_card = (new CDiv([
     $conn_body,
 ]))->addClass('ap-card')->addClass('ap-card--connectivity')->addClass('ap-card--worst-' . $conn_worst);
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Overview tab — System Information KV (M2 task #5)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// All rows come from already-loaded Zabbix items. SNMP-direct rows carry
+// the ZBX badge; XIQ-cached rows (populated by the fleet template's
+// dependent items) carry the EXT badge.
+
+/**
+ * Render one row of the System Information grid. Each row contributes
+ * three direct children to the parent .ap-kv container so the CSS
+ * `grid-template-columns: 160px 1fr auto` lays them out per the mockup.
+ *
+ * @param array{
+ *   key: string, label: string, kind: string, value: string,
+ *   source: string, tone?: string, hint?: ?string
+ * } $row
+ * @return CDiv[]  three CDivs: .ap-kv__k, .ap-kv__v, .ap-kv__b
+ */
+$render_kv_row = static function (array $row): array {
+    $kind   = (string) ($row['kind']   ?? 'text');
+    $label  = (string) ($row['label']  ?? '');
+    $value  = (string) ($row['value']  ?? '—');
+    $source = (string) ($row['source'] ?? 'ZBX');
+    $hint   = $row['hint'] ?? null;
+
+    // Value column — content varies by kind.
+    $value_node = (new CDiv())
+        ->addClass('ap-kv__v')
+        ->setAttribute('data-key', (string) ($row['key'] ?? ''));
+
+    switch ($kind) {
+        case 'pill':
+            $tone = (string) ($row['tone'] ?? 'unknown');
+            $value_node->addItem(
+                (new CSpan($value))
+                    ->addClass('ap-kv__pill')
+                    ->addClass('ap-kv__pill--' . $tone)
+            );
+            break;
+
+        case 'firmware':
+            $value_node->addItem((new CSpan($value))->addClass('ap-kv__text'));
+            if (is_string($hint) && $hint !== '') {
+                $value_node->addItem(
+                    (new CSpan('⚠'))
+                        ->addClass('ap-kv__warn')
+                        ->setAttribute('title', $hint)
+                        ->setAttribute('aria-label', $hint)
+                );
+            }
+            break;
+
+        case 'when':
+            $value_node->addItem((new CSpan($value))->addClass('ap-kv__text'));
+            if (is_string($hint) && $hint !== '') {
+                $value_node->setAttribute('title', $hint);
+            }
+            break;
+
+        case 'text':
+        default:
+            $value_node->addItem((new CSpan($value))->addClass('ap-kv__text'));
+            break;
+    }
+
+    return [
+        (new CDiv($label))->addClass('ap-kv__k'),
+        $value_node,
+        (new CDiv(
+            (new CSpan($source))
+                ->addClass('ap-source')
+                ->addClass('ap-source--' . strtolower($source))
+        ))->addClass('ap-kv__b'),
+    ];
+};
+
+$sysinfo_grid = (new CDiv())->addClass('ap-kv');
+foreach ($system_info as $row) {
+    if (!is_array($row)) {
+        continue;
+    }
+    foreach ($render_kv_row($row) as $node) {
+        $sysinfo_grid->addItem($node);
+    }
+}
+
+$sysinfo_card_head = (new CDiv([
+    (new CTag('h3', true, _('System Information')))->addClass('ap-card__title'),
+    (new CDiv())->addClass('ap-card__spacer'),
+    (new CSpan(_('merged from Zabbix host + ExtremeCloud IQ')))
+        ->addClass('ap-card__meta'),
+]))->addClass('ap-card__head');
+
+$sysinfo_card = (new CDiv([
+    $sysinfo_card_head,
+    $sysinfo_grid,
+]))->addClass('ap-card')->addClass('ap-card--sysinfo');
+
 // Overview panel content.
 $overview_panel_content = [
     $health_card,
     $telemetry_card,
     $conn_card,
+    $sysinfo_card,
     // Subsequent M2 tasks insert here:
-    //   - M2 #4: System Info KV
-    //   - M2 #5: Network Info KV
+    //   - M2 #6: Network Info KV
     //   - M2 #7: Recent Events feed
-    (new CDiv(_('System Info, Network Info, and Recent Events panels — populated in M2 tasks #4, #5, #7.')))
+    (new CDiv(_('Network Info and Recent Events panels — populated in M2 tasks #6, #7.')))
         ->addClass('ap-panel__pending'),
 ];
 
