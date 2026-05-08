@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Modules\TcsApDetail\Includes;
+namespace Modules\APDetail\Includes;
 
 // Polyfill: array_is_list() landed in PHP 8.1; this Zabbix host is on 8.0.
 // Declared inside this namespace so XIQClient's unqualified array_is_list()

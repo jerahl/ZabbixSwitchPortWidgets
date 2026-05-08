@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Modules\TcsApDetail\Includes;
+namespace Modules\APDetail\Includes;
 
 /**
  * PacketFence HTTP client — session auth + nodes search.
