@@ -87,6 +87,28 @@
     border-bottom-color: var(--ap-accent);
 }
 
+/* Tab content + issue-count badge — wrap label in a span so the badge
+   sits beside the text without inheriting underline / border-bottom. */
+.ap-tab__label  { display: inline-block; vertical-align: middle; }
+.ap-tab__badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    min-width: 14px;
+    height: 14px;
+    line-height: 14px;
+    border-radius: 7px;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--ap-mono);
+    text-align: center;
+    color: #fff;
+    background: var(--ap-warn);
+    vertical-align: middle;
+}
+.ap-tab__badge--warn { background: var(--ap-warn); }
+.ap-tab__badge--crit { background: var(--ap-crit); }
+
 /* ── Tab panels ─────────────────────────────────────────────────────────── */
 .ap-panel {
     flex: 1;
@@ -432,8 +454,74 @@
     text-align: right;
 }
 
-/* Connectivity Issues + Recent Events panels (M2 #6, #7) */
-.ap-conn-issues,
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Connectivity Issues panel (M2 #6) — Zabbix-only, computed locally    *
+ * ────────────────────────────────────────────────────────────────────── */
+
+.ap-card--connectivity .ap-card__meta--ok   { color: var(--ap-ok);   }
+.ap-card--connectivity .ap-card__meta--warn { color: var(--ap-warn); }
+.ap-card--connectivity .ap-card__meta--crit { color: var(--ap-crit); }
+
+/* Card-edge indicator stripe — picks up the worst rule's severity. */
+.ap-card--worst-warn { box-shadow: inset 3px 0 0 var(--ap-warn); }
+.ap-card--worst-crit { box-shadow: inset 3px 0 0 var(--ap-crit); }
+
+.ap-conn-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ap-conn-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--ap-border-2);
+    font-size: 12.5px;
+}
+.ap-conn-row:first-child { border-top: 0; }
+
+.ap-conn-row__sev {
+    flex-shrink: 0;
+    width: 64px;
+    font-family: var(--ap-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-align: center;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #fff;
+    background: var(--ap-warn);
+}
+.ap-conn-row--crit .ap-conn-row__sev { background: var(--ap-crit); }
+.ap-conn-row--warn .ap-conn-row__sev { background: var(--ap-warn); }
+
+.ap-conn-row__msg {
+    color: var(--ap-text);
+    line-height: 1.4;
+}
+
+/* Empty / missing-input states. */
+.ap-conn-empty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    color: var(--ap-text-muted);
+    font-size: 12.5px;
+}
+.ap-conn-empty__icon {
+    font-family: var(--ap-mono);
+    color: var(--ap-ok);
+    font-size: 16px;
+    line-height: 1;
+}
+.ap-conn-empty--missing .ap-conn-empty__icon { color: var(--ap-text-dim); }
+.ap-conn-empty--missing .ap-conn-empty__msg  { color: var(--ap-text-dim); font-style: italic; }
+
+/* Recent Events feed (M2 #7) — placeholder kept for next PR. */
 .ap-events-feed {
     padding: 10px;
     background: var(--ap-bg);
