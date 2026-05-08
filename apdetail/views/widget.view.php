@@ -361,8 +361,8 @@ $telemetry_card = (new CDiv([
 // exist on XIQClient). All five rules read item lastvalues already on the
 // host, so this panel adds no extra round-trip beyond Health + Telemetry.
 
-$conn_issues = is_array($connectivity['issues'] ?? null) ? $connectivity['issues'] : [];
-$conn_reason = (string) ($connectivity['reason'] ?? '');
+$conn_summary = is_array($connectivity['summary'] ?? null) ? $connectivity['summary'] : [];
+$conn_reason  = (string) ($connectivity['reason'] ?? '');
 
 $conn_card_head = (new CDiv([
     (new CTag('h3', true, _('Connectivity Issues')))->addClass('ap-card__title'),
@@ -377,42 +377,53 @@ $conn_card_head = (new CDiv([
         ->addClass('ap-card__meta--' . $conn_worst),
 ]))->addClass('ap-card__head');
 
-if ($conn_count === 0) {
-    if ($conn_reason !== '') {
-        $conn_body = (new CDiv([
-            (new CSpan('—'))->addClass('ap-conn-empty__icon'),
-            (new CSpan($conn_reason))->addClass('ap-conn-empty__msg'),
-        ]))->addClass('ap-conn-empty')->addClass('ap-conn-empty--missing');
-    }
-    else {
-        $conn_body = (new CDiv([
-            (new CSpan('✓'))->addClass('ap-conn-empty__icon'),
-            (new CSpan(_('No connectivity issues')))->addClass('ap-conn-empty__msg'),
-        ]))->addClass('ap-conn-empty');
-    }
+// Summary stat grid — three cells (Reachability / Cloud / Config) each
+// rendered as: status icon · big count · label. The full per-rule
+// detail surfaces as a `title=` tooltip on hover (kept out of the
+// summary panel itself per request to condense).
+$conn_grid = (new CDiv())->addClass('ap-issues');
+
+if ($conn_summary === [] && $conn_reason !== '') {
+    $conn_grid = (new CDiv([
+        (new CSpan('—'))->addClass('ap-issues-empty__icon'),
+        (new CSpan($conn_reason))->addClass('ap-issues-empty__msg'),
+    ]))->addClass('ap-issues-empty')->addClass('ap-issues-empty--missing');
 }
 else {
-    $conn_list = (new CTag('ul', true))->addClass('ap-conn-list');
-    foreach ($conn_issues as $issue) {
-        $sev   = (string) ($issue['severity'] ?? 'warn');
-        $code  = (string) ($issue['code']     ?? '');
-        $msg   = (string) ($issue['msg']      ?? '');
-        $sev_label = $sev === 'crit' ? _('CRITICAL') : _('WARNING');
+    foreach ($conn_summary as $cell) {
+        if (!is_array($cell)) {
+            continue;
+        }
+        $tone   = (string) ($cell['tone']   ?? 'unknown');
+        $count  = (int)    ($cell['count']  ?? 0);
+        $label  = (string) ($cell['label']  ?? '');
+        $detail = (string) ($cell['detail'] ?? '');
+        $key    = (string) ($cell['key']    ?? '');
 
-        $row = (new CTag('li', true))
-            ->addClass('ap-conn-row')
-            ->addClass('ap-conn-row--' . $sev)
-            ->setAttribute('data-code', $code)
-            ->addItem((new CSpan($sev_label))->addClass('ap-conn-row__sev'))
-            ->addItem((new CSpan($msg))->addClass('ap-conn-row__msg'));
-        $conn_list->addItem($row);
+        $glyph = match ($tone) {
+            'crit' => '!',
+            'warn' => '!',
+            'ok'   => '✓',
+            default => '—',
+        };
+
+        $issue_cell = (new CDiv([
+            (new CDiv($glyph))->addClass('ap-issue__ico'),
+            (new CDiv((string) $count))->addClass('ap-issue__num'),
+            (new CDiv($label))->addClass('ap-issue__lbl'),
+        ]))
+            ->addClass('ap-issue')
+            ->addClass('ap-issue--' . $tone)
+            ->setAttribute('data-key', $key)
+            ->setAttribute('title', $detail);
+
+        $conn_grid->addItem($issue_cell);
     }
-    $conn_body = $conn_list;
 }
 
 $conn_card = (new CDiv([
     $conn_card_head,
-    $conn_body,
+    $conn_grid,
 ]))->addClass('ap-card')->addClass('ap-card--connectivity')->addClass('ap-card--worst-' . $conn_worst);
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -548,13 +559,23 @@ $netinfo_card = (new CDiv([
     $netinfo_grid,
 ]))->addClass('ap-card')->addClass('ap-card--netinfo');
 
+// Side-by-side row containers — match the mockup's two-up layout for
+// (Device Health · Connectivity Issues) and (System Info · Network Info).
+// Health gets the wider column (1.4fr) since its rings need horizontal
+// breathing room; the issue summary is denser, so 1fr suffices.
+$top_row = (new CDiv([$health_card, $conn_card]))
+    ->addClass('ap-row')
+    ->addClass('ap-row--health-conn');
+
+$kv_row = (new CDiv([$sysinfo_card, $netinfo_card]))
+    ->addClass('ap-row')
+    ->addClass('ap-row--cols-2');
+
 // Overview panel content.
 $overview_panel_content = [
-    $health_card,
+    $top_row,
     $telemetry_card,
-    $conn_card,
-    $sysinfo_card,
-    $netinfo_card,
+    $kv_row,
     // Subsequent M2 tasks insert here:
     //   - M2 #7: Recent Events feed
     (new CDiv(_('Recent Events panel — populated in M2 task #7.')))

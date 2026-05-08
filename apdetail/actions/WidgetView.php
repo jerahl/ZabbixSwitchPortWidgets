@@ -1063,12 +1063,100 @@ final class WidgetView extends CControllerDashboardWidgetView {
             $reason = _('No connectivity-state items found on this host. The Extreme AP via SNMPv3 template + ExtremeCloud IQ fleet template must be linked for this panel to populate.');
         }
 
-        return [
-            'issues' => $issues,
-            'count'  => count($issues),
-            'worst'  => $worst,
-            'reason' => $reason,
+        // ── Summary stat cells ────────────────────────────────────────
+        // Three roll-ups mirroring the mockup's .issues 3-cell grid.
+        // Each cell carries a tooltip listing the contributing rules
+        // so per-rule detail is one hover away from the summary view.
+        $by_code = [];
+        foreach ($issues as $i) {
+            $by_code[$i['code']] = $i;
+        }
+
+        // 1. Reachability — latency + loss + eth0 status (network-layer health).
+        $reach_codes  = ['latency_warn', 'latency_crit', 'loss_warn', 'loss_crit', 'eth0_down'];
+        $reach_hits   = array_values(array_filter($by_code, static fn(array $i) => in_array($i['code'], $reach_codes, true)));
+        $reach_tone   = $this->summaryTone($reach_hits);
+        $reach_detail = $this->summaryDetail($reach_hits, _('Latency, packet loss, and uplink operational status are healthy.'));
+
+        // 2. Cloud — XIQ /devices presence flag.
+        $cloud_hits   = isset($by_code['xiq_disconnected']) ? [$by_code['xiq_disconnected']] : [];
+        $cloud_tone   = $this->summaryTone($cloud_hits);
+        $cloud_detail = $cloud_hits === []
+            ? _('Connected to ExtremeCloud IQ.')
+            : $cloud_hits[0]['msg'];
+
+        // 3. Config — running config vs. policy.
+        $cfg_hits   = isset($by_code['config_mismatch']) ? [$by_code['config_mismatch']] : [];
+        $cfg_tone   = $this->summaryTone($cfg_hits);
+        $cfg_detail = $cfg_hits === []
+            ? _('Running config matches the assigned XIQ network policy.')
+            : $cfg_hits[0]['msg'];
+
+        $summary = [
+            [
+                'key'    => 'reachability',
+                'label'  => _('Reachability'),
+                'count'  => count($reach_hits),
+                'tone'   => $reach_tone,
+                'detail' => $reach_detail,
+            ],
+            [
+                'key'    => 'cloud',
+                'label'  => _('Cloud Status'),
+                'count'  => count($cloud_hits),
+                'tone'   => $cloud_tone,
+                'detail' => $cloud_detail,
+            ],
+            [
+                'key'    => 'config_sync',
+                'label'  => _('Config Sync'),
+                'count'  => count($cfg_hits),
+                'tone'   => $cfg_tone,
+                'detail' => $cfg_detail,
+            ],
         ];
+
+        return [
+            'issues'  => $issues,
+            'count'   => count($issues),
+            'worst'   => $worst,
+            'reason'  => $reason,
+            'summary' => $summary,
+        ];
+    }
+
+    /**
+     * Worst-tone roll-up across a list of issue rows.
+     * 'crit' wins over 'warn' wins over 'ok' (no rows = ok).
+     *
+     * @param  list<array{severity:string}> $hits
+     */
+    private function summaryTone(array $hits): string {
+        $tone = 'ok';
+        foreach ($hits as $h) {
+            if (($h['severity'] ?? 'warn') === 'crit') {
+                return 'crit';
+            }
+            $tone = 'warn';
+        }
+        return $tone;
+    }
+
+    /**
+     * Build a tooltip string for a summary stat cell — one issue msg
+     * per line, or the supplied "all good" sentence when empty.
+     *
+     * @param  list<array{msg:string}> $hits
+     */
+    private function summaryDetail(array $hits, string $ok_text): string {
+        if ($hits === []) {
+            return $ok_text;
+        }
+        $lines = [];
+        foreach ($hits as $h) {
+            $lines[] = '• ' . (string) ($h['msg'] ?? '');
+        }
+        return implode("\n", $lines);
     }
 
     /** Human label for IF-MIB ifOperStatus values used in issue messages. */
@@ -1087,11 +1175,23 @@ final class WidgetView extends CControllerDashboardWidgetView {
 
     /** Empty-state Connectivity payload — keeps the view's iteration stable. */
     private function emptyConnectivity(): array {
-        return [
-            'issues' => [],
+        $blank_summary = static fn(string $key, string $label): array => [
+            'key'    => $key,
+            'label'  => $label,
             'count'  => 0,
-            'worst'  => 'ok',
-            'reason' => '',
+            'tone'   => 'unknown',
+            'detail' => _('No data yet.'),
+        ];
+        return [
+            'issues'  => [],
+            'count'   => 0,
+            'worst'   => 'ok',
+            'reason'  => '',
+            'summary' => [
+                $blank_summary('reachability', _('Reachability')),
+                $blank_summary('cloud',        _('Cloud Status')),
+                $blank_summary('config_sync',  _('Config Sync')),
+            ],
         ];
     }
 
