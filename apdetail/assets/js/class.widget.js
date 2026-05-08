@@ -136,14 +136,14 @@ class CWidgetAPDetail extends CWidget {
      * stroke-dasharray that produces an arc of the right length for its
      * data-value (0–100) and apply it. CSS transition does the easing.
      *
-     * Circle radius is fixed at 26 in the SVG (matches widget.view.php),
-     * so the circumference 2π·26 ≈ 163.36 is constant. Two-segment
+     * Circle radius is fixed at 40 in the SVG (matches widget.view.php),
+     * so the circumference 2π·40 ≈ 251.33 is constant. Two-segment
      * dasharray "<arcLen> <restLen>" controls how much of the stroke
      * is visible, starting at the top because of the -90deg transform
      * applied in CSS.
      */
     _animateRings(root) {
-        const CIRC = 2 * Math.PI * 26;
+        const CIRC = 2 * Math.PI * 40;
 
         for (const fill of root.querySelectorAll('.ap-ring__fill')) {
             const raw = parseFloat(fill.dataset.value ?? '0');

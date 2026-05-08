@@ -103,15 +103,18 @@ foreach ($TABS as $key => $label) {
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Render a single ring cell (CPU or Memory) with a sparkline behind it.
+ * Render a single ring cell (CPU or Memory).
  *
- * Layout per cell:
+ * Layout per cell (matches the React mockup):
  *
- *   ┌─────────────────────────────────────┐
- *   │       ⊙   12%        ← donut + value│
- *   │       CPU            ← label        │
- *   │ /\/\/\/\/\/\/\/\/\/\ ← spark behind │
- *   └─────────────────────────────────────┘
+ *   ┌─────────────────────────────────┐
+ *   │           ┌──────┐              │
+ *   │           │  12% │   ← ring     │
+ *   │           └──────┘              │
+ *   │            CPU                  │   ← label
+ *   │       alert at 80%              │   ← caption
+ *   │ /\/\/\/\/\/\/\/\/\/\            │   ← sparkline
+ *   └─────────────────────────────────┘
  *
  * The donut SVG arc length is set client-side by class.widget.js's
  * _animateRings() so the fill animates in. We pre-compute a no-op
@@ -163,39 +166,39 @@ $render_ring_cell = static function (string $key, string $label, array $ring): C
         );
     }
 
-    // Donut SVG. r=26 → circumference ≈ 163.4 (matches JS _animateRings constant).
+    // Donut SVG. r=40 → circumference ≈ 251.3 (matches JS _animateRings).
+    // Larger radius matches the mockup's 92px ring with strokeWidth 6.
     $ring_svg = (new CTag('svg', true))
         ->addClass('ap-ring__svg')
-        ->setAttribute('viewBox', '0 0 64 64')
+        ->setAttribute('viewBox', '0 0 92 92')
         ->setAttribute('aria-hidden', 'true')
         ->addItem(
             (new CTag('circle', true))
                 ->addClass('ap-ring__track')
-                ->setAttribute('cx', '32')->setAttribute('cy', '32')->setAttribute('r', '26')
+                ->setAttribute('cx', '46')->setAttribute('cy', '46')->setAttribute('r', '40')
         )
         ->addItem(
             (new CTag('circle', true))
                 ->addClass('ap-ring__fill')
-                ->setAttribute('cx', '32')->setAttribute('cy', '32')->setAttribute('r', '26')
+                ->setAttribute('cx', '46')->setAttribute('cy', '46')->setAttribute('r', '40')
                 ->setAttribute('stroke-dasharray', '0 999')
                 ->setAttribute('data-value', $value === null ? '0' : (string) $value)
         );
 
-    // Inside-ring text overlay — value + label stacked.
-    $ring_text = (new CDiv([
-        (new CDiv($value_text))->addClass('ap-ring-cell__value'),
-        (new CDiv($label))->addClass('ap-ring-cell__label'),
-    ]))->addClass('ap-ring-cell__text');
+    // Centred value lives inside the ring; label + caption stack below it.
+    $ring_text = (new CDiv(
+        (new CDiv($value_text))->addClass('ap-ring-cell__value')
+    ))->addClass('ap-ring-cell__text');
 
-    // Threshold readout — small caption beneath the label.
     $caption = $value === null
         ? _('no data')
         : sprintf(_('alert at %d%%'), (int) $threshold);
 
     return (new CDiv([
         (new CDiv([$ring_svg, $ring_text]))->addClass('ap-ring-cell__ring'),
-        $spark_group,
+        (new CDiv($label))->addClass('ap-ring-cell__label'),
         (new CDiv($caption))->addClass('ap-ring-cell__caption'),
+        $spark_group,
     ]))
         ->addClass('ap-ring-cell')
         ->addClass('ap-ring-cell--' . $status)
