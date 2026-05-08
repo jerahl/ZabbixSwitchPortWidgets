@@ -295,16 +295,105 @@
  *  until the matching HTML appears in widget.view.php).                  *
  * ────────────────────────────────────────────────────────────────────── */
 
-/* Live Telemetry strip (M2 #3) */
-.ap-telemetry {
+/* ────────────────────────────────────────────────────────────────────── *
+ *  Live Telemetry strip — 9 sparklines (M2 #3)                          *
+ * ────────────────────────────────────────────────────────────────────── */
+
+.ap-card--telemetry .ap-tele__grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-bottom: 16px;
-    padding: 10px;
+    /* 9 cells in a single row at desktop widths; wraps to 3 columns on
+       narrow widget instances (≤ 760px) so labels + values stay legible. */
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--ap-border-2);
+}
+
+@media (max-width: 1100px) {
+    .ap-card--telemetry .ap-tele__grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.ap-tele-cell {
+    --ap-tele-color: var(--ap-accent-2);
+
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px 6px;
     background: var(--ap-bg);
-    border: 1px solid var(--ap-border);
-    border-radius: 6px;
+    min-width: 0;
+}
+
+.ap-tele-cell--xiq { --ap-tele-color: var(--ap-accent); }
+.ap-tele-cell--zbx { --ap-tele-color: var(--ap-accent-2); }
+
+.ap-tele-cell--clickable {
+    cursor: pointer;
+    transition: background-color .12s ease;
+}
+.ap-tele-cell--clickable:hover {
+    background: var(--ap-bg-2);
+}
+.ap-tele-cell--clickable:focus-visible {
+    outline: 2px solid var(--ap-tele-color);
+    outline-offset: -2px;
+}
+.ap-tele-cell--active {
+    background: color-mix(in srgb, var(--ap-tele-color) 18%, var(--ap-bg));
+}
+
+.ap-tele-cell__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+.ap-tele-cell__label {
+    font-size: 10px;
+    font-family: var(--ap-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ap-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ap-tele-cell__value {
+    font-family: var(--ap-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ap-text);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ap-tele-cell__spark {
+    display: block;
+    width: 100%;
+    height: 28px;
+    overflow: visible;
+}
+.ap-tele-cell__spark-fill {
+    fill: var(--ap-tele-color);
+    fill-opacity: .14;
+    stroke: none;
+}
+.ap-tele-cell__spark-line {
+    fill: none;
+    stroke: var(--ap-tele-color);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+.ap-tele-cell__spark-empty {
+    fill: var(--ap-text-dim);
+    font-family: var(--ap-mono);
+    font-size: 9px;
+    letter-spacing: .04em;
 }
 
 /* KV tables (M2 #4, #5) */

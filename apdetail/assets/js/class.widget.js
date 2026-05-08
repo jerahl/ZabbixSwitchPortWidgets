@@ -57,6 +57,12 @@ class CWidgetAPDetail extends CWidget {
         // catches the dasharray change (otherwise the value is set during
         // initial paint and there's nothing to animate from).
         requestAnimationFrame(() => this._animateRings(root));
+
+        // Live Telemetry strip — broadcast _itemids on cell click so a
+        // peer Graph (classic) widget can render the full series. Only
+        // ZBX-source cells carry data-itemid (XIQ d360 sparklines have
+        // no Zabbix item to broadcast).
+        this._wireTelemetryClicks(root);
     }
 
     onActivate() {
@@ -145,6 +151,43 @@ class CWidgetAPDetail extends CWidget {
             const arc = (pct / 100) * CIRC;
             // Use float strings so SVG won't serialize "163.36000000000001".
             fill.style.strokeDasharray = `${arc.toFixed(2)} ${(CIRC - arc).toFixed(2)}`;
+        }
+    }
+
+    // ── Live Telemetry strip ────────────────────────────────────────────
+
+    /**
+     * Bind click + Enter/Space activation on every clickable telemetry
+     * cell. A click broadcasts the cell's itemid as both _itemid (single)
+     * and _itemids (list) so any peer Graph (classic) widget listening
+     * on either type picks it up — same pattern as portdetail.
+     *
+     * Re-binding on every setContents is safe: this._body is replaced by
+     * super.setContents, so the previous listener died with the old DOM.
+     */
+    _wireTelemetryClicks(root) {
+        const cells = root.querySelectorAll('.ap-tele-cell--clickable[data-itemid]');
+        for (const cell of cells) {
+            const itemid = cell.dataset.itemid;
+            if (!itemid) continue;
+
+            const fire = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.broadcast({
+                    [CWidgetsData.DATA_TYPE_ITEM_ID]:  [String(itemid)],
+                    [CWidgetsData.DATA_TYPE_ITEM_IDS]: [String(itemid)],
+                });
+                cell.classList.add('ap-tele-cell--active');
+                setTimeout(() => cell.classList.remove('ap-tele-cell--active'), 300);
+            };
+
+            cell.addEventListener('click', fire);
+            cell.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    fire(e);
+                }
+            });
         }
     }
 }

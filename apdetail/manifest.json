@@ -30,7 +30,9 @@
         },
         "out": [
             {"type": "_hostid"},
-            {"type": "_hostids"}
+            {"type": "_hostids"},
+            {"type": "_itemid"},
+            {"type": "_itemids"}
         ]
     }
 }
