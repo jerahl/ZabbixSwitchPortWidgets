@@ -6,7 +6,7 @@ namespace Modules\APDetail\Includes;
 
 use Zabbix\Widgets\CWidgetField;
 use Zabbix\Widgets\CWidgetForm;
-use Zabbix\Widgets\Fields\CWidgetFieldMultiSelectHost;
+use Zabbix\Widgets\Fields\CWidgetFieldMultiSelectOverrideHost;
 use Zabbix\Widgets\Fields\CWidgetFieldTextBox;
 use Zabbix\Widgets\Fields\CWidgetFieldTimePeriod;
 
@@ -47,9 +47,7 @@ final class WidgetForm extends CWidgetForm {
     public function addFields(): self {
         return $this
             ->addField(
-                (new CWidgetFieldMultiSelectHost('hostids', _('AP host')))
-                    ->setMultiple(false)
-                    ->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK)
+                new CWidgetFieldMultiSelectOverrideHost()
             )
 
             ->addField(

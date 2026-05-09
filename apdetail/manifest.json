@@ -8,7 +8,16 @@
 
     "widget": {
         "js_class": "CWidgetAPDetail",
-        "size":     {"width": 36, "height": 8}
+        "size":     {"width": 36, "height": 8},
+        "in": {
+            "time_period": {"type": "_timeperiod"}
+        },
+        "out": [
+            {"type": "_hostid"},
+            {"type": "_hostids"},
+            {"type": "_itemid"},
+            {"type": "_itemids"}
+        ]
     },
 
     "assets": {
@@ -21,18 +30,5 @@
             "class": "WidgetView",
             "view":  "widget.view"
         }
-    },
-
-    "config": {
-        "in": {
-            "hostids":     {"type": "_hostid"},
-            "time_period": {"type": "_timeperiod"}
-        },
-        "out": [
-            {"type": "_hostid"},
-            {"type": "_hostids"},
-            {"type": "_itemid"},
-            {"type": "_itemids"}
-        ]
     }
 }

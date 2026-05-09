@@ -163,45 +163,62 @@ class WidgetView extends CControllerDashboardWidgetView {
 		}
 
 		// Resolve each AP's per-AP Zabbix host id so a row click can
-		// broadcast _hostid to a peer AP Detail widget. The AP's hostname
-		// (parsed from "AP <hostname>: ..." item names above) is matched
-		// against Zabbix host technical-name and visible-name. Best-effort:
-		// rows whose AP name doesn't resolve get hostid=0 and silently
-		// skip the broadcast on click.
-		$ap_names = [];
-		foreach ($rows as $r) {
-			if ($r['name'] !== '') $ap_names[$r['name']] = true;
-		}
-		if ($ap_names) {
-			$ap_hosts = API::Host()->get([
-				'output' => ['hostid', 'host', 'name'],
-				'filter' => ['host' => array_keys($ap_names)],
-			]);
-			$by_name = [];
-			foreach ($ap_hosts as $h) {
-				$by_name[$h['host']] = (int) $h['hostid'];
-				$by_name[$h['name']] = (int) $h['hostid'];
-			}
-			// Second pass for any names not found by technical name.
-			$missing = array_diff(array_keys($ap_names), array_keys($by_name));
-			if ($missing) {
-				$more = API::Host()->get([
-					'output' => ['hostid', 'host', 'name'],
-					'filter' => ['name' => array_values($missing)],
-				]);
-				foreach ($more as $h) {
-					$by_name[$h['host']] = (int) $h['hostid'];
-					$by_name[$h['name']] = (int) $h['hostid'];
+		// broadcast _hostid to a peer AP Detail widget. We pull every host
+		// that carries the per-AP SNMP template's CPU item (the canonical
+		// key apdetail reads) and try several lookup keys per row:
+		//   1. host technical-name (case-insensitive)
+		//   2. host visible-name   (case-insensitive)
+		//   3. SNMP/Agent interface IP
+		//   4. row IP (when interface IP is empty)
+		// Best-effort: rows that resolve to no host get hostid=0 and the
+		// JS silently skips the broadcast on click.
+		$ap_host_candidates = API::Host()->get([
+			'output'           => ['hostid', 'host', 'name'],
+			'selectInterfaces' => ['ip', 'main', 'type'],
+			'with_items'       => true,
+			'searchByAny'      => true,
+			'search'           => ['key_' => ['extremeap.cpu.util']],
+			'startSearch'      => true,
+		]);
+		$by_host_lc = [];   // lowercase host technical-name
+		$by_name_lc = [];   // lowercase visible-name
+		$by_ip      = [];   // any interface IP
+		foreach ($ap_host_candidates as $h) {
+			$hid = (int) $h['hostid'];
+			$by_host_lc[strtolower((string) $h['host'])] = $hid;
+			$by_name_lc[strtolower((string) $h['name'])] = $hid;
+			foreach ((array) ($h['interfaces'] ?? []) as $iface) {
+				$ip = (string) ($iface['ip'] ?? '');
+				if ($ip !== '' && !isset($by_ip[$ip])) {
+					$by_ip[$ip] = $hid;
 				}
 			}
-			foreach ($rows as &$r) {
-				if (isset($by_name[$r['name']])) {
-					$r['hostid'] = $by_name[$r['name']];
-				}
-			}
-			unset($r);
-			$debug['step_4b_hostid_resolved'] = count(array_filter($rows, fn($r) => $r['hostid'] > 0));
 		}
+		$debug['step_4a_candidate_hosts'] = count($ap_host_candidates);
+
+		$row_match_debug = [];
+		foreach ($rows as &$r) {
+			$nm = strtolower((string) $r['name']);
+			$ip = (string) $r['ip'];
+			if ($nm !== '' && isset($by_host_lc[$nm])) {
+				$r['hostid'] = $by_host_lc[$nm];
+				$row_match_debug[$r['serial']] = 'host_name';
+			}
+			elseif ($nm !== '' && isset($by_name_lc[$nm])) {
+				$r['hostid'] = $by_name_lc[$nm];
+				$row_match_debug[$r['serial']] = 'visible_name';
+			}
+			elseif ($ip !== '' && isset($by_ip[$ip])) {
+				$r['hostid'] = $by_ip[$ip];
+				$row_match_debug[$r['serial']] = 'interface_ip';
+			}
+			else {
+				$row_match_debug[$r['serial']] = 'no_match';
+			}
+		}
+		unset($r);
+		$debug['step_4b_hostid_resolved'] = count(array_filter($rows, fn($r) => $r['hostid'] > 0));
+		$debug['step_4c_row_match']       = $row_match_debug;
 
 		// Summary tiles.
 		$summary = self::emptySummary();

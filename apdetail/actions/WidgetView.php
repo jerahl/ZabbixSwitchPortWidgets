@@ -159,17 +159,43 @@ final class WidgetView extends CControllerDashboardWidgetView {
     private const ITEM_KEY_PREFIX_LLDP_SYSNAME   = 'lldp.neighbor.sysname';
     private const ITEM_KEY_PREFIX_LLDP_PORTID    = 'lldp.neighbor.portid';
 
+    protected function init(): void {
+        parent::init();
+        $this->addValidationRules([
+            'xiq_hostid' => 'int32',
+        ]);
+    }
+
     protected function doAction(): void {
         // ── 1. Resolve host from broadcast/form ─────────────────────────
-        $field_hostids = $this->fields_values['hostids'] ?? [];
+        // CWidgetFieldMultiSelectOverrideHost stores the resolved host as a
+        // list under 'override_hostid'. Each entry is either a hostid scalar
+        // or {id: <hostid>} depending on framework version.
+        $field_hostids = $this->fields_values['override_hostid'] ?? [];
         $host_id = 0;
 
         if (is_array($field_hostids)) {
             $first = reset($field_hostids);
-            $host_id = $first !== false ? (int) $first : 0;
+            if (is_array($first)) {
+                $host_id = (int) ($first['id'] ?? 0);
+            }
+            elseif ($first !== false) {
+                $host_id = (int) $first;
+            }
         }
         elseif (is_numeric($field_hostids)) {
             $host_id = (int) $field_hostids;
+        }
+
+        // Fallback path for direct AP-row selection from the XIQ AP Status
+        // widget. Avoids the user having to wire "Override host" in the
+        // dashboard editor — class.widget.js forwards xiq_hostid every
+        // refresh once the user has clicked an AP row.
+        if ($host_id <= 0) {
+            $xiq_hostid = $this->hasInput('xiq_hostid') ? (int) $this->getInput('xiq_hostid') : 0;
+            if ($xiq_hostid > 0) {
+                $host_id = $xiq_hostid;
+            }
         }
 
         $name = $this->getInput('name', $this->widget->getDefaultName());

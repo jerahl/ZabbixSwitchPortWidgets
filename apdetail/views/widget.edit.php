@@ -8,20 +8,20 @@
  * array_key_exists() guards mirror the built-in hostcard widget.
  *
  * Field-to-View mapping:
- *   hostids      → CWidgetFieldMultiSelectHostView
- *   time_period  → CWidgetFieldTimePeriodView
- *   xiq_host     → CWidgetFieldTextBoxView
- *   pf_url       → CWidgetFieldTextBoxView
- *   pf_user      → CWidgetFieldTextBoxView
- *   pf_pass      → CWidgetFieldTextBoxView
+ *   override_hostid → CWidgetFieldMultiSelectOverrideHostView
+ *   time_period     → CWidgetFieldTimePeriodView
+ *   xiq_host        → CWidgetFieldTextBoxView
+ *   pf_url          → CWidgetFieldTextBoxView
+ *   pf_user         → CWidgetFieldTextBoxView
+ *   pf_pass         → CWidgetFieldTextBoxView
  *
  * @var CView $this
  * @var array $data
  */
 
 (new CWidgetFormView($data))
-    ->addField(array_key_exists('hostids', $data['fields'])
-        ? new CWidgetFieldMultiSelectHostView($data['fields']['hostids'])
+    ->addField(array_key_exists('override_hostid', $data['fields'])
+        ? new CWidgetFieldMultiSelectOverrideHostView($data['fields']['override_hostid'])
         : null
     )
     ->addField(array_key_exists('time_period', $data['fields'])
