@@ -25,7 +25,8 @@
 
     "config": {
         "in": {
-            "time_period": {"type": "_timeperiod"}
+            "override_hostid": {"type": "_hostid"},
+            "time_period":     {"type": "_timeperiod"}
         },
         "out": [
             {"type": "_hostid"},
