@@ -10,8 +10,7 @@
         "js_class": "CWidgetAPDetail",
         "size":     {"width": 36, "height": 8},
         "in": {
-            "override_hostid": {"type": "_hostid"},
-            "time_period":     {"type": "_timeperiod"}
+            "time_period": {"type": "_timeperiod"}
         },
         "out": [
             {"type": "_hostid"},
