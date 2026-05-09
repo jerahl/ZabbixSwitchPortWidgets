@@ -158,7 +158,49 @@ class WidgetView extends CControllerDashboardWidgetView {
 				'last_connect' => $g['last_connect'] ?? 0,
 				'uptime'       => $g['uptime']       ?? 0,
 				'cfg_mismatch' => $g['cfg_mismatch'] ?? 0,
+				'hostid'       => 0,
 			];
+		}
+
+		// Resolve each AP's per-AP Zabbix host id so a row click can
+		// broadcast _hostid to a peer AP Detail widget. The AP's hostname
+		// (parsed from "AP <hostname>: ..." item names above) is matched
+		// against Zabbix host technical-name and visible-name. Best-effort:
+		// rows whose AP name doesn't resolve get hostid=0 and silently
+		// skip the broadcast on click.
+		$ap_names = [];
+		foreach ($rows as $r) {
+			if ($r['name'] !== '') $ap_names[$r['name']] = true;
+		}
+		if ($ap_names) {
+			$ap_hosts = API::Host()->get([
+				'output' => ['hostid', 'host', 'name'],
+				'filter' => ['host' => array_keys($ap_names)],
+			]);
+			$by_name = [];
+			foreach ($ap_hosts as $h) {
+				$by_name[$h['host']] = (int) $h['hostid'];
+				$by_name[$h['name']] = (int) $h['hostid'];
+			}
+			// Second pass for any names not found by technical name.
+			$missing = array_diff(array_keys($ap_names), array_keys($by_name));
+			if ($missing) {
+				$more = API::Host()->get([
+					'output' => ['hostid', 'host', 'name'],
+					'filter' => ['name' => array_values($missing)],
+				]);
+				foreach ($more as $h) {
+					$by_name[$h['host']] = (int) $h['hostid'];
+					$by_name[$h['name']] = (int) $h['hostid'];
+				}
+			}
+			foreach ($rows as &$r) {
+				if (isset($by_name[$r['name']])) {
+					$r['hostid'] = $by_name[$r['name']];
+				}
+			}
+			unset($r);
+			$debug['step_4b_hostid_resolved'] = count(array_filter($rows, fn($r) => $r['hostid'] > 0));
 		}
 
 		// Summary tiles.

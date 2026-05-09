@@ -277,6 +277,7 @@ class WidgetXiqApStatus extends CWidget {
 			tr.classList.remove('xiq-row--selected');
 			this._selected_serial = null;
 			this._sendToPacketFence(null);
+			this._broadcastHostid(null);
 			return;
 		}
 
@@ -304,6 +305,34 @@ class WidgetXiqApStatus extends CWidget {
 			serial: tr.dataset.serial || '',
 			xiq_id: tr.dataset.xiqid  || '',
 		});
+
+		// Broadcast _hostid so the AP Detail widget (which receives _hostid
+		// into its 'hostids' field) re-renders for the selected AP.
+		this._broadcastHostid(tr.dataset.hostid || null);
+	}
+
+	/**
+	 * Push the selected AP's Zabbix host id onto the EventHub so a peer
+	 * AP Detail widget (or any widget configured to receive _hostid) loads
+	 * for the selected AP. Pass null to clear.
+	 */
+	_broadcastHostid(hostid) {
+		const id = hostid && hostid !== '0' ? String(hostid) : null;
+		try {
+			if (id !== null) {
+				this.broadcast({
+					[CWidgetsData.DATA_TYPE_HOST_ID]:  [id],
+					[CWidgetsData.DATA_TYPE_HOST_IDS]: [id],
+				});
+			} else {
+				this.broadcast({
+					[CWidgetsData.DATA_TYPE_HOST_ID]:  [],
+					[CWidgetsData.DATA_TYPE_HOST_IDS]: [],
+				});
+			}
+		} catch (e) {
+			console.warn('[xiq_ap_status] broadcast(_hostid) failed:', e.message);
+		}
 	}
 
 	/**
@@ -620,7 +649,7 @@ class WidgetXiqApStatus extends CWidget {
 			: '';
 
 		return `
-			<tr class="xiq-row" data-serial="${esc(r.serial)}" data-xiqid="${esc(r.xiq_id)}" data-name="${esc(r.name)}" data-mac="${esc(r.mac)}" data-ip="${esc(r.ip)}">
+			<tr class="xiq-row" data-serial="${esc(r.serial)}" data-xiqid="${esc(r.xiq_id)}" data-name="${esc(r.name)}" data-mac="${esc(r.mac)}" data-ip="${esc(r.ip)}" data-hostid="${esc(r.hostid || 0)}">
 				<td class="xiq-cell--name">
 					${name_html}
 					<div class="xiq-sub">${esc(r.serial)}${r.mac ? ' · ' + esc(r.mac) : ''}</div>
