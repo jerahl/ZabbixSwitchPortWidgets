@@ -12,7 +12,11 @@
 		"size": {
 			"width": 24,
 			"height": 8
-		}
+		},
+		"out": [
+			{"type": "_hostid"},
+			{"type": "_hostids"}
+		]
 	},
 	"actions": {
 		"widget.xiq_ap_status.view": {
