@@ -161,12 +161,20 @@ final class WidgetView extends CControllerDashboardWidgetView {
 
     protected function doAction(): void {
         // ── 1. Resolve host from broadcast/form ─────────────────────────
-        $field_hostids = $this->fields_values['hostids'] ?? [];
+        // CWidgetFieldMultiSelectOverrideHost stores the resolved host as a
+        // list under 'override_hostid'. Each entry is either a hostid scalar
+        // or {id: <hostid>} depending on framework version.
+        $field_hostids = $this->fields_values['override_hostid'] ?? [];
         $host_id = 0;
 
         if (is_array($field_hostids)) {
             $first = reset($field_hostids);
-            $host_id = $first !== false ? (int) $first : 0;
+            if (is_array($first)) {
+                $host_id = (int) ($first['id'] ?? 0);
+            }
+            elseif ($first !== false) {
+                $host_id = (int) $first;
+            }
         }
         elseif (is_numeric($field_hostids)) {
             $host_id = (int) $field_hostids;

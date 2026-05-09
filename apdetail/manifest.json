@@ -25,7 +25,6 @@
 
     "config": {
         "in": {
-            "hostids":     {"type": "_hostid"},
             "time_period": {"type": "_timeperiod"}
         },
         "out": [
