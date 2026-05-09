@@ -318,6 +318,7 @@ class WidgetXiqApStatus extends CWidget {
 	 */
 	_broadcastHostid(hostid) {
 		const id = hostid && hostid !== '0' ? String(hostid) : null;
+		console.debug('[xiq_ap_status] broadcast _hostid', id);
 		try {
 			if (id !== null) {
 				this.broadcast({
