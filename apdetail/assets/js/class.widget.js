@@ -28,6 +28,26 @@ class CWidgetAPDetail extends CWidget {
     onInitialize() {
         super.onInitialize();
         this._activeTab = sessionStorage.getItem('ap.activeTab') ?? 'overview';
+        // Direct hostid path from xiq_ap_status (works without configuring
+        // Override host in the dashboard editor — see onActivate listener).
+        this._xiq_hostid = null;
+        try {
+            const stored = sessionStorage.getItem('xiq_ap_detail_selection');
+            if (stored) {
+                const sel = JSON.parse(stored);
+                if (sel && sel.hostid && String(sel.hostid) !== '0') {
+                    this._xiq_hostid = String(sel.hostid);
+                }
+            }
+        } catch (_) {}
+    }
+
+    getUpdateRequestData() {
+        const data = super.getUpdateRequestData();
+        if (this._xiq_hostid !== null) {
+            data.xiq_hostid = this._xiq_hostid;
+        }
+        return data;
     }
 
     setContents(response) {
@@ -67,10 +87,25 @@ class CWidgetAPDetail extends CWidget {
 
     onActivate() {
         super.onActivate();
+        this._xiqApListener = (e) => {
+            const d = e.detail;
+            const id = d && d.hostid && String(d.hostid) !== '0' ? String(d.hostid) : null;
+            if (id === this._xiq_hostid) return;
+            this._xiq_hostid = id;
+            console.debug('[apdetail] xiq:apDetailSelected → hostid', id);
+            if (this.getState && this.getState() === WIDGET_STATE_ACTIVE) {
+                this._startUpdating();
+            }
+        };
+        document.addEventListener('xiq:apDetailSelected', this._xiqApListener);
     }
 
     onDeactivate() {
         super.onDeactivate();
+        if (this._xiqApListener) {
+            document.removeEventListener('xiq:apDetailSelected', this._xiqApListener);
+            this._xiqApListener = null;
+        }
     }
 
     // ── Tab management ───────────────────────────────────────────────────

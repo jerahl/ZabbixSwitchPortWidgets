@@ -278,6 +278,7 @@ class WidgetXiqApStatus extends CWidget {
 			this._selected_serial = null;
 			this._sendToPacketFence(null);
 			this._broadcastHostid(null);
+			this._sendToApDetail(null);
 			return;
 		}
 
@@ -309,6 +310,43 @@ class WidgetXiqApStatus extends CWidget {
 		// Broadcast _hostid so the AP Detail widget (which receives _hostid
 		// into its 'hostids' field) re-renders for the selected AP.
 		this._broadcastHostid(tr.dataset.hostid || null);
+
+		// Direct AP-Detail integration: emit a document event + persist to
+		// sessionStorage. AP Detail's JS listens for this (the EventHub
+		// route is fragile because it depends on the user wiring "Override
+		// host" in the dashboard editor; this fallback works regardless).
+		this._sendToApDetail({
+			hostid: tr.dataset.hostid || '',
+			serial: tr.dataset.serial || '',
+			mac:    tr.dataset.mac    || '',
+			name:   tr.dataset.name   || '',
+			ip:     tr.dataset.ip     || '',
+		});
+	}
+
+	static AP_DETAIL_EVENT       = 'xiq:apDetailSelected';
+	static AP_DETAIL_SESSION_KEY = 'xiq_ap_detail_selection';
+
+	_sendToApDetail(detail) {
+		try {
+			if (detail && detail.hostid && detail.hostid !== '0') {
+				sessionStorage.setItem(
+					WidgetXiqApStatus.AP_DETAIL_SESSION_KEY,
+					JSON.stringify(detail)
+				);
+			} else {
+				sessionStorage.removeItem(WidgetXiqApStatus.AP_DETAIL_SESSION_KEY);
+				detail = null;
+			}
+		} catch (_) {}
+		try {
+			document.dispatchEvent(new CustomEvent(
+				WidgetXiqApStatus.AP_DETAIL_EVENT,
+				{detail, bubbles: true}
+			));
+		} catch (e) {
+			console.warn('[xiq_ap_status] apDetailSelected dispatch failed:', e.message);
+		}
 	}
 
 	/**
