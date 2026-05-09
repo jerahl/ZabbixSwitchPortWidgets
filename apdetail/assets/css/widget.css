@@ -687,3 +687,37 @@
     margin-bottom: 14px;
     min-height: 48px;
 }
+
+/* ── Loading overlay (shown while a new AP is being fetched after selection
+ *    in the XIQ AP Status widget) ─────────────────────────────────────── */
+.ap-detail-loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: color-mix(in srgb, var(--ap-bg, #0d1117) 70%, transparent);
+    backdrop-filter: blur(2px);
+    z-index: 5;
+    color: var(--ap-fg-2, #b8c2d4);
+    font-size: 13px;
+    pointer-events: none;
+    animation: ap-loading-fade 120ms ease-out;
+}
+.ap-detail-loading--on { display: flex; }
+.ap-detail-loading__spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid color-mix(in srgb, var(--ap-fg-2, #b8c2d4) 30%, transparent);
+    border-top-color: var(--ap-zbx, #d92929);
+    border-radius: 50%;
+    animation: ap-loading-spin 0.7s linear infinite;
+}
+@keyframes ap-loading-spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes ap-loading-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}

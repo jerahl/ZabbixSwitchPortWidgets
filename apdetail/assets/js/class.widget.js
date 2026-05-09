@@ -53,6 +53,9 @@ class CWidgetAPDetail extends CWidget {
     setContents(response) {
         super.setContents(response);
 
+        // A new payload landed — clear any in-flight loading overlay.
+        this._setLoading(false);
+
         const root = this._body && this._body.querySelector('.ap-detail');
         if (!root) return;
 
@@ -93,6 +96,10 @@ class CWidgetAPDetail extends CWidget {
             if (id === this._xiq_hostid) return;
             this._xiq_hostid = id;
             console.debug('[apdetail] xiq:apDetailSelected → hostid', id);
+            if (id !== null) {
+                const label = (d && (d.name || d.serial)) || '';
+                this._setLoading(true, label);
+            }
             if (this.getState && this.getState() === WIDGET_STATE_ACTIVE) {
                 this._startUpdating();
             }
@@ -105,6 +112,34 @@ class CWidgetAPDetail extends CWidget {
         if (this._xiqApListener) {
             document.removeEventListener('xiq:apDetailSelected', this._xiqApListener);
             this._xiqApListener = null;
+        }
+    }
+
+    /**
+     * Show / hide a small loading overlay on top of the widget body while
+     * a new AP's data is being fetched after a row click in the AP Status
+     * widget. Cleared automatically by setContents() when the response lands.
+     */
+    _setLoading(on, label = '') {
+        if (!this._body) return;
+        let overlay = this._body.querySelector('.ap-detail-loading');
+        if (on) {
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'ap-detail-loading';
+                overlay.setAttribute('role', 'status');
+                overlay.setAttribute('aria-live', 'polite');
+                overlay.innerHTML =
+                    '<span class="ap-detail-loading__spinner" aria-hidden="true"></span>' +
+                    '<span class="ap-detail-loading__msg"></span>';
+                this._body.appendChild(overlay);
+            }
+            const msg = overlay.querySelector('.ap-detail-loading__msg');
+            if (msg) msg.textContent = label ? `Loading ${label}…` : 'Loading…';
+            overlay.classList.add('ap-detail-loading--on');
+        }
+        else if (overlay) {
+            overlay.classList.remove('ap-detail-loading--on');
         }
     }
 
